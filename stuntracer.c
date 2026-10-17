@@ -482,7 +482,6 @@ static void build_track_geometry(int idx)
         tr_minz = fminf(tr_minz, seg[k].c.z); tr_maxz = fmaxf(tr_maxz, seg[k].c.z);
     }
     ar_x0 = tr_minx - 90; ar_x1 = tr_maxx + 90; ar_z0 = tr_minz - 90; ar_z1 = tr_maxz + 90;
-    plan_jumps();
 }
 
 /* flat stadium floor, like the original */
@@ -1451,6 +1450,7 @@ static float try_jumps(const int *l, int n, float v, int b, int s, float v0, int
  * stones) form a chain taken at one speed: the one the scratch car got over cleanest, with a little either side to
  * spare, that the run-up can reach (without boost if it can) */
 static int badj[NJ], nbadj;                     /* lips of jumps nothing gets over cleanly */
+static int plan_gen = -1;                       /* the track_gen the plan is for */
 static void plan_jumps(void)
 {
     int lip[NJ], end[NJ], back[NJ], nj = 0;
@@ -1521,7 +1521,10 @@ static void plan_jumps(void)
     for (int c = 0; c < nc; c++)
         for (int k = 0; k < cn[c]; k++) if (cl[c][k] >= 0) run_up(cl[c][k], cv[c], cb[c]);
     state = st0; racetime = rt0; npart = np0; stat_falls = sf0; stat_sparks = ss0; rngs = rs0; planning = 0;
+    plan_gen = track_gen;
 }
+/* the plan is only needed once the AI drives: at the start of a race, not when a track is shown */
+static void plan_need(void) { if (plan_gen != track_gen) plan_jumps(); }
 
 /* ----------------------------------------------------------- car pose */
 /* body frame including the visual roll/pitch lean */
@@ -1594,6 +1597,7 @@ static const char *player_name(void) { return sea.pname[0] ? sea.pname : "Player
 /* season races: three laps against one opponent; practice and the builder's test drive: alone, laps until ESC */
 static void start_race(void)
 {
+    plan_need();
     int solo = race_mode == RM_PRACTICE || race_mode == RM_TEST;
     if (race_mode == RM_SEASON) laps = 3; else if (solo) laps = 0;
     for (int i = 0; i < 2; i++) {
@@ -1666,12 +1670,12 @@ static void view_key(SDL_Keycode k)
     else if (k == SDLK_HOME) { view_yaw = 0.6f; view_pitch = 0.22f; view_dist = 7.5f; view_target = V(0, 0.55f, 0); }
 }
 
+/* the menu: the camera turns round the empty track (preview_cam) */
+static float orbit_t;
 static void setup_menu(void)
 {
     if (cur_track != sel_track) build_track(sel_track);
-    memset(&cars[0], 0, sizeof(Car)); memset(&cars[1], 0, sizeof(Car));
-    cars[0].active = 1; cars[0].col = CAR_RED; cars[0].boost = 100;
-    car_place(&cars[0], 40, 0, 25);
+    memset(cars, 0, sizeof cars);
     npart = 0; paused = 0;
     state = ST_MENU;
 }
@@ -1680,9 +1684,7 @@ static void game_tick(float dt)
 {
     switch (state) {
     case ST_MENU:
-        ai_drive(&cars[0], 0, 42, 8, NULL);
-        car_step(&cars[0], dt);
-        if (cars[0].damage > 40) { cars[0].damage = 0; cars[0].wrecked = 0; }
+        orbit_t += dt;
         break;
     case ST_COUNT: {
         int before = (int)ceilf(state_t);
@@ -1751,7 +1753,7 @@ static void game_tick(float dt)
     case ST_EDIT:
         break;
     case ST_PREVIEW:
-        state_t += dt;
+        orbit_t += dt;
         break;
     }
     if (state == ST_COUNT || state == ST_RACE || state == ST_DONE) rec_tick();
@@ -1765,7 +1767,7 @@ static void game_tick(float dt)
 static V3 cam_dir, cam_pos_s, cam_f, cam_u;
 static void update_camera(const Car *c, float dt, int snap)
 {
-    if (state == ST_PREVIEW) return;                                  /* fixed, set by preview_cam */
+    if (state == ST_PREVIEW || state == ST_MENU) return;             /* set by preview_cam */
     if (state == ST_VIEW) {
         V3 tg = view_target;
         cam.pos = vadd(tg, vmul(V(cosf(view_pitch) * sinf(view_yaw), sinf(view_pitch), cosf(view_pitch) * cosf(view_yaw)), view_dist));

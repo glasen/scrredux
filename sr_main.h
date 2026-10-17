@@ -681,7 +681,7 @@ static void make_cascade(V3 center, float E, float D, int size, float *rows)
 static void gpu_render(const char *shot_path)
 {
     if (win) { int w, h; SDL_GetWindowSizeInPixels(win, &w, &h); if (w < 64) w = 64; if (h < 64) h = 64; if (ensure_targets(w, h)) return; }
-    if (state == ST_PREVIEW) preview_cam((float)rtw / rth);
+    if (state == ST_PREVIEW || state == ST_MENU) preview_cam((float)rtw / rth);
     upload_static();
     build_frame();
     int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > 100000 ? 100000 : hb.n;

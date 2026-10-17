@@ -9,7 +9,7 @@ Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen,
 
 ## Menu
 Like the original's: the logo, your division, SELECT and grey bars (the chosen one orange) between two wooden posts, over
-the stadium with a car lapping the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
+the stadium, the camera turning slowly round the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
 Before every season race and practice session the camera turns slowly round the track in a chequered frame with its
 name below, like the original's; ENTER starts, ESC goes back.
 

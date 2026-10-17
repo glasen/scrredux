@@ -285,7 +285,7 @@ static void menu_go(int screen)
     if (screen == MS_REPLAYS) { rp_scan(); msel[MS_REPLAYS] = 0; }
     if (screen == MS_SEASON && sea.on && sea.race >= 6) {        /* a finished season (also one loaded from a save) */
         season_end(); season_write(0); ms = MS_END;
-    } else if (screen == MS_SEASON) {                             /* the attract car drives the next race's track */
+    } else if (screen == MS_SEASON) {                             /* the menu shows the next race's track */
         const Race *r = player_race();
         if (r && sel_track != r->track) { sel_track = r->track; setup_menu(); }
         msel[MS_SEASON] = r ? 0 : 1;
@@ -293,8 +293,12 @@ static void menu_go(int screen)
     if (state != ST_MENU) setup_menu();
 }
 /* ---- before a race: the whole track from the stands in a chequered frame, its name below, like the original ---- */
-static void pv_frame(float hw, float f[4]) { f[0] = 10; f[1] = 8; f[2] = hw - 10; f[3] = VH - 54; }
 #define PV_Q 8.f                                                 /* the chequers */
+static void pv_frame(float hw, float f[4])                       /* the menu: the whole screen is the picture */
+{
+    if (state == ST_MENU) { f[0] = f[1] = -PV_Q - 1.5f; f[2] = hw + PV_Q + 1.5f; f[3] = VH + PV_Q + 1.5f; }
+    else { f[0] = 10; f[1] = 8; f[2] = hw - 10; f[3] = VH - 54; }
+}
 #define CHQ(k) ((k) & 1 ? 0xD8D8D8u : 0x0C0C0Cu)
 static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
 {
@@ -305,7 +309,7 @@ static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
         b[0] = fminf(b[0], x); b[1] = fminf(b[1], y); b[2] = fmaxf(b[2], x); b[3] = fmaxf(b[3], y);
     }
 }
-/* the camera turns slowly round the track, starting square to its long axis, from above and at one distance: the
+/* menu and preview: the camera turns slowly round the track, starting square to its long axis, from above and at one distance: the
  * nearest that keeps the track in the picture all the way round. Worked out at PV_NA angles, the aim between them */
 #define PV_NA 24
 #define PV_EL 0.42f
@@ -330,9 +334,9 @@ static void pv_fit(V3 fwd, float fx, const float n[4], V3 *tg, float *D, int fix
 }
 static void preview_cam(float asp)
 {
-    static float was_asp, th0, D; static int was_gen = -1; static V3 tg[PV_NA];
-    if (asp != was_asp || track_gen != was_gen) {
-        was_asp = asp; was_gen = track_gen;
+    static float was_asp, th0, D; static int was_gen = -1, was_menu; static V3 tg[PV_NA];
+    if (asp != was_asp || track_gen != was_gen || (state == ST_MENU) != was_menu) {
+        was_asp = asp; was_gen = track_gen; was_menu = state == ST_MENU;
         float f[4], hw = VH * asp, in = PV_Q + 1.5f, fx = FOCAL_Y / asp; pv_frame(hw, f);
         float n[4] = {(f[0] + in) / hw * 2 - 1, 1 - (f[3] - in) / VH * 2, (f[2] - in) / hw * 2 - 1, 1 - (f[1] + in) / VH * 2};
         double mx = 0, mz = 0, sxx = 0, szz = 0, sxz = 0; float ymax = 0;
@@ -349,7 +353,7 @@ static void preview_cam(float asp)
         }
         for (int a = 0; a < PV_NA; a++) pv_fit(pv_fwd(th0 + 2 * PI_F * a / PV_NA), fx, n, &tg[a], &D, 1);
     }
-    float u = fmodf(state_t * 0.12f / (2 * PI_F), 1.f) * PV_NA, fr = u - floorf(u);
+    float u = fmodf(orbit_t * 0.12f / (2 * PI_F), 1.f) * PV_NA, fr = u - floorf(u);
     int a = (int)u % PV_NA;
     V3 fwd = pv_fwd(th0 + 2 * PI_F * u / PV_NA), t = vlerp(tg[a], tg[(a + 1) % PV_NA], fr);
     cam.pos = vsub(t, vmul(fwd, D)); cam.fwd = fwd; cam.right = vnorm(vcross(fwd, UP)); cam.up = vcross(cam.right, fwd);
@@ -380,7 +384,7 @@ static void draw_preview(void)
 static void preview_start(void)
 {
     memset(cars, 0, sizeof cars); npart = 0; paused = 0;
-    state = ST_PREVIEW; state_t = 0;
+    state = ST_PREVIEW; orbit_t = 0;
 }
 static void preview_key(SDL_Keycode k)
 {

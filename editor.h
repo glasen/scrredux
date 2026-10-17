@@ -295,6 +295,7 @@ static void ed_check_jumps(void)
     if (!ed_ready()) return;
     trk[ED_SLOT] = ed; trk[ED_SLOT].orig = -1;
     build_track_geometry(ED_SLOT); cur_track = -1;
+    plan_need();
     ed_jumps_note();
 }
 static void ed_test(void)
