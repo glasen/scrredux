@@ -29,11 +29,16 @@ is wrecked. Lap, race time and best lap are overlay text in the top corners.
 * The deck is weathered concrete in precast slabs, with rubber laid down in the bends.
 * Sun shadows: two shadow-map cascades (near/far) cover track, towers, stands, trucks, cranes and cars.
 * Shaders are SPIR-V only, so a Vulkan-capable driver is required.
+* Sound: the original Amiga samples, played where the original plays them: the engine (TickOver and its decimated
+  copies, revs model ported from the original), scraping, dirt, hard landings, car-to-car hits, creaks and the smash
+  that punches a hole in the cage tube; Chime counts down the start. The WAVs in `sounds/` come from the remake's
+  `Sounds/` folder; without them the game runs silent. Engine and smash sit left, the rest right, 30% apart.
 
 Debug: `./stuntracer --sim SECS [TRACK]` (autopilot, prints lap/damage/contact stats),
 `./stuntracer --shot out.png SECS [TRACK] [CAM]` (offscreen 1080p render; CAM 0 chase, 1 cockpit, 2 front, 3 side, 4 model viewer, 5 track overview).
 `SR_DEBUG=1`, `SR_TRACE=1` add logging; `SR_PLANE=x` sets the autopilot's lane (outside +-4.4 it drives off the track),
 `SR_WHEELS=1` reports the gap between the drawn tyres and the road, `SR_CAM=px,py,pz,tx,ty,tz` places the `--shot` camera freely.
+`./stuntracer --audio-dump out.wav SECS [TRACK]` mixes the autopilot's race into a WAV; `SR_SND=1` logs every sound as it starts.
 `./stuntracer --menu-frames DIR SECS` records the menu scene at 60 fps as PNGs (`SR_NOHUD=1` hides the HUD).
 
 ## Car

@@ -201,32 +201,7 @@ static void cyl(V3 a, V3 b, float r0, float r1, int n, uint32_t col, int caps)
 }
 
 /* ----------------------------------------------------------------- audio */
-static volatile float a_freq, a_vol, a_noise, a_beepf, a_beept, a_thump;
-static void synth(int16_t *o, int n)
-{
-    static float ph, ph2, bph, th; static uint32_t r = 1;
-    for (int i = 0; i < n; i++) {
-        float f = a_freq;
-        ph += f / 22050.f; if (ph >= 1) ph -= 1;
-        ph2 += f * 0.5f / 22050.f; if (ph2 >= 1) ph2 -= 1;
-        float s = (ph * 2 - 1) * 0.45f + (ph < 0.5f ? 0.2f : -0.2f) + (ph2 < 0.5f ? 0.2f : -0.2f);
-        s *= a_vol * 0.4f;
-        r = r * 1664525u + 1013904223u;
-        float nz = ((r >> 16) & 0x7fff) / 16384.f - 1;
-        s += nz * a_noise * 0.5f; a_noise *= 0.9998f;
-        if (a_thump > 0.001f) { th += 55.f / 22050.f; if (th >= 1) th -= 1; s += (th < 0.5f ? 1.f : -1.f) * a_thump * 0.6f; a_thump *= 0.9993f; }
-        if (a_beept > 0) { bph += a_beepf / 22050.f; if (bph >= 1) bph -= 1; s += bph < 0.5f ? 0.18f : -0.18f; a_beept -= 1.f / 22050.f; }
-        s = clampf(s, -1, 1);
-        o[i] = (int16_t)(s * 18000);
-    }
-}
-static void SDLCALL audio_cb(void *ud, SDL_AudioStream *st, int add, int total)
-{
-    (void)ud; (void)total;
-    int n = add / 2; int16_t buf[1024];
-    while (n > 0) { int m = n > 1024 ? 1024 : n; synth(buf, m); SDL_PutAudioStreamData(st, buf, m * 2); n -= m; }
-}
-static void beep(float f, float t) { a_beepf = f; a_beept = t; }
+#include "audio.h"
 
 /* ----------------------------------------------------------------- track */
 typedef struct { V3 c, T, R, N; float u, curv, vcurv, bin; unsigned char gap, steep; } Seg;   /* bin: sin of the bank into the bend */   /* steep: sheer face, height measured vertically */
@@ -708,8 +683,8 @@ typedef struct {
     float crash, crane, crane_T, hook, dust_t;    /* crash on the ground / crane lowering timers, hook retract timer */
     V3 crane_x;                                   /* where the crane sets the car down */
     int crane_seg;
-    float wl[4], wph[4], flip_t, stuck_t, hurt_cd;
-    unsigned char hit[16], wbot[4];
+    float wl[4], wph[4], flip_t, stuck_t, hurt_cd, smash_t;   /* smash_t: after a smash, hits only creak for a while */
+    unsigned char hit[16], wbot[4], wcon[4];
     float lr, lp, lrr, lpr, alat_f, along_f;      /* visual body roll/pitch (angle, rate) and filtered accelerations */
     float flame;                                  /* exhaust flame strength (0..1.4), boost only */
     float holes[6]; int nholes;                   /* big hits: holes in the cockpit's top tube, as damage fractions along the crack */
@@ -739,6 +714,70 @@ static const float skill_vcap[3] = {56, 62, 69}, skill_alat[3] = {11.0f, 13.5f, 
 
 static void set_msg(const char *s, float t) { snprintf(msg, sizeof msg, "%s", s); msg_t = t; }
 
+/* ---- sound: when the original's samples play (StuntCarRacer.s, Car_Behaviour.cpp), periods and volumes from its tables ---- */
+#define AMI_V (30720.f / 72.f)               /* original speed units per m/s: its top speed 0x7800 = our unboosted ~72 m/s */
+static int eng_revs, eng_chg, eng_fluct, eng_on;   /* the original's engine.revs model */
+static float snd_t10, snd_t50, grounded_cd, hitcar_cd;
+static int snd_scrape, snd_dirt;             /* player since the last 10 Hz frame: steel scraping the deck / sliding in the dirt */
+static uint32_t snd_rng = 1;
+static int snd_rand(void) { snd_rng = snd_rng * 1664525u + 1013904223u; return (int)(snd_rng >> 16); }   /* not frand: the game's sequence stays as it was */
+static int snd_live(const Car *c) { return c == &cars[0] && (state == ST_COUNT || state == ST_RACE || state == ST_DONE); }
+static void snd_grounded(const Car *c, float rate)
+{
+    if (!snd_live(c) || grounded_cd > 0) return;
+    snd_play(S_GROUNDED, 400, (int)clampf(28 + (rate - 3.f) * 8, 28, 64)); grounded_cd = 0.5f;
+}
+/* UpdateEngineRevs, at the original's ~10 Hz frame rate */
+static void engine_revs(int touch, int input, int zs)
+{
+    int c = touch ? (zs & ~0xf) : (input ? 0x9000 : 0);
+    c = (c + 0x580) >> 3;
+    c = eng_revs < 192 ? 2 : (c - eng_revs) >> 3;      /* slow climb from a standstill */
+    if (c >= 0x100) c = 0x100;
+    else if (c < (touch ? -0x100 : -0x20)) c = touch ? -0x100 : -0x20;
+    eng_chg = c; eng_fluct = snd_rand() & 0xf;
+}
+/* FramesWheelsEngine, 50 Hz: the revs pick a sample and a period below 256, which is the same as TickOver at 47.3 * (revs + 378) Hz */
+static void engine_frame(void)
+{
+    eng_revs += eng_chg; if (eng_revs < 0) eng_revs = 0;
+    int period = 4800000 / (eng_revs + 378), k = 6;
+    if (period >= 0x3fff) period = 0x3ffe;
+    period |= eng_fluct;
+    if (period < 124) period = 124;
+    while (period >= 256) { period >>= 1; if (--k < 0) k = 0; }
+    snd_engine(k, period);
+}
+static void snd_tick(float dt)
+{
+    static int quiet;
+    const Car *p = &cars[0];
+    grounded_cd -= dt; hitcar_cd -= dt;
+    if (state == ST_MENU || state == ST_VIEW) { if (!quiet) snd_stop_all(); quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
+    quiet = 0;
+    if (p->crane > 0) {                      /* on the crane all is quiet, the engine starts again from a standstill */
+        if (eng_on) snd_engine_stop();
+        eng_on = eng_revs = eng_chg = 0; snd_scrape = snd_dirt = 0;
+    } else {
+        if ((snd_t10 += dt) >= 0.1f) {
+            snd_t10 -= 0.1f;
+            int zs = (int)(fabsf(vdot(p->v, p->F)) * AMI_V), fer = zs >> 8 < 50 ? zs >> 8 : 50;
+            if (state == ST_DONE) eng_chg = -8;      /* race over: the revs wind down to nothing */
+            else engine_revs(p->nwc > 0, state == ST_RACE && !p->wrecked && p->crash <= 0 && (p->thr > 0 || p->brk > 0), zs);
+            if (snd_scrape && p->crash <= 0 && fer >= 1) snd_play(S_WRECK, (31 - (fer >> 1)) * 4 + 170, 64);
+            if (snd_dirt && vlen(p->v) > 1.5f) snd_play(S_OFFROAD, 450 + (snd_rand() & 0x1c), 64);
+            snd_scrape = snd_dirt = 0;
+        }
+        for (snd_t50 += dt; snd_t50 >= 0.02f; snd_t50 -= 0.02f) {
+            if (state == ST_DONE && eng_revs <= 0) { if (eng_on) snd_engine_stop(); eng_on = 0; }
+            else { engine_frame(); eng_on = 1; }
+        }
+    }
+    if (snd_dump) snd_dump_frames(dt);
+}
+/* pause: the engine stops, effects play out */
+static void snd_paused(void) { snd_engine_stop(); }
+
 static V3 body_pt(const Car *c, V3 l)
 {
     return vadd(c->x, vadd(vmul(c->R, l.x), vadd(vmul(c->U, l.y), vmul(c->F, l.z))));
@@ -760,12 +799,13 @@ static void car_hurt(Car *c, float amt, float loud)
     if (c->hurt_cd > 0) amt *= 0.12f; else c->hurt_cd = 0.3f;
     c->damage += amt;
     if (getenv("SR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
-    if (c == &cars[0] && state == ST_RACE) {
-        a_noise = fmaxf(a_noise, clampf(amt / 8.f, 0.2f, 1.f) * loud);
-        a_thump = fmaxf(a_thump, clampf(amt / 12.f, 0.1f, 0.8f) * loud);
-    }
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
-    if (amt >= 8.f && loud > 0 && c->nholes < 6) c->holes[c->nholes++] = c->damage / 100.f;   /* at the crack's tip */
+    int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0;           /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
+    if (smash) { c->smash_t = 6.9f; if (c->nholes < 6) c->holes[c->nholes++] = c->damage / 100.f; }   /* at the crack's tip */
+    if (snd_live(c) && loud > 0) {
+        if (smash) snd_play(S_SMASH, 280, 64);
+        else if (amt >= 0.5f) snd_play(S_CREAK, 238, (int)clampf(amt * 10.f, 28, 64));
+    }
 }
 
 /* ---- particles: sparks, dust, smoke, fire (world space, drawn as unlit camera-facing shapes) ---- */
@@ -835,6 +875,7 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
     V3 vt = vsub(vp, vmul(bn, vn)); float vts = vlen(vt);
     if (vts > 1e-3f) f = vadd(f, vmul(vt, -0.25f * Fn * tanhf(vts / 0.5f) / vts));
     *F = vadd(*F, f); *Tq = vadd(*Tq, vcross(r, f));
+    if (vts > 3.f && Fn > 1500.f && c == &cars[0]) snd_scrape = 1;
     if (vts > 3.f && Fn > 1500.f && frand() < 0.35f)                  /* steel on the deck: sparks */
         for (int k = 0; k < 4; k++)
             spawn(P_SPARK, P, vadd(vadd(vmul(vt, 0.55f + 0.3f * frand()), vmul(bn, 1.5f + 2.f * frand())), vmul(rnd_dir(), 2.f)),
@@ -871,6 +912,7 @@ static void edge_contact(Car *c, V3 *F, V3 *Tq)
             V3 f = vmul(c->U, Fn), vt = vsub(vp, vmul(c->U, vn)); float vts = vlen(vt);
             if (vts > 1e-3f) f = vadd(f, vmul(vt, -0.3f * Fn * tanhf(vts / 0.5f) / vts));
             *F = vadd(*F, f); *Tq = vadd(*Tq, vcross(r, f));
+            if (vts > 2.f && c == &cars[0]) snd_scrape = 1;
             if (vts > 2.f && frand() < 0.5f)                                          /* frame grinding on the edge: sparks */
                 for (int k = 0; k < 4; k++) {                                         /* some fly high and wide: seen from the cockpit */
                     V3 sv = (k & 1)
@@ -968,6 +1010,7 @@ static void car_step(Car *c, float dt)
     }
 
     if (c->hurt_cd > 0) c->hurt_cd -= dt;
+    if (c->smash_t > 0) c->smash_t -= dt;
     V3 Fo = V(0, -CAR_M * GRAV, 0), To = V(0, 0, 0);
     float speed = vdot(c->v, c->F);
     float gl = -GRAV * c->R.y, dmax = steer_max(speed, c->str >= 0 ? gl : -gl);
@@ -999,17 +1042,20 @@ static void car_step(Car *c, float dt)
             if (l < WLF[i]) { contact = 1; hub = l > 0 ? l : 0; }
         }
         c->wl[i] = hub;
+        int was = c->wcon[i]; c->wcon[i] = contact;
         if (!contact) { c->wbot[i] = 0; continue; }
         nwc++;
         V3 N = wq.N, Pc = vsub(M, vmul(c->U, l + WRAD[i]));
         V3 r = vsub(Pc, c->x), vc = vadd(c->v, vcross(c->w, r));
         float rate = -vdot(vc, N);
+        if (!was && rate > 4.f) snd_grounded(c, rate);                       /* hard touchdown */
         float comp = WLF[i] - l;
         float kk = i < 2 ? K_F : K_R, cs = sqrtf(kk / 14000.f);
         float Fs = kk * comp + (rate > 0 ? C_COMP : C_REB) * cs * rate;
         if (l < WLMIN[i]) {
             float x = WLMIN[i] - l;                                          /* progressive hydraulic stop */
             Fs += K_BUMP * x + 6.0e6f * x * x + (rate > 0 ? 9000.f * rate : 0.f);
+            if (!c->wbot[i] && rate > 2.5f) snd_grounded(c, rate);          /* bottomed out: the original's grounded sound */
             if (!c->wbot[i] && rate > 4.5f) car_hurt(c, (rate - 4.5f) * 1.2f, 1.f);
             c->wbot[i] = 1;
         } else c->wbot[i] = 0;
@@ -1042,6 +1088,7 @@ static void car_step(Car *c, float dt)
     edge_contact(c, &Fo, &To);
     int touch = 0;
     float impact = ground_contact(c, &Fo, &To, &touch);
+    if (touch && c == &cars[0]) snd_dirt = 1;
     if (touch && c->crash <= 0) {                                    /* landed beside the track: crash */
         c->crash = 1e-4f; stat_falls++;
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
@@ -1144,6 +1191,7 @@ static void cars_interact(Car *a, Car *b, float dt)
             V3 f = vmul(n, Fn);
             a->v = vsub(a->v, vmul(f, dt / CAR_M)); b->v = vadd(b->v, vmul(f, dt / CAR_M));
             apply_ang(a, vcross(ra, vmul(f, -1)), dt); apply_ang(b, vcross(rb, f), dt);
+            if (-vn > 1.f && hitcar_cd <= 0 && (snd_live(a) || snd_live(b))) { snd_play(S_HITCAR, 238, 56); hitcar_cd = 0.5f; }
             if (-vn > 3.f) { car_hurt(a, 0.015f * (-vn - 3.f), 0.6f); car_hurt(b, 0.015f * (-vn - 3.f), 0.6f); }
         }
 }
@@ -1327,15 +1375,13 @@ static void game_tick(float dt)
         ai_drive(&cars[0], 0, 42, 8, NULL);
         car_step(&cars[0], dt);
         if (cars[0].damage > 40) { cars[0].damage = 0; cars[0].wrecked = 0; }
-        a_vol = 0;
         break;
     case ST_COUNT: {
         int before = (int)ceilf(state_t);
         state_t -= dt;
-        if ((int)ceilf(state_t) != before && state_t > 0) beep(440, 0.15f);
+        if ((int)ceilf(state_t) != before && state_t > 0) snd_play(S_CHIME, 150, 40);
         for (int i = 0; i < 2; i++) { cars[i].thr = 0; cars[i].brk = 1; cars[i].hold = 1; car_step(&cars[i], dt); }
-        if (state_t <= 0) { state = ST_RACE; racetime = 0; cars[0].hold = cars[1].hold = 0; beep(880, 0.5f); set_msg("GO!", 1.0f); }
-        a_vol = 0.3f; a_freq = 40;
+        if (state_t <= 0) { state = ST_RACE; racetime = 0; cars[0].hold = cars[1].hold = 0; snd_play(S_CHIME, 75, 40); set_msg("GO!", 1.0f); }
         break; }
     case ST_RACE: {
         racetime += dt;
@@ -1353,15 +1399,13 @@ static void game_tick(float dt)
         ai_drive(o, 1.8f, skill_vcap[skill], skill_alat[skill], p);
         car_step(p, dt); car_step(o, dt);
         cars_interact(p, o, dt);
-        float sp = vdot(p->v, p->F);
-        a_freq = 38 + fabsf(sp) * 2.2f + p->thr * 14; a_vol = car_out(p) ? 0.15f : 0.55f + 0.45f * p->thr;
         if (p->finished || o->finished || p->wrecked || o->wrecked) {
             state = ST_DONE; state_t = 0;
             if (p->wrecked) result = -2;
             else if (o->wrecked) result = 2;
             else if (p->finished && (!o->finished || p->ftime <= o->ftime)) result = 1;
             else result = -1;
-            beep(result > 0 ? 660 : 220, 0.8f);
+            snd_play(S_CHIME, result > 0 ? 100 : 300, 40);
         }
         break; }
     case ST_VIEW: {
@@ -1388,17 +1432,16 @@ static void game_tick(float dt)
             for (int i = 0; i < 4; i++) c->wl[i] = WREST[i];
         }
         c->flame = view_flame ? 1.f : 0.f;
-        a_vol = 0;
         break; }
     case ST_DONE:
         state_t += dt;
         for (int i = 0; i < 2; i++) { cars[i].thr = 0; cars[i].brk = 0.4f; cars[i].hold = 1; cars[i].str = 0; cars[i].bst = 0; car_step(&cars[i], dt); }
-        a_vol = 0;
         break;
     }
     if (msg_t > 0) msg_t -= dt;
     for (int i = 0; i < 2; i++) if (cars[i].lapshow > 0) cars[i].lapshow -= dt;
     parts_step(dt);
+    snd_tick(dt);
 }
 
 /* ---------------------------------------------------------------- camera */

@@ -931,6 +931,13 @@ int main(int argc, char **argv)
     phys_defaults();
     if (argc >= 3 && !strcmp(argv[1], "--sim")) {
         run_headless(0, NULL, (float)atof(argv[2]), argc > 3 ? atoi(argv[3]) % NTRACKS : 0, 0);
+        snd_report();
+        return 0;
+    }
+    if (argc >= 4 && !strcmp(argv[1], "--audio-dump")) {     /* the autopilot's race, mixed into a WAV instead of the device */
+        snd_load(); snd_dump_begin();
+        run_headless(0, NULL, (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0, 0);
+        snd_report(); snd_dump_write(argv[2]);
         return 0;
     }
     if (argc >= 4 && !strcmp(argv[1], "--menu-frames")) {       /* debug: record the menu at 60 fps into DIR/fNNN.png */
@@ -953,9 +960,7 @@ int main(int argc, char **argv)
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
     win = SDL_CreateWindow("STUNT RACER", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || gpu_init() != 0) { fprintf(stderr, "init failed: %s\n", SDL_GetError()); return 1; }
-    SDL_AudioSpec spec = {SDL_AUDIO_S16, 1, 22050};
-    SDL_AudioStream *as = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, audio_cb, NULL);
-    if (as) SDL_ResumeAudioStreamDevice(as);
+    snd_open();
     keys = SDL_GetKeyboardState(NULL);
 
     setup_menu();
@@ -987,9 +992,8 @@ int main(int argc, char **argv)
         if (!paused) {
             acc += frame;
             while (acc >= PHYS_DT) { game_tick(PHYS_DT); acc -= PHYS_DT; }
-        }
+        } else snd_paused();
         update_camera(&cars[0], frame, 0);
-        if (!as) a_vol = 0;
         gpu_render(NULL);
     }
     SDL_Quit();
