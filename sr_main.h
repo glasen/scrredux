@@ -85,6 +85,8 @@ static void phys_defaults(void)
     ph.leanp = 0.004f;
     ph.shw = 1.5f;                   /* invisible shoulder past the deck edge: wheels still find ground up to shw out, */
     ph.shdrop = 0.25f;               /* shdrop lower at the edge and falling 1:2 outwards, like the original */
+    ph.vtop = 200.f / 3.6f;          /* engine cut-off: 200 km/h, */
+    ph.vtopb = 250.f / 3.6f;         /* 250 km/h on boost (the boost adds pull, the drag alone would allow 107 m/s) */
 }
 
 static void draw_hud_base(void)
@@ -514,7 +516,7 @@ static void gauge(V3 C, float r, float frac, int nmaj, const char **lab, const c
         V3 d = vadd(vmul(u, cosf(a)), vmul(v, sinf(a))), sd = vmul(vadd(vmul(u, -sinf(a)), vmul(v, cosf(a))), w);
         V3 p0 = vadd(F, vmul(d, r0)), p1 = vadd(F, vmul(d, r * 0.92f));
         draw_quad_unlit(ckp(vsub(p0, sd)), ckp(vsub(p1, sd)), ckp(vadd(p1, sd)), ckp(vadd(p0, sd)), 0xF0F0F4);
-        if (k % 4 == 0 && lab[k / 4][0]) world_text_c(ckp(vadd(F, vmul(d, r * 0.58f))), ckd(u), ckd(v), lab[k / 4], r * 0.02f, 0xF0F0F4, 1);
+        if (k % 4 == 0 && lab[k / 4][0]) world_text_c(ckp(vadd(F, vmul(d, r * 0.58f))), ckd(u), ckd(v), lab[k / 4], r * (nmaj > 6 ? 0.017f : 0.02f), 0xF0F0F4, 1);
     }
     world_text_c(ckp(vsub(F, vmul(v, r * 0.6f))), ckd(u), ckd(v), title, r * 0.018f, 0xA0A8B8, 1);
     float a = A0 - SW * clampf(frac, 0, 1);
@@ -559,9 +561,9 @@ static void draw_cockpit(void)
     const Car *c = &cars[0];
     if (!c->active || !cockpit || state == ST_MENU || state == ST_VIEW) return;
     car_body_rows(c, ck_m);
-    static const char *bst[] = {"0", "", "50", "", "100"}, *spd[] = {"0", "40", "80", "120", "160", "200", "240"};
+    static const char *bst[] = {"0", "", "50", "", "100"}, *spd[] = {"0", "40", "80", "120", "160", "200", "240", "280"};
     gauge(V(-0.35f, 0.535f, -0.10f), 0.052f, c->boost / 100.f, 4, bst, "BOOST", V(-0.35f, 0.45f, -0.04f));
-    gauge(V(0.35f, 0.54f, -0.10f), 0.058f, fmaxf(vdot(c->v, c->F), 0) * 3.6f / 240.f, 6, spd, "KPH", V(0.35f, 0.45f, -0.04f));
+    gauge(V(0.35f, 0.54f, -0.10f), 0.058f, fmaxf(vdot(c->v, c->F), 0) * 3.6f / 280.f, 7, spd, "KPH", V(0.35f, 0.45f, -0.04f));
     draw_crack(c);
 }
 
@@ -845,7 +847,8 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
     if (getenv("SR_PROFILE")) { for (int k = 0; k < nseg; k += 25) printf("%d x=%.0f y=%.1f z=%.0f gap=%d\n", k, seg[k].c.x, seg[k].c.y, seg[k].c.z, seg[k].gap); }
     autoplay = 1; start_race();
     if (getenv("SR_LAUNCH")) { int lk = 0; float lv = 0; sscanf(getenv("SR_LAUNCH"), "%d,%f", &lk, &lv);
-        car_place(&cars[0], lk, 0, lv); car_place(&cars[1], (lk + 300) % nseg, 2.0f, 0); state = ST_RACE; }
+        car_place(&cars[0], lk, 0, lv); car_place(&cars[1], (lk + 300) % nseg, 2.0f, 0); state = ST_RACE;
+        cars[0].crane = cars[1].crane = 0; }                    /* else the start crane puts them back on the grid */
     if (camsel == 4) { start_view(); view_auto = 0; view_yaw = secs * PI_F / 180.f; secs = 0;
         if (getenv("SR_VIEW")) sscanf(getenv("SR_VIEW"), "%f,%f", &view_pitch, &view_dist);
         if (getenv("SR_TARGET")) sscanf(getenv("SR_TARGET"), "%f,%f,%f", &view_target.x, &view_target.y, &view_target.z);
@@ -980,7 +983,7 @@ int main(int argc, char **argv)
                 if (k == SDLK_ESCAPE) { if (state == ST_MENU || state == ST_VIEW) running = 0; else { setup_menu(); paused = 0; } }
                 else if (k == SDLK_F11) { full = !full; SDL_SetWindowFullscreen(win, full); }
                 else if (k == SDLK_P && state == ST_RACE) paused = !paused;
-                else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) { car_hurt(&cars[0], 8, 0); start_crane(&cars[0], cars[0].safe, 0, 2.6f); }
+                else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) { car_hurt(&cars[0], 8, 0); start_crane(&cars[0], restart_seg(&cars[0]), 0, 2.6f); }
                 else if (state == ST_VIEW) view_key(k);
                 else if (state == ST_MENU) menu_key(k);
                 else if (state == ST_DONE && k == SDLK_RETURN && state_t > 1.5f) setup_menu();

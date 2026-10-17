@@ -32,7 +32,7 @@ typedef struct {
     float mass, grav, power, fmax, boostp, boostf, brkf, brkr, drag, mu, corner, lowspd, loadmax;
     float steer, steerfall, steerrate, kf, kr, ccomp, creb, kbump;
     float sroll, syaw, spitch, air, leanr, leanp, rgrip, steerlat, keyrise, keyret;
-    float boostrate, shw, shdrop;
+    float boostrate, shw, shdrop, vtop, vtopb;
 } Phys;
 static Phys ph;
 #define GRAV (ph.grav)
@@ -212,8 +212,27 @@ typedef struct { V3 c, T, R, N; float u, curv, vcurv, bin; unsigned char gap, st
 #define SCR_U (2.95f / 128.f)                          /* metres per x/z unit: the car's 2.95 m wheelbase is 128 units */
 
 static Seg seg[MAXSEG]; static int nseg; static float ds;
-static float jump_v[MAXSEG];                           /* AI: speed needed here to clear the jump ahead, 0 = none */
+static float jump_v[MAXSEG];                           /* AI: speed to hold here for the jump ahead (its run-up and the bend before it), 0 = none */
+static unsigned char jump_b[MAXSEG];                   /* AI: that run-up needs the boost */
 static int cur_track = -1;
+/* crane drop points, like the original: the car is lowered onto the middle of a section, never onto a bend piece
+ * (templates 1, 3, 6, 7) nor onto a section in the track's own list (the tail of each track's road data) */
+static const unsigned char SCR_NOREST[SCR_NTRACKS][16] = {
+    {1, 34}, {16, 17, 18, 19, 20, 21, 22, 47, 5}, {38}, {16, 17, 21, 22, 32, 33, 34, 35}, {32},
+    {4, 13, 38, 51, 52, 53, 54}, {30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43, 44, 45}, {0}};
+static const unsigned char SCR_NNOREST[SCR_NTRACKS] = {2, 9, 1, 8, 1, 7, 14, 0};
+/* our cars top out at 250 km/h on boost, the original's flew further: its jumps reshaped to suit (build_track_geometry) */
+enum { ED_FILL, ED_LIFT, ED_STEP, ED_TOWER };
+static const struct { unsigned char track, sec, kind; float m; } TRACK_EDIT[] = {
+    {0, 33, ED_LIFT, 2}, {0, 0, ED_LIFT, 4},
+    {1, 15, ED_LIFT, 2}, {1, 17, ED_LIFT, 2}, {1, 19, ED_LIFT, 2}, {1, 21, ED_LIFT, 2},
+    {3, 17, ED_FILL, 0}, {3, 22, ED_FILL, 3}, {3, 34, ED_FILL, 10},
+    {4, 32, ED_STEP, 8.5f},
+    {5, 3, ED_LIFT, 5}, {5, 12, ED_LIFT, 4}, {5, 38, ED_FILL, 0},
+    {6, 40, ED_LIFT, 8}, {6, 43, ED_TOWER, 12}};
+static const struct { unsigned char track, sec; signed char from; float vd, smax, c, R; } TRACK_HILL[] = {
+    {4, 3, -1, 50, 0.5f, 4, 120}, {5, 37, -1, 50, 0.5f, 4, 120}, {6, 40, 44, 56, 0.9f, 4, 150}};
+static short seg_sec[MAXSEG]; static int sec_mid[100], nsec; static unsigned char sec_ok[100];
 static float tr_minx, tr_maxx, tr_minz, tr_maxz;
 static float ar_x0, ar_x1, ar_z0, ar_z1;        /* stadium arena bounds */
 
@@ -227,72 +246,8 @@ static void smooth_circ(float *a, int passes)
     }
 }
 
-/* take-off speed (along the lip) for a jump from the end of seg lip to the road after seg end, found on the height
- * profile: the lowest speed that lands gently (e.g. far down the Ski Jump's slope), else firmly, else at all */
-static float jump_speed(int lip, int end, int past)
-{
-    int span = (end - lip + nseg) % nseg;
-    float first = 0, firm = 0;
-    for (float v = 8.f; v < 110.f; v += 0.5f) {
-        const Seg *L = &seg[lip];
-        float s = 0, y = seg[(lip + 1) % nseg].c.y + 0.45f, vh = v * sqrtf(fmaxf(1 - L->T.y * L->T.y, 0)), vy = v * L->T.y, imp = 0;
-        int ok = 0;
-        for (int it = 0; it < 1200; it++) {
-            const float dt = 1.f / 120.f;
-            float sp = sqrtf(vh * vh + vy * vy), k = ph.drag * sp / ph.mass;
-            vh -= k * vh * dt; vy -= (GRAV + k * vy) * dt;
-            s += vh * dt; y += vy * dt;
-            int i = (int)(s / ds); float f = s / ds - i;
-            int a = (lip + 1 + i) % nseg, b = (a + 1) % nseg;
-            float ry = seg[a].c.y + (seg[b].c.y - seg[a].c.y) * f;
-            if (y - 0.45f > ry - (seg[a].steep ? 0.8f : 0.f)) continue;   /* wheels may clip a face */
-            if (i >= span + past && !seg[a].steep) {
-                float sl = (seg[b].c.y - seg[a].c.y) / ds;              /* impact speed across the landing slope */
-                imp = (sl * vh - vy) / sqrtf(1 + sl * sl); ok = 1;
-            }
-            break;
-        }
-        if (!ok) continue;
-        if (first <= 0) first = v;
-        if (imp < 9.f) return v;
-        if (imp < 15.f && firm <= 0) firm = v;
-    }
-    return firm > 0 ? firm : first;
-}
-/* a jump starts at a sheer face and runs on over the next faces while the road between is no place to land:
- * far below the lip (a pit) or above it (a wall to clear) */
-static void plan_jumps(void)
-{
-    memset(jump_v, 0, sizeof(float) * nseg);
-    for (int k = 0; k < nseg; k++) {
-        int lip = (k + nseg - 1) % nseg;
-        if (!seg[k].steep || seg[lip].steep || seg[(k + 2) % nseg].c.y > seg[k].c.y) continue;   /* only faces going down */
-        int e = k;
-        float ylip = seg[k].c.y;
-        for (;;) {
-            while (seg[(e + 1) % nseg].steep) e = (e + 1) % nseg;
-            int m = 1, lim = (int)(300 / ds);
-            while (m < lim && !seg[(e + m) % nseg].steep) m++;
-            if (m >= lim) break;
-            float lo = 1e9f, hi = -1e9f;
-            for (int q = 1; q < m; q++) { lo = fminf(lo, seg[(e + q) % nseg].c.y); hi = fmaxf(hi, seg[(e + q) % nseg].c.y); }
-            if (!(hi < ylip - 2.f || lo > ylip + 2.f)) break;
-            e = (e + m) % nseg;
-        }
-        float v = jump_speed(lip, e, (int)(4 / ds));                 /* a car length past the far face */
-        if (v <= 0) v = jump_speed(lip, e, 0);
-        if (getenv("SR_DEBUG")) printf("jump seg %d..%d: %.1f m/s\n", lip, e, v);
-        if (v <= 0) continue;
-        v = v * 1.06f + 2.f;
-        for (int q = 0; q < (int)(900 / ds); q++) {                 /* run-up, flat out on boost */
-            int si = (lip - q + nseg) % nseg;
-            if (seg[si].steep || seg[si].curv > 0.004f || v < 20.f) break;   /* run-ups start out of the last bend */
-            jump_v[si] = fmaxf(jump_v[si], v);
-            float a = (fminf(ph.fmax + ph.boostf, (ph.power + ph.boostp) / v) - ph.drag * v * v) / ph.mass * 0.7f;
-            v = sqrtf(fmaxf(v * v - 2 * fmaxf(a, 0.5f) * ds, 0));
-        }
-    }
-}
+static void plan_jumps(void);
+static int planning;                                   /* a scratch car is on the track (plan_jumps): no debug output */
 
 static void build_track_geometry(int idx)
 {
@@ -301,13 +256,16 @@ static void build_track_geometry(int idx)
     cur_track = idx;
     /* cross-sections round the loop from the start line (the end of the start piece); a piece's last one is the next one's first */
     enum { MAXX = 100 * 13, PER = 24 };
-    static float ex[MAXX][2], ez[MAXX][2]; static int ey[MAXX][2];
+    static float ex[MAXX][2], ez[MAXX][2]; static int ey[MAXX][2], xsec[MAXX];
     int nx = 0;
+    nsec = np;
     for (int q = 0; q < np; q++) {
         int p = (start + 1 + q) % np, at = b[102 + p], t = at & 15, ang = at & 0xc0, ns = SCR_TPL_NS[t];
         int cx = (b[2 + p] & 15) * 2048, cz = (b[2 + p] >> 4) * 2048;
         int sh[2] = {(short)(b[402 + 2 * p] << 8 | b[403 + 2 * p]), (short)(b[602 + 2 * p] << 8 | b[603 + 2 * p])};
         int id[2] = {b[202 + p] & 0x7f, b[302 + p] & 0x7f};
+        sec_ok[p] = t != 1 && t != 3 && t != 6 && t != 7;
+        for (int k = 0; k < SCR_NNOREST[idx]; k++) if (SCR_NOREST[idx][k] == p) sec_ok[p] = 0;
         for (int i = 0; i < ns; i++) {
             const short *r = SCR_TPL_XZ[t][(at & 0x10) ? ns - i : i];
             for (int e = 0; e < 2; e++) {
@@ -319,7 +277,79 @@ static void build_track_geometry(int idx)
                 ez[nx][e] = (cz + rz - 8 * 2048) * SCR_U;
                 ey[nx][e] = SCR_PROF[id[e]][i] + sh[e];
             }
-            nx++;
+            xsec[nx++] = p;
+        }
+    }
+    /* the jump edits, m metres each (a sheer face is a step of 640 units or more between cross-sections) */
+    const float U = 0.25f * SCR_U;
+    for (int e = 0; e < (int)(sizeof TRACK_EDIT / sizeof TRACK_EDIT[0]); e++) {
+        if (TRACK_EDIT[e].track != idx) continue;
+        int i0 = 0, i, M = (int)(TRACK_EDIT[e].m / U);
+        while (i0 < nx && xsec[i0] != TRACK_EDIT[e].sec) i0++;
+        switch (TRACK_EDIT[e].kind) {
+        case ED_FILL:                    /* a pit filled from this section on, up to its far face's top (sloping down by m to it) */
+            for (i = i0; i + 1 < nx && ey[i + 1][0] - ey[i][0] < 640 && ey[i + 1][1] - ey[i][1] < 640; i++) {}
+            if (i + 2 >= nx) break;
+            for (int ed = 0; ed < 2; ed++) {
+                int H = ey[i + 2][ed] > ey[i + 1][ed] ? ey[i + 2][ed] : ey[i + 1][ed];   /* a crest just past the face */
+                ey[i + 1][ed] = H;
+                for (int k = i0; k <= i; k++) ey[k][ed] = H + M * (i + 1 - k) / (i + 1 - i0);
+            }
+            break;
+        case ED_LIFT:                    /* a ramp's lip raised by m, from nothing at the section start (the lip may be the next one's first) */
+            for (i = i0; i + 1 < nx && xsec[i] == xsec[i0] && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640; i++) {}
+            for (int k = i0 + 1; k <= i; k++) for (int ed = 0; ed < 2; ed++) ey[k][ed] += M * (k - i0) / (i - i0);
+            break;
+        case ED_STEP: {                  /* a step down onto a climb made shallower: the climb raised by m, tapering out at the crest */
+            for (i = i0; i + 1 < nx && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640; i++) {}
+            int kc = i + 1;
+            for (int k = i + 1; k < nx && k < i + 40; k++) if (ey[k][0] + ey[k][1] > ey[kc][0] + ey[kc][1]) kc = k;
+            for (int k = i + 1; k < kc; k++) for (int ed = 0; ed < 2; ed++) ey[k][ed] += M * (kc - k) / (kc - i - 1);
+            break;
+        }
+        case ED_TOWER: {                 /* a tower between two pits lowered by m */
+            int lo = 1 << 30;
+            for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) lo = ey[k][0] < lo ? ey[k][0] : lo;
+            for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) for (int ed = 0; ed < 2; ed++) if (ey[k][ed] > lo + 640) ey[k][ed] -= M;
+            break;
+        }
+        }
+    }
+    /* a drop too deep to land flat after at our speeds becomes a landing hill: a sheer step of c metres at the lip, then a
+     * knoll the car follows up to vd m/s, steepening to a straight slope smax and curving out (radius ~R) onto the floor */
+    for (int e = 0; e < (int)(sizeof TRACK_HILL / sizeof TRACK_HILL[0]); e++) {
+        if (TRACK_HILL[e].track != idx) continue;
+        int i0 = 0;
+        while (i0 < nx && xsec[i0] != TRACK_HILL[e].sec) i0++;
+        int i = i0;
+        while (i + 1 < nx && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640) i++;
+        const float vd = TRACK_HILL[e].vd, sm = TRACK_HILL[e].smax, c = TRACK_HILL[e].c, D = TRACK_HILL[e].R * sm * sm * 0.5f;
+        float H = (ey[i][0] + ey[i][1]) * 0.5f * U, fl = 1e9f, d = 0;
+        int kf = i + 1;                                                                /* the hill starts after the lip, or across a pit */
+        if (TRACK_HILL[e].from >= 0) while (kf < nx && xsec[kf] != TRACK_HILL[e].from) kf++;
+        for (int k = kf; k < nx && k < kf + 80; k++) {                                /* the floor: where the track first stops going down */
+            float y = (ey[k][0] + ey[k][1]) * 0.5f * U;
+            if (y > fl + 0.5f) break;
+            fl = fminf(fl, y);
+        }
+        float th = ((ey[i][0] + ey[i][1]) - (ey[i - 1][0] + ey[i - 1][1])) * 0.5f * U /
+                   hypotf((ex[i][0] + ex[i][1] - ex[i - 1][0] - ex[i - 1][1]) * 0.5f, (ez[i][0] + ez[i][1] - ez[i - 1][0] - ez[i - 1][1]) * 0.5f);
+        static float tj[700];                                                          /* the flight from the lip at vd, with the car's drag */
+        { float px = 0, py = 0, vx = vd / sqrtf(1 + th * th), vy = vx * th; int n = 0;
+          for (int it = 0; it < 6000 && n < 700; it++) { float sp = hypotf(vx, vy), dt = 0.005f; vx -= ph.drag / ph.mass * sp * vx * dt; vy -= (GRAV + ph.drag / ph.mass * sp * vy) * dt;
+                            px += vx * dt; py += vy * dt; while (n < 700 && n <= px) tj[n++] = py; }
+          while (n < 700) { tj[n] = n ? tj[n - 1] - 10.f : py; n++; } }
+        float xk = 699, yk;
+        for (int x = 1; x < 699; x++) if (tj[x + 1] - tj[x] < -sm) { xk = (float)x; break; }
+        yk = tj[(int)xk] - c;
+        for (int k = i + 1; k < nx; k++) {
+            d += hypotf((ex[k][0] + ex[k][1] - ex[k - 1][0] - ex[k - 1][1]) * 0.5f, (ez[k][0] + ez[k][1] - ez[k - 1][0] - ez[k - 1][1]) * 0.5f);
+            float y = d < xk ? tj[(int)d] + (tj[(int)d + 1] - tj[(int)d]) * (d - (int)d) - c : yk - sm * (d - xk), r = y - (fl - H);
+            y = r > D ? y : r > -D ? fl - H + (r + D) * (r + D) / (4 * D) : fl - H;    /* smooth max onto the floor */
+            float yo = (ey[k][0] + ey[k][1]) * 0.5f * U - H;
+            if (r < -D && yo <= fl - H + 0.05f) break;                                 /* down: the rest is the original's */
+            if (k < kf) continue;
+            for (int ed = 0; ed < 2; ed++) ey[k][ed] = ey[i][ed] + (int)(y / U);
         }
     }
     float ymin = 1e9f;
@@ -330,7 +360,7 @@ static void build_track_geometry(int idx)
     int re = vdot(vcross(d0, UP), V(ex[0][1] - ex[0][0], 0, ez[0][1] - ez[0][0])) > 0 ? 1 : 0;
 
     /* plan: centripetal Catmull-Rom through the cross-section centres; heights stay linear between cross-sections */
-    static V3 fp[MAXX * PER]; static float fy[MAXX * PER], fb[MAXX * PER], cum[MAXX * PER + 1]; static unsigned char fs[MAXX * PER];
+    static V3 fp[MAXX * PER]; static float fy[MAXX * PER], fb[MAXX * PER], cum[MAXX * PER + 1]; static unsigned char fs[MAXX * PER]; static short fsec[MAXX * PER];
     int M = 0;
     for (int i = 0; i < nx; i++) {
         V3 P[4];
@@ -346,10 +376,12 @@ static void build_track_geometry(int idx)
             V3 A3 = vlerp(P[2], P[3], (tt - t[2]) / (t[3] - t[2]));
             V3 B1 = vlerp(A1, A2, (tt - t[0]) / (t[2] - t[0])), B2 = vlerp(A2, A3, (tt - t[1]) / (t[3] - t[1]));
             fp[M] = vlerp(B1, B2, (tt - t[1]) / (t[2] - t[1]));
-            float yl = yl0 + (yl1 - yl0) * f, yr = yr0 + (yr1 - yr0) * f;
+            /* a sheer face becomes a vertical step at the upper deck's end: the lip and the gap stay the original's */
+            float fh = !steep ? f : (yl1 + yr1 < yl0 + yr0) ? clampf(f / 0.08f, 0, 1) : clampf((f - 0.92f) / 0.08f, 0, 1);
+            float yl = yl0 + (yl1 - yl0) * fh, yr = yr0 + (yr1 - yr0) * fh;
             fy[M] = (yl + yr) * 0.5f * 0.25f * SCR_U + lift;
             fb[M] = (yl - yr) * 0.25f * SCR_U;              /* left edge minus right edge */
-            fs[M] = steep;
+            fs[M] = steep; fsec[M] = (short)xsec[i];
             M++;
         }
     }
@@ -369,9 +401,31 @@ static void build_track_geometry(int idx)
         seg[k].c.y = fy[i] + (fy[i2] - fy[i]) * f;
         seg[k].u = tg;
         bank[k] = atan2f(fb[i] + (fb[i2] - fb[i]) * f, 2 * TRACK_HW);
-        st[k] = fs[i];
+        st[k] = fs[i]; seg_sec[k] = fsec[i];
     }
-    for (int k = 0; k < nseg; k++) { seg[k].gap = 0; seg[k].steep = st[k] || st[(k + 1) % nseg]; }
+    for (int k = 0, k0 = 0; k < nseg; k++)
+        if (k == nseg - 1 || seg_sec[k + 1] != seg_sec[k]) { sec_mid[seg_sec[k]] = (k0 + k) / 2; k0 = k + 1; }
+    /* sharp hollows (the foot of the draw bridge's 30 degree ramps: an 11 m radius) are rounded off to ~80 m, away from sheer faces */
+    for (int k = 0; k < nseg; k++) {
+        int near = 0;
+        for (int o = -6; o <= 6; o++) near |= st[(k + o + nseg) % nseg];
+        if (near) continue;
+        #define YS(o) seg[((k) + (o) + nseg) % nseg].c.y
+        float s1 = (YS(-1) - YS(-4)) / (3 * ds), s2 = (YS(4) - YS(1)) / (3 * ds), d2 = YS(1) - 2 * YS(0) + YS(-1);
+        if (s2 - s1 < 0.15f || d2 < YS(2) - 2 * YS(1) + YS(0) || d2 < YS(0) - 2 * YS(-1) + YS(-2)) continue;
+        int W = (int)fminf(40.f * (s2 - s1) / ds, 25.f);
+        float y0 = YS(-W) + s1 * W * ds;                                   /* where the two straights meet, about here */
+        for (int j = -W; j <= W; j++) {
+            float y = y0 + s1 * j * ds + (s2 - s1) * sq((j + W) * ds) / (4 * W * ds);
+            int q = (k + j + nseg) % nseg; if (y > seg[q].c.y) seg[q].c.y = y;   /* only ever filled in */
+        }
+        #undef YS
+        k += W;
+    }
+    for (int k = 0; k < nseg; k++) {
+        int kn = (k + 1) % nseg;
+        seg[k].gap = 0; seg[k].steep = (st[k] || st[kn]) && fabsf(seg[kn].c.y - seg[k].c.y) > 1.5f;
+    }
     static float kap[MAXSEG], vk[MAXSEG]; static V3 Th[MAXSEG];
     for (int k = 0; k < nseg; k++) {
         int kp = (k + nseg - 1) % nseg, kn = (k + 1) % nseg;
@@ -496,7 +550,11 @@ static void build_seg_mesh(int i)
     float tj = (i % SLAB == 0) ? 0.10f : 0.f;
     for (int k = 0; k < NSTR; k++) {
         V3 a0 = a[k], a1 = a[k + 1], b0 = b[k], b1 = b[k + 1];
-        if (s->steep) { draw_quad(a0, a1, b1, b0, is_edge(k) ? 0x3A3A3E : 0x141416); continue; }   /* sheer face: black, like the original's pits */
+        if (s->steep) {                                     /* sheer step: a red and white end panel like the side skirts */
+            uint32_t col = is_edge(k) ? 0x6A6A72 : (((k - 1) / 4) & 1) ? COL_RED : 0xE8E8E8;
+            draw_quad(a0, a1, b1, b0, col); draw_quad(a0, b0, b1, a1, col);
+            continue;
+        }
         if (i < 4 && !is_edge(k)) { draw_quad(a0, a1, b1, b0, start_col(i, k)); continue; }
         if (tj > 0) {
             V3 m0 = vlerp(a0, b0, tj), m1 = vlerp(a1, b1, tj);
@@ -511,6 +569,7 @@ static void build_seg_mesh(int i)
             draw_quad_c(a0, a1, b1, b0, scalecol(ca[k], f), scalecol(ca[k + 1], f), scalecol(cb[k + 1], f), scalecol(cb[k], f));
         }
     }
+    if (s->steep) return;
     /* open deck edge, no barriers (like the original): steel lip over red and white side skirts */
     for (int sd = -1; sd <= 1; sd += 2) {
         uint32_t hz = ((i / 4) & 1) ? COL_RED : 0xE8E8E8;
@@ -689,6 +748,7 @@ typedef struct {
     float flame;                                  /* exhaust flame strength (0..1.4), boost only */
     float holes[6]; int nholes;                   /* big hits: holes in the cockpit's top tube, as damage fractions along the crack */
     uint32_t col;
+    float ai_lane; int ai_lset;                   /* AI: the lane it is easing towards its target */
 } Car;
 
 /* car geometry relative to the centre of mass (FL, FR, RL, RR), read from models/stuntcar.scm (car_model.h) */
@@ -721,7 +781,7 @@ static float snd_t10, snd_t50, grounded_cd, hitcar_cd;
 static int snd_scrape, snd_dirt;             /* player since the last 10 Hz frame: steel scraping the deck / sliding in the dirt */
 static uint32_t snd_rng = 1;
 static int snd_rand(void) { snd_rng = snd_rng * 1664525u + 1013904223u; return (int)(snd_rng >> 16); }   /* not frand: the game's sequence stays as it was */
-static int snd_live(const Car *c) { return c == &cars[0] && (state == ST_COUNT || state == ST_RACE || state == ST_DONE); }
+static int snd_live(const Car *c) { return c == &cars[0] && !planning && (state == ST_COUNT || state == ST_RACE || state == ST_DONE); }
 static void snd_grounded(const Car *c, float rate)
 {
     if (!snd_live(c) || grounded_cd > 0) return;
@@ -849,6 +909,26 @@ static void parts_step(float dt)
     }
 }
 
+/* a sheer face going up just behind or at segment k: its segment, else -1 */
+static int climb_face(int k)
+{
+    for (int o = -3; o <= 1; o++) {
+        int f = ((k + o) % nseg + nseg) % nseg;
+        if (seg[f].steep && seg[(f + 1) % nseg].c.y > seg[f].c.y) return f;
+    }
+    return -1;
+}
+/* below the upper deck past a sheer face going up: the face is a wall there. How far P is through it, else 0 */
+static float in_climb_wall(V3 P, int f, V3 *n)
+{
+    const Seg *s = &seg[f], *s2 = &seg[(f + 1) % nseg];
+    V3 Th = vnorm(V(s2->c.x - s->c.x, 0, s2->c.z - s->c.z));
+    float d = vdot(vsub(P, s->c), Th);
+    if (d <= 0 || d > 4.f || P.y > s2->c.y - 0.3f) return 0;
+    *n = vmul(Th, -1);
+    return d;
+}
+
 /* penalty contact of one body point against the solid deck / barriers */
 static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
 {
@@ -859,10 +939,12 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
     float al = fabsf(q.lat), h = q.h, sg = q.lat > 0 ? 1.f : -1.f;
     float topy = 0.0f;
     int stp = seg[q.seg].steep || seg[(q.seg + 1) % nseg].steep || seg[(q.seg + nseg - 1) % nseg].steep;   /* solid down to the ground */
-    if (al > ow || (h < -1.2f && !stp) || h > topy) { c->hit[idx] = 0; return; }
-    float best = topy - h; V3 bn = q.N;
-    float pb = h + 1.2f; if (pb < best && !stp) { best = pb; bn = vmul(q.N, -1); }
-    float ps = ow - al; if (ps < best) { best = ps; bn = vmul(q.R, sg); }
+    int cf = al < ow ? climb_face(q.seg) : -1; V3 wn; float wd = cf >= 0 ? in_climb_wall(P, cf, &wn) : 0;
+    if (wd > 0) { h = -wd; topy = 0; stp = 0; }                   /* the wall: pushed straight back out, never up the face */
+    if (al > ow || (h < -1.2f && !stp && wd <= 0) || h > topy) { c->hit[idx] = 0; return; }
+    float best = topy - h; V3 bn = wd > 0 ? wn : q.N;
+    float pb = h + 1.2f; if (pb < best && !stp && wd <= 0) { best = pb; bn = vmul(q.N, -1); }
+    float ps = ow - al; if (ps < best && wd <= 0) { best = ps; bn = vmul(q.R, sg); }
     if (seg[(q.seg + nseg - 1) % nseg].gap) { float pst = q.u * ds; if (pst < best) { best = pst; bn = vmul(q.T, -1); } }
     if (seg[(q.seg + 1) % nseg].gap) { float pe = (1 - q.u) * ds; if (pe < best) { best = pe; bn = q.T; } }
     V3 r = vsub(P, c->x), vp = vadd(c->v, vcross(c->w, r));
@@ -946,6 +1028,16 @@ static void lean_limit(Car *c)
 
 static int car_out(const Car *c) { return c->crash > 0 || c->crane > 0; }
 
+/* where the crane puts the car back: the middle of the section it was last on, or of the nearest one before it allowed */
+static int restart_seg(const Car *c)
+{
+    int s = seg_sec[c->safe], s0;
+    for (int n = 0; n < nsec && !sec_ok[s]; n++) s = (s + nsec - 1) % nsec;
+    s0 = s;                                    /* and not where a jump ahead needs a run-up: from a standstill it would fall in */
+    for (int n = 0; n < nsec && (!sec_ok[s] || jump_v[sec_mid[s]] > 0); n++) s = (s + nsec - 1) % nsec;
+    return sec_mid[sec_ok[s] && jump_v[sec_mid[s]] <= 0 ? s : s0];
+}
+
 /* the crane picks the car up and lowers it onto the track at segment s, like the original */
 static void start_crane(Car *c, int s, float lat, float T)
 {
@@ -1021,7 +1113,8 @@ static void car_step(Car *c, float dt)
     if (c->thr > 0) {
         float P = ph.power, Fm = ph.fmax;
         if (c->bst && c->boost > 0) { P += ph.boostp; Fm += ph.boostf; c->boost -= dt * ph.boostrate; if (c->boost < 0) c->boost = 0; }
-        Fdrv = c->thr * fminf(Fm, P / fmaxf(speed, 3.f));
+        float vtop = c->bst && c->boost > 0 ? ph.vtopb : ph.vtop;      /* the engine cuts out at the top speed, boost or not, like the original */
+        Fdrv = c->thr * fminf(Fm, P / fmaxf(speed, 3.f)) * clampf((vtop - speed) / 2.f, 0, 1);
     }
     if (c->brk > 0 && speed < 0.8f && c->thr <= 0 && !c->hold) { Fdrv = -c->brk * 4500.f; brake = 0; }
 
@@ -1036,6 +1129,8 @@ static void car_step(Car *c, float dt)
             wq.N = vnorm(vadd(wq.N, vmul(wq.R, wq.lat > 0 ? 0.5f : -0.5f)));
         }
         float cosd = wq.valid ? vdot(c->U, wq.N) : 0;
+        int wcf = wq.valid ? climb_face(wq.seg) : -1; V3 wn;
+        if (wcf >= 0 && in_climb_wall(M, wcf, &wn) > 0) wq.valid = 0;                 /* below the top of a face going up: the wall */
         if (wq.valid && wq.road && over < ph.shw && cosd > 0.15f && wq.h > (seg[wq.seg].steep ? -8.f : -0.6f)) {
             float d = wq.h / cosd;
             l = d - WRAD[i];
@@ -1094,7 +1189,7 @@ static void car_step(Car *c, float dt)
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
         dust_burst(c->x, 36, 3.f + 0.3f * impact);
         if (c == &cars[0]) set_msg("CRASHED!", 2.0f);
-        if (getenv("SR_DEBUG")) fprintf(stderr, "crash car%d seg %d impact %.1f t=%.2f\n", (int)(c - cars), c->seg, impact, racetime);
+        if (getenv("SR_DEBUG") && !planning) fprintf(stderr, "crash car%d seg %d impact %.1f t=%.2f\n", (int)(c - cars), c->seg, impact, racetime);
     }
 
     float sp2 = vlen(c->v);
@@ -1142,11 +1237,7 @@ static void car_step(Car *c, float dt)
     c->U = vnorm(vsub(c->U, vmul(c->F, vdot(c->U, c->F))));
     c->R = vcross(c->F, c->U);
 
-    if (nwc >= 3 && q.valid && q.road && fabsf(q.lat) < TRACK_HW - 1.5f) {
-        int ok = 1, look = (int)(110 / ds);
-        for (int k = -5; k < look && ok; k++) { const Seg *sk = &seg[((q.seg + k) % nseg + nseg) % nseg]; if (sk->gap || sk->steep) ok = 0; }
-        if (ok) c->safe = q.seg;
-    }
+    if (nwc >= 3 && q.valid && q.road && fabsf(q.lat) < TRACK_HW - 1.5f) c->safe = q.seg;
     if (c->crash > 0) {                                              /* lying in the dirt: smoke, a little fire, then the crane */
         c->crash += dt; c->dust_t -= dt;
         if (c->dust_t <= 0) {
@@ -1155,16 +1246,16 @@ static void car_step(Car *c, float dt)
             spawn(P_SMOKE, vadd(eng, vmul(rnd_dir(), 0.3f)), V(frand() - 0.5f, 1.5f, frand() - 0.5f), 2.5f + frand(), 0.3f, (frand() < 0.5f) ? 0x4A4A4E : 0x66666A);
             if (frand() < 0.6f) spawn(P_FIRE, vadd(eng, vmul(rnd_dir(), 0.4f)), V(0, 1.f, 0), 0.4f + 0.3f * frand(), 0.35f, frand() < 0.5f ? 0xFF8A18 : 0xFFD040);
         }
-        if (c->crash > 3.4f) start_crane(c, c->safe, 0, 2.6f);
+        if (c->crash > 3.4f) start_crane(c, restart_seg(c), 0, 2.6f);
         return;
     }
     c->flip_t = c->U.y < 0.25f && vlen(c->v) < 6.f ? c->flip_t + dt : 0;
     c->stuck_t = (state == ST_RACE && vlen(c->v) < 1.0f && c->thr > 0.15f) ? c->stuck_t + dt : 0;
     if (c->flip_t > 2.5f || c->stuck_t > 2.5f || c->x.y < ground_h(c->x.x, c->x.z) - 4.f) {
         stat_falls++; car_hurt(c, 4.f, 1.f);
-        if (getenv("SR_DEBUG")) fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flip_t, c->stuck_t);
+        if (getenv("SR_DEBUG") && !planning) fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flip_t, c->stuck_t);
         if (c == &cars[0]) set_msg("RESET", 1.5f);
-        start_crane(c, c->safe, 0, 2.6f);
+        start_crane(c, restart_seg(c), 0, 2.6f);
     }
 }
 
@@ -1205,7 +1296,7 @@ static float ai_lane_clear(const Car *c, const Car *o, float lane, float *lift)
     V3 d = vsub(o->x, c->x);
     float dlong = vdot(d, s0->T), mylat = vdot(vsub(c->x, s0->c), s0->R), olat = mylat + vdot(d, s0->R);
     if (dlong < -6.f || dlong > 18.f) return lane;                    /* far behind or well ahead */
-    const float need = 3.4f, edge = TRACK_HW - 1.7f;                   /* centre-to-centre room for two cars side by side */
+    const float need = 3.4f, edge = TRACK_HW - 2.2f;                   /* centre-to-centre room for two cars side by side */
     if (fabsf(lane - olat) >= need) return lane;
     float side = mylat >= olat ? 1.f : -1.f;                           /* stay on the side we are already on */
     float alt = clampf(olat + side * need, -edge, edge);
@@ -1223,7 +1314,11 @@ static void ai_drive(Car *c, float lane, float vcap, float alat, const Car *riva
     int gapsoon = 0, gn = (int)(110 / ds);
     for (int k = -(int)(25 / ds); k < gn; k++) { const Seg *sk = &seg[((c->seg + k) % nseg + nseg) % nseg]; if (sk->gap || sk->steep) gapsoon = 1; }
     const Seg *s0 = &seg[c->seg];
-    if (gapsoon) lane = clampf(vdot(vsub(c->x, s0->c), s0->R), -2.5f, 2.5f);   /* hold the lane through a jump */
+    if (gapsoon) lane = clampf(vdot(vsub(c->x, s0->c), s0->R), -1.5f, 1.5f);   /* hold the lane through a jump, well in from the edges */
+    if (jump_v[c->seg] > 0) lane = clampf(lane, -2.2f, 2.2f);                 /* a run-up is driven near the middle, whoever is about */
+    if (!c->ai_lset) { c->ai_lane = vdot(vsub(c->x, s0->c), s0->R); c->ai_lset = 1; }
+    c->ai_lane += clampf(lane - c->ai_lane, -2.f / 240.f, 2.f / 240.f);       /* change lanes at 2 m/s, never with a jerk */
+    lane = c->ai_lane;
     V3 Th = vnorm(V(s0->T.x, 0, s0->T.z)), Rt = vnorm(vcross(Th, UP));
     V3 Fh = vnorm(V(c->F.x, 0, c->F.z));
     float e = vdot(vsub(c->x, s0->c), s0->R) - lane;                 /* cross-track error (+ = right of lane) */
@@ -1238,20 +1333,155 @@ static void ai_drive(Car *c, float lane, float vcap, float alat, const Car *riva
     float vmax = 0, vmin = 0, vbend = 1e9f;
     int n = (int)((fmaxf(spd, 5) * 2.0f + 20) / ds);
     for (int k = 0; k <= n; k++) {
-        const Seg *s = &seg[(c->seg + k) % nseg];
-        vbend = fminf(vbend, sqrtf(fmaxf(alat + GRAV * s->bin, 3.f) / fmaxf(s->curv, 1e-4f)));   /* banking holds the car in */
+        int sk = (c->seg + k) % nseg; const Seg *s = &seg[sk];
+        float cap = sqrtf(fmaxf(alat + GRAV * s->bin, 3.f) / fmaxf(s->curv, 1e-4f));   /* banking holds the car in */
+        vbend = fminf(vbend, fmaxf(cap, jump_v[sk]));                  /* the bend before a jump is taken near the limit */
         vmax = fmaxf(vmax, s->vcurv); vmin = fminf(vmin, s->vcurv);
     }
     float vt = fminf(vcap, vbend), jv = jump_v[c->seg];
-    if (jv > 0) vt = jv;                                              /* run-up: the speed that clears the jump */
-    else if (!gapsoon) vt = fminf(fminf(vt, 1.1f * sqrtf(GRAV / fmaxf(vmax, 1e-4f))), sqrtf(26.f / fmaxf(-vmin, 1e-4f)));
+    if (jv > 0) vt = jv;                                              /* run-up: flat out, then down to the take-off speed */
+    else if (!gapsoon) {                                              /* a little float over crests, none out wide where the deck may twist */
+        float fl = fabsf(vdot(vsub(c->x, s0->c), s0->R)) > 1.6f ? 0.95f : 1.1f;
+        vt = fminf(fminf(vt, fl * sqrtf(GRAV / fmaxf(vmax, 1e-4f))), sqrtf(26.f / fmaxf(-vmin, 1e-4f)));
+    }
     else vt = clampf(vt, 30.f, 34.f);
-    if (spd < vt) { c->thr = clampf((vt - spd) * 0.5f, 0.2f, 1.f); c->brk = 0; }
-    else if (spd > vt * 1.06f && !gapsoon) { c->thr = 0; c->brk = clampf((spd - vt) * 0.15f, 0.15f, 1.f); }
+    if (spd < vt) { c->thr = clampf((vt - spd) * (jv > 0 ? 2.f : 0.5f), 0.2f, 1.f); c->brk = 0; }
+    else if (jv > 0 ? spd > vt + 1.f : spd > vt * 1.06f && !gapsoon) { c->thr = 0; c->brk = clampf((spd - vt) * 0.15f, 0.15f, 1.f); }
     else { c->thr = 0.3f; c->brk = 0; }
     if (spd > 8.f) c->thr *= fmaxf(0.25f, 1.f - 0.85f * fabsf(c->str));
     if (lift && jv <= 0) { c->thr = 0; if (spd > 6.f) c->brk = fmaxf(c->brk, 0.25f); }
-    c->bst = jv > 0 && spd < jv - 1.f;
+    if (c->nwc < 3) c->brk = 0;                                       /* no braking in the air or on an unsettled landing */
+    else c->brk *= 1.f - 0.7f * fabsf(c->str);                        /* leave the tyres grip to steer with */
+    c->bst = jump_b[c->seg] && spd < jv - 1.f;
+}
+
+/* ---- AI jump planning: a scratch car tries each jump with the real physics, so bounces off a far face count too ---- */
+#define RUN_ALAT 36.f              /* lateral grip the AI uses in the bend before a jump (m/s^2, before banking) */
+#define NJ 64
+static float bend_hold(int k) { return seg[k].curv > 0.004f ? sqrtf(fmaxf(RUN_ALAT + GRAV * seg[k].bin, 3.f) / seg[k].curv) : 1e9f; }
+/* fastest the AI goes at seg k, q segments before a take-off: bends near the limit, no flying off a crest on the way */
+static float run_cap(int k, int q)
+{
+    float v = bend_hold(k);
+    if (q > (int)(40 / ds) && seg[k].vcurv > 0.002f) v = fminf(v, 1.2f * sqrtf(GRAV / seg[k].vcurv));
+    return v;
+}
+/* run-up to a take-off at speed vt from seg L: flat out (boost if b) up to a braking curve that meets vt at the lip,
+ * back through the last bend before it */
+static void run_up(int L, float vt, int b)
+{
+    int inb = 0;
+    for (int q = 0; q < (int)(700 / ds); q++) {
+        int si = (L - q + nseg) % nseg;
+        if (seg[si].steep) break;
+        if (bend_hold(si) < 1e9f) inb = 1;
+        else if (inb) break;
+        float v = fminf(run_cap(si, q), sqrtf(vt * vt + 2 * 6.f * q * ds));
+        if (v >= jump_v[si]) { jump_v[si] = v; jump_b[si] = (unsigned char)b; }
+    }
+}
+
+/* a scratch car from seg s at speed v0 to seg goal, settled on its wheels: the damage it took, 1000 if it crashed,
+ * got stuck or never got there. *vmark: its speed at seg mark */
+static float scratch_run(int s, float v0, int mark, int goal, float lane, int boost, float *vmark)
+{
+    Car t; memset(&t, 0, sizeof t);
+    t.active = 1; t.boost = boost ? 100 : 0;
+    car_place(&t, s, lane, v0);
+    int dm = (mark - s + nseg) % nseg, dg = (goal - s + nseg) % nseg, seen = 0;
+    for (int i = 0; i < 240 * 20; i++) {
+        ai_drive(&t, lane, skill_vcap[1], skill_alat[1], NULL);
+        car_step(&t, 1.f / 240);
+        if (t.crash > 0 || t.crane > 0 || t.wrecked) return 1000;
+        float d = t.prog - s;
+        if (d >= dm && !seen) { seen = 1; if (vmark) *vmark = vdot(t.v, t.F); }
+        if (d >= dg && (t.nwc >= 3 || goal == mark)) return t.damage;
+    }
+    return 1000;
+}
+
+/* the scratch car over a chain of n jumps (lips l[], -1 = no run-up of its own), all taken off at v, from seg s
+ * (at no more than v0) */
+static float try_jumps(const int *l, int n, float v, int b, int s, float v0, int goal, float lane, float *vmark)
+{
+    memset(jump_v, 0, sizeof(float) * nseg); memset(jump_b, 0, nseg);
+    for (int k = 0; k < n; k++) if (l[k] >= 0) run_up(l[k], v, b);
+    if (jump_v[s] > 0) v0 = fminf(v0, jump_v[s]);
+    return scratch_run(s, fminf(v0, v), l[0], goal, lane, b, vmark);
+}
+
+/* a jump starts at a sheer face going down and runs on over the next faces while the road between is no place to
+ * land: far below the lip (a pit) or above it (a wall to clear). Jumps with little road between them (stepping
+ * stones) form a chain taken at one speed: the one the scratch car got over cleanest, with a little either side to
+ * spare, that the run-up can reach (without boost if it can) */
+static void plan_jumps(void)
+{
+    int lip[NJ], end[NJ], back[NJ], nj = 0;
+    memset(jump_v, 0, sizeof(float) * nseg); memset(jump_b, 0, nseg);
+    for (int k = 0; k < nseg && nj < NJ; k++) {
+        int l = (k + nseg - 1) % nseg;
+        if (!seg[k].steep || seg[l].steep || seg[(k + 2) % nseg].c.y > seg[k].c.y) continue;   /* only faces going down */
+        int e = k;
+        float ylip = seg[k].c.y;
+        for (;;) {
+            while (seg[(e + 1) % nseg].steep) e = (e + 1) % nseg;
+            int m = 1, lim = (int)(300 / ds);
+            while (m < lim && !seg[(e + m) % nseg].steep) m++;
+            if (m >= lim) break;
+            float lo = 1e9f, hi = -1e9f;
+            for (int q = 1; q < m; q++) { lo = fminf(lo, seg[(e + q) % nseg].c.y); hi = fmaxf(hi, seg[(e + q) % nseg].c.y); }
+            if (!(hi < ylip - 2.f || lo > ylip + 2.f)) break;
+            e = (e + m) % nseg;
+        }
+        int bk = 0;
+        while (bk < (int)(700 / ds) && !seg[(l - bk - 1 + nseg) % nseg].steep) bk++;
+        lip[nj] = l; end[nj] = e; back[nj] = bk; nj++;
+    }
+    const int CHAIN = (int)(150 / ds);
+    int h0 = 0;
+    while (h0 < nj && back[h0] < CHAIN) h0++;
+    if (h0 == nj) h0 = 0;
+    float cv[NJ]; int cb[NJ], cl[NJ][NJ], cn[NJ], nc = 0;
+    int st0 = state; float rt0 = racetime; int np0 = npart, sf0 = stat_falls, ss0 = stat_sparks; uint32_t rs0 = rngs;
+    state = ST_RACE; planning = 1;
+    for (int j = h0; j < h0 + nj; ) {
+        int *l = cl[nc], n = 0, J = j % nj;
+        do { l[n++] = back[j % nj] < (int)(40 / ds) ? -1 : lip[j % nj]; j++; } while (j < h0 + nj && back[j % nj] < CHAIN);
+        int L = lip[J], E = end[(j - 1) % nj], bk = back[J], nxt = lip[j % nj];
+        int dgo = (int)(200 / ds), dnx = (nxt - E + nseg) % nseg - (int)(30 / ds);
+        int goal = (E + (nj > 1 && dnx < dgo ? (dnx > 2 ? dnx : 2) : dgo)) % nseg;
+        /* fastest take-off: flat out from the start of the last bend, the bend at the limit */
+        int q0 = 0;
+        while (q0 < bk && bend_hold((L - q0 + nseg) % nseg) >= 1e9f) q0++;
+        while (q0 < bk && bend_hold((L - q0 + nseg) % nseg) < 1e9f) q0++;
+        q0 = q0 + (int)(10 / ds) < bk ? q0 + (int)(10 / ds) : bk - (int)(5 / ds);
+        int rs = (L - q0 + nseg) % nseg;
+        float vr[2] = {0, 0};
+        for (int b = 0; b < 2; b++) try_jumps(l, 1, 200.f, b, rs, 55.f, L, 0, &vr[b]);
+        /* what each take-off speed does */
+        enum { V0 = 20, NV = 92 };
+        float sc[NV], best = 1e9f; int bv = 0;
+        int vtop = (int)fminf(vr[1] + 3, V0 + NV - 1);
+        int ts = (L - (bk < CHAIN ? bk - (int)(5 / ds) : CHAIN) + nseg) % nseg;
+        for (int v = V0; v < V0 + NV; v++) sc[v - V0] = v <= vtop ? try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 0, NULL) : 1000;
+        for (int pass = 0; pass < 2; pass++)                 /* pass 1: the best few again from either side of the deck */
+            for (int v = V0 + 1; v < V0 + NV - 1; v++) {
+                float r = fmaxf(sc[v - V0], fmaxf(sc[v - V0 - 1], sc[v - V0 + 1]));
+                float cost = r + (v > vr[0] - 1.5f ? 3.f : 0.f) + 20.f * fmaxf(v - (vr[1] - 1.5f), 0.f) - 0.05f * v;   /* clean, then fast */
+                if (pass == 1 && cost < best + 5.f) {
+                    for (int sd = -1; sd <= 1; sd += 2)
+                        cost += fmaxf(0.f, try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 2.f * sd, NULL) - r);
+                    if (cost < best) { best = cost; bv = v; }
+                } else if (pass == 0 && cost < best) { best = cost; bv = v; }
+            }
+        cv[nc] = (float)bv; cb[nc] = bv > vr[0] - 1.5f; cn[nc] = n;
+        if (getenv("SR_DEBUG")) printf("jump seg %d..%d (%d): %.1f m/s (reach %.1f, %.1f on boost; risk %.1f)\n", L, E, n, cv[nc], vr[0], vr[1], best);
+        nc++;
+    }
+    memset(jump_v, 0, sizeof(float) * nseg); memset(jump_b, 0, nseg);
+    for (int c = 0; c < nc; c++)
+        for (int k = 0; k < cn[c]; k++) if (cl[c][k] >= 0) run_up(cl[c][k], cv[c], cb[c]);
+    state = st0; racetime = rt0; npart = np0; stat_falls = sf0; stat_sparks = ss0; rngs = rs0; planning = 0;
 }
 
 /* ----------------------------------------------------------- car pose */
