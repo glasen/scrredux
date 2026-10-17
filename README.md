@@ -1,100 +1,121 @@
-# STUNT RACER
+# Stunt Racer
 
-Stunt Car Racer inspired roller-coaster racer in a stadium. SDL3 + SDL_GPU, flat-shaded polygons, no textures.
+A remake-in-spirit of the Amiga classic *Stunt Car Racer*: race a V8 buggy round elevated roller-coaster tracks in
+a stadium, take on eleven computer drivers in a four-division league, and build your own tracks.
 
-    make            # builds ./stuntracer and the SPIR-V shaders (needs glslangValidator)
-    ./stuntracer    # run from this directory (shaders are loaded from next to the binary)
+## Requirements
 
-Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen, ESC exits the race or the game (after a REALLY EXIT? Y/N).
+- SDL3
+- A Vulkan-capable graphics driver (on macOS: MoltenVK)
+- To build: a C compiler, `pkg-config` and `glslangValidator`
 
-## Menu
-Like the original's: the logo, your division, SELECT and grey bars (the chosen one orange) between two wooden posts, over
-the stadium, the camera turning slowly round the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
-Before every season race and practice session the camera turns slowly round the track in a chequered frame with its
-name below, like the original's; ENTER starts, ESC goes back.
+## Building and starting
 
-1. **Hall of Fame**: the lap record and the race record on every track, and who drove them. The originals start with
-   records by the computer drivers; laps in season races and in practice count, race times in season races.
-2. **Practise**: any track, the eight originals and your own, alone and for as many laps as you like; ESC ends it.
-3. **Start/Continue the Racing Season**: the original's single player league. Twelve drivers (you and Hot Rod, Whizz Kid,
-   Bad Guy, The Dodger, Big Ed, Max Boost, Dare Devil, High Flyer, Bully Boy, Jumping Jack, Road Hog) in four divisions
-   of three, two tracks each: Division 4 Little Ramp and Hump Back, 3 Stepping Stones and Big Ramp, 2 High Jump and
-   Roller Coaster, 1 Draw Bridge and Ski Jump. Every driver races the other two on both tracks (three laps), 2 points
-   a win and 1 for the fastest lap; at the season's end the top driver of each division goes up and the bottom one down.
-   You start in Division 4. Races between computer drivers are worked out from their pace on the track, with the odd
-   fall and wreck. The holes in your cage stay for the whole season and make the frame crack faster. ESC and Y in a
-   race retires from it (the opponent wins). The season is kept in `save/season0.sav` as you go.
-4. **Load/Save/Replay**: four save slots for the season, and replays of the last five season races (cockpit, chase,
-   trackside TV and the opponent's cameras on C, SPACE pause, hold LEFT/RIGHT to wind back or forward).
-5. **Track Builder**: see below.
+```bash
+make
+```
 
-## Track builder
-Tracks are built like the original's: pieces on a 16 x 16 grid, seen from above. The track grows from its open end:
-UP adds a straight, LEFT/RIGHT a 45 degree bend, SHIFT+LEFT/RIGHT a 90 degree bend. Only pieces that join on and leave
-the other pieces' cubes free are offered (the outlines at the open end show what fits, and which key adds it).
-BACKSPACE takes the last piece off, C closes the loop the shortest way round.
-Heights are set where two pieces meet: TAB/click picks a piece, W/S (or the mouse wheel) raise and lower its start by
-half a metre (SHIFT: 2 m), Q/E bank it. 1-6 give a piece its shape between its two ends: smooth, linear, hump (a dip
-with a negative size), kicker (a lip at the end and a drop to the next piece: a jump), step (a sheer face at the start)
-and pit; -/= change the size of a hump, kicker or pit. A drop of 3.7 m or more is a sheer face (red on the map).
-F puts the start line on the chosen straight, T test-drives the track, J asks the AI's jump planner whether every jump
-can be made (the ones it can't are outlined in red), F2 saves to `tracks/NAME.trk`, F3 opens a track (the originals
-open as a copy with their jump edits baked in), F4 renames, N starts afresh. Your tracks show up in Practise and the
-Hall of Fame; the season keeps to the originals.
-Races are driven from the cockpit only, like the original. Boost and speed are gauges clamped to the roll cage beside the
-steering wheel; damage is a crack growing along the cage's top tube (holes where big hits landed), at the right end the car
-is wrecked. Lap, race time and best lap are overlay text in the top corners.
+```bash
+./stuntracer
+```
 
-* Renders at native window resolution with 4x MSAA (when supported).
-* The car is a rigid body: 4 spring/damper suspensions with progressive hydraulic bump stops, tyre friction (traction circle),
-  weight transfer, full 3D rotation, solid deck collisions, car-to-car contact. The opponent keeps clear of the player.
-  The engine cuts out at 200 km/h, 250 km/h on boost (boost adds pull up to there, like the original's cut-off).
-* The eight tracks of the original (Little Ramp to Roller Coaster), built from its road tables at the scale the physics
-  is tuned to (128 original units = the 2.95 m wheelbase, 8.85 m deck). Banked bends, sheer faces that are solid walls
-  with red and white end panels, elevated on red/white girders, with a chequered start line. No barriers on the track
-  edges; past the edge the wheels find an invisible sloping shoulder for a moment, like the original. Draw Bridge's
-  bridge does not move. The jumps are reshaped for the 250 km/h limit (`TRACK_EDIT`, `TRACK_HILL` in stuntracer.c):
-  steeper lips, shorter pits, Ski Jump's drop and High Jump's far side as landing hills, High Jump's tower lower.
-  `scr_tracks.h` is generated by `tools/gen_scr_tracks.py` from a checkout of the Stunt Car Racer remake
-  (github.com/Team-Resurgent/StuntCarRacer-X).
-* The AI plans every jump when the track loads: a scratch car tries take-off speeds with the real physics and the AI
-  takes the fastest one that lands clean on either side of the deck, boosting up to it when it has to.
-* Cranes lower both cars onto the track before the start and put a car back after it falls off: onto the middle of
-  the section it was last on, or the nearest one before it that is no bend, not on the track's own no-drop list from
-  the original and not in a jump's run-up. A car that lands beside
-  the track crashes in a cloud of dust and smoke (seen from outside) before the crane picks it up. Steel scraping the deck throws sparks.
-* Stadium (`scenery.h`): roofed grandstands with a VIP tier, open end terraces, a crowd, sponsor boards, a scoreboard, lattice
-  floodlights and a service gate; outside, car parks, trees, big-top tents and faceted mountains under drifting clouds.
-* An 8 m catch net on the arena wall stops a car that leaves the track before it reaches the stands: it gives a few
-  metres and holds the car, which counts as a crash. Only a car flying higher than the net goes over it.
-* Arena floor: grass with mowing stripes, dirt worn under the track and a gravel service road to a compound with a recovery
-  truck, water bowser, ambulance, TV truck, cabins and containers; TV towers, marshal posts, tyre stacks and hay bales around.
-* The deck is weathered concrete in precast slabs, with rubber laid down in the bends.
-* Sun shadows: two shadow-map cascades (near/far) cover track, towers, stands, trucks, cranes and cars.
-* Shaders are SPIR-V only, so a Vulkan-capable driver is required.
-* Sound: the original Amiga samples, played where the original plays them: the engine (TickOver and its decimated
-  copies, revs model ported from the original), scraping, dirt, hard landings, car-to-car hits, creaks and the smash
-  that punches a hole in the cage tube; Chime counts down the start. The WAVs in `sounds/` come from the remake's
-  `Sounds/` folder; without them the game runs silent. Engine and smash sit left, the rest right, 30% apart.
+Start the game from its own folder; it looks for its shaders, car model and sounds next to the binary.
+Without the `sounds/` folder the game runs silently.
 
-Debug: `./stuntracer --sim SECS [TRACK]` (autopilot, prints lap/damage/contact stats),
-`./stuntracer --shot out.png SECS [TRACK] [CAM]` (offscreen 1080p render; CAM 0 chase, 1 cockpit, 2 front, 3 side, 4 model viewer, 5 track overview).
-`SR_DEBUG=1`, `SR_TRACE=1` add logging; `SR_PLANE=x` sets the autopilot's lane (outside +-4.4 it drives off the track),
-`SR_WHEELS=1` reports the gap between the drawn tyres and the road, `SR_CAM=px,py,pz,tx,ty,tz` places the `--shot` camera freely.
-`./stuntracer --audio-dump out.wav SECS [TRACK]` mixes the autopilot's race into a WAV; `SR_SND=1` logs every sound as it starts.
-`./stuntracer --menu-frames DIR SECS` records the menu scene at 60 fps as PNGs (`SR_NOHUD=1` hides the HUD).
-`./stuntracer --ui-shot out.png "KEYS"` plays a script of SDL key names through the menus and the builder headless and
-renders the last frame (`wait5` runs five seconds of the game, `text:Name` types into a name field, `shift+Left`;
-`SR_AUTO=1` lets the autopilot drive, `SR_OVERVIEW=1` looks at the whole track from above).
-`./stuntracer --check-tracks` checks the originals against the builder's joining and overlap rules.
+## Controls
 
-## Car
-A single-seat tube-frame buggy in the spirit of the original Stunt Car Racer car: roll cage, exposed V8 with eight chrome zoomie
-pipes, independent double-wishbone suspension on all four wheels and a steering rig. It is loaded from `models/stuntcar.scm`
-(~32k triangles, shared by both cars; paint is tinted per car), which `../stunt_car_racer/export_game_model.py` writes from the
-low-poly Blender model (`models/stuntcar.blend`, also as `models/stuntcar.glb`); `car_model.h` loads it and poses wishbones,
-uprights, coilovers and links from the physics' wheel travel and steering. The game does not start without `stuntcar.scm`.
-Vehicle physics constants are in `phys_defaults()` (sr_main.h).
+| Key | Action |
+| --- | --- |
+| Up / W | Accelerate |
+| Down / S | Brake |
+| Left, Right / A, D | Steer |
+| Space / Left Shift | Boost |
+| R | Put the car back on the track |
+| P | Pause |
+| F11 | Fullscreen |
+| Esc | Leave the race or quit the game (asks first) |
 
-Model viewer: `./stuntracer --view`. Orbit with mouse drag / arrows, zoom with wheel or `+`/`-`, `Home` resets, `Space` toggles
-the turntable, `Z` stops the animation (wheels straight, at ride height), `N` paint, `R` roll cage, `E` intake, `F` flames.
+In the menus: Up/Down or the number keys select, Enter confirms, Esc goes back.
+
+## Racing
+
+You drive from the cockpit. The gauges on the roll cage beside the steering wheel show your speed and the boost you
+have left. Damage shows as a crack growing along the top tube of the cage. When the crack reaches the right-hand end,
+your car is wrecked. Heavy hits punch holes in the tube, starting at the right-hand end. The crack runs straight
+through a hole, so every hole brings the wreck closer.
+
+Fall off the track and a crane lifts you back on.
+
+## Game modes
+
+**Hall of Fame** – the best lap and best race time on every track, and who set them.
+
+**Practise** – drive any track, the originals or your own, alone and for as many laps as you like. Esc ends the session.
+
+**Racing Season** – the league. Twelve drivers in four divisions of three, two tracks per division:
+
+| Division | Tracks |
+| --- | --- |
+| 4 | Little Ramp, Hump Back |
+| 3 | Stepping Stones, Big Ramp |
+| 2 | High Jump, Roller Coaster |
+| 1 | Draw Bridge, Ski Jump |
+
+You start in Division 4. Every driver races each of the other two on both tracks over three laps. A win is worth
+2 points, the fastest lap 1. At the end of the season the top driver of each division moves up and the bottom one
+moves down. The crack is mended after every race, but the holes stay until the season ends. There is room for ten;
+once they are all punched, heavy hits make no more. Retiring from a race (Esc, then Y) hands the win to your
+opponent. The season is saved automatically as you go.
+
+**Load / Save / Replay** – four save slots for your season, and replays of your last five season races.
+In a replay: C changes camera, Space pauses, hold Left/Right to rewind or fast-forward.
+
+**Track Builder** – see below.
+
+## Track Builder
+
+Tracks are laid out from above on a 16 × 16 grid and grow from their open end. The outlines at the open end show
+which pieces fit and which key adds them.
+
+| Key | Action |
+| --- | --- |
+| Up | Add a straight |
+| Left / Right | Add a 45° bend |
+| Shift + Left / Right | Add a 90° bend |
+| Backspace | Remove the last piece |
+| C | Close the loop the shortest way |
+| Tab / mouse click | Select a piece |
+| W / S, mouse wheel | Raise / lower the start of the selected piece by 0.5 m (with Shift: 2 m) |
+| Q / E | Bank the piece |
+| 1 – 6 | Shape: smooth, linear, hump, kicker (jump), step, pit |
+| - / = | Make a hump, kicker or pit smaller / bigger (a negative hump is a dip) |
+| F | Put the start line on the selected straight |
+| T | Test-drive the track |
+| J | Check whether every jump can be made (impossible ones turn red) |
+| F2 | Save |
+| F3 | Open a track (the original tracks open as a copy) |
+| F4 | Rename |
+| N | Start a new track |
+
+A drop of 3.7 m or more becomes a sheer wall, shown red on the map.
+
+Your tracks are saved in `tracks/` and show up in Practise and the Hall of Fame. The Racing Season always uses the
+eight original tracks.
+
+## Car viewer
+
+```bash
+./stuntracer --view
+```
+
+Drag the mouse or use the arrow keys to orbit, mouse wheel or +/- to zoom, Home to reset the view, Space to toggle
+the turntable. N changes the paint, R hides the roll cage, E the intake, F toggles the exhaust flames.
+
+## Development
+
+How the game is built, and the debugging tools, are described in [DEVELOPING.md](DEVELOPING.md).
+
+## Credits
+
+The track layouts and sound effects come from the original *Stunt Car Racer* by Geoff Crammond, via the
+[StuntCarRacer-X](https://github.com/Team-Resurgent/StuntCarRacer-X) remake.
