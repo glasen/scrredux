@@ -5,11 +5,13 @@ Stunt Car Racer inspired roller-coaster racer in a stadium. SDL3 + SDL_GPU, flat
     make            # builds ./stuntracer and the SPIR-V shaders (needs glslangValidator)
     ./stuntracer    # run from this directory (shaders are loaded from next to the binary)
 
-Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen, ESC menu/quit.
+Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen, ESC exits the race or the game (after a REALLY EXIT? Y/N).
 
 ## Menu
 Like the original's: the logo, your division, SELECT and grey bars (the chosen one orange) between two wooden posts, over
 the stadium with a car lapping the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
+Before every season race and practice session the track is shown from the stands in a chequered frame with its name
+below, like the original's; ENTER starts, ESC goes back.
 
 1. **Hall of Fame**: the lap record and the race record on every track, and who drove them. The originals start with
    records by the computer drivers; laps in season races and in practice count, race times in season races.
@@ -20,7 +22,7 @@ the stadium with a car lapping the track. UP/DOWN or the number keys pick, ENTER
    Roller Coaster, 1 Draw Bridge and Ski Jump. Every driver races the other two on both tracks (three laps), 2 points
    a win and 1 for the fastest lap; at the season's end the top driver of each division goes up and the bottom one down.
    You start in Division 4. Races between computer drivers are worked out from their pace on the track, with the odd
-   fall and wreck. The holes in your cage stay for the whole season and make the frame crack faster. ESC twice in a
+   fall and wreck. The holes in your cage stay for the whole season and make the frame crack faster. ESC and Y in a
    race retires from it (the opponent wins). The season is kept in `save/season0.sav` as you go.
 4. **Load/Save/Replay**: four save slots for the season, and replays of the last five season races (cockpit, chase,
    trackside TV and the opponent's cameras on C, SPACE pause, hold LEFT/RIGHT to wind back or forward).

@@ -2,9 +2,9 @@
  * wooden posts, over the stadium. Hall of Fame, Practise, the Racing Season, Load/Save/Replay and the track builder.
  * Included by sr_main.h */
 enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS };
-static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, esc_armed;
+static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused;
 static char name_buf[16], ms_note[80];
-static float ms_note_t, esc_t;
+static float ms_note_t;
 static int rp_slot[RP_SLOTS], nrp_list; static RHead rp_list[RP_SLOTS];
 static int last_lap_rec, last_race_rec;
 
@@ -64,6 +64,15 @@ static void draw_bars_sc(float y, const char *const *it, int n, int sel, int num
 }
 static void draw_bars(float y, const char *const *it, int n, int sel, int numbered) { draw_bars_sc(y, it, n, sel, numbered, 1.5f); }
 static void menu_help(const char *s) { hud_text_c(VH - 12, s, 1, 0x9C9CA4); }
+/* "Really exit?": Y yes, N or ESC no */
+static void ask_box(const char *sub)
+{
+    float w = 236, h = sub ? 46 : 32, x = (HW - w) / 2, y = 96;
+    hud_rect(x - 2, y - 2, w + 4, h + 4, 0xF08C1C); hud_rect(x, y, w, h, 0x18181C);
+    hud_text_c(y + 9, "REALLY EXIT?  Y/N", 2, 0xFFFFFF);
+    if (sub) hud_text_c(y + 31, sub, 1, 0xFF8070);
+}
+static int ask_answer(SDL_Keycode k) { return k == SDLK_Y ? 1 : k == SDLK_N || k == SDLK_ESCAPE ? 0 : -1; }
 
 /* ---- screens ---- */
 static int main_items(const char **it)
@@ -263,13 +272,14 @@ static void draw_menu(void)
     case MS_REPLAYS: draw_replays(); break;
     }
     if (ms_note_t > 0) hud_text_c(VH - 26, ms_note, 1.5f, 0x60FF60);
+    if (ask_quit) ask_box(NULL);
 }
 
 /* ---- going places ---- */
 static void ed_open(void);
 static void menu_go(int screen)
 {
-    ms = screen; ms_scroll = 0; esc_armed = 0;
+    ms = screen; ms_scroll = 0; ask_quit = 0;
     if (screen == MS_NAME) { snprintf(name_buf, sizeof name_buf, "%s", sea.pname[0] ? sea.pname : "Player"); if (win) SDL_StartTextInput(win); }
     else if (win) SDL_StopTextInput(win);
     if (screen == MS_REPLAYS) { rp_scan(); msel[MS_REPLAYS] = 0; }
@@ -282,6 +292,85 @@ static void menu_go(int screen)
     }
     if (state != ST_MENU) setup_menu();
 }
+/* ---- before a race: the whole track from the stands in a chequered frame, its name below, like the original ---- */
+static void pv_frame(float hw, float f[4]) { f[0] = 10; f[1] = 8; f[2] = hw - 10; f[3] = VH - 54; }
+#define PV_Q 8.f                                                 /* the chequers */
+#define CHQ(k) ((k) & 1 ? 0xD8D8D8u : 0x0C0C0Cu)
+static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
+{
+    b[0] = b[1] = 1e9f; b[2] = b[3] = -1e9f;
+    for (int k = 0; k < nseg; k += 4) for (int e = 0; e < 3; e++) {
+        V3 p = e == 2 ? V(seg[k].c.x, 0, seg[k].c.z) : vadd(seg[k].c, vmul(seg[k].R, e ? TRACK_HW : -TRACK_HW));
+        V3 d = vsub(p, pos); float z = fmaxf(vdot(d, fwd), 0.5f), x = vdot(d, right) / z * fx, y = vdot(d, up) / z * FOCAL_Y;
+        b[0] = fminf(b[0], x); b[1] = fminf(b[1], y); b[2] = fmaxf(b[2], x); b[3] = fmaxf(b[3], y);
+    }
+}
+/* seen square to the track's long axis, a little from the side and from above, as big as the picture allows */
+static void preview_cam(float asp)
+{
+    static float was_asp; static int was_gen = -1; static V3 pos, fwd0;
+    if (asp == was_asp && track_gen == was_gen) {
+        cam.pos = pos; cam.fwd = fwd0; cam.right = vnorm(vcross(fwd0, UP)); cam.up = vcross(cam.right, fwd0); return;
+    }
+    was_asp = asp; was_gen = track_gen;
+    float f[4]; pv_frame(VH * asp, f);
+    float in = PV_Q + 1.5f, fx = FOCAL_Y / asp, hw = VH * asp;
+    float nx0 = (f[0] + in) / hw * 2 - 1, nx1 = (f[2] - in) / hw * 2 - 1, ny0 = 1 - (f[3] - in) / VH * 2, ny1 = 1 - (f[1] + in) / VH * 2;
+    double mx = 0, mz = 0, sxx = 0, szz = 0, sxz = 0; float ymax = 0;
+    for (int k = 0; k < nseg; k++) { mx += seg[k].c.x; mz += seg[k].c.z; ymax = fmaxf(ymax, seg[k].c.y); }
+    mx /= nseg; mz /= nseg;
+    for (int k = 0; k < nseg; k++) { double dx = seg[k].c.x - mx, dz = seg[k].c.z - mz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; }
+    float th = 0.5f * (float)atan2(2 * sxz, sxx - szz) + PI_F / 2 + 0.3f, el = 0.42f;
+    V3 h = V(cosf(th), 0, sinf(th));
+    if (h.z < 0) h = vmul(h, -1);
+    V3 fwd = vnorm(V(h.x * cosf(el), -sinf(el), h.z * cosf(el))), right = vnorm(vcross(fwd, UP)), up = vcross(right, fwd);
+    V3 tg = V((float)mx, ymax * 0.4f, (float)mz);
+    float D = 300, b[4];
+    for (int it = 0; it < 4; it++) {
+        float lo = 5, hi = 5000;
+        for (int k = 0; k < 28; k++) {
+            D = 0.5f * (lo + hi);
+            pv_bounds(vsub(tg, vmul(fwd, D)), fwd, right, up, fx, b);
+            if (b[2] - b[0] <= (nx1 - nx0) * 0.92f && b[3] - b[1] <= (ny1 - ny0) * 0.92f) hi = D; else lo = D;
+        }
+        D = hi; pv_bounds(vsub(tg, vmul(fwd, D)), fwd, right, up, fx, b);
+        tg = vadd(tg, vadd(vmul(right, ((b[0] + b[2]) - (nx0 + nx1)) * 0.5f / fx * D), vmul(up, ((b[1] + b[3]) - (ny0 + ny1)) * 0.5f / FOCAL_Y * D)));
+    }
+    cam.pos = pos = vsub(tg, vmul(fwd, D)); cam.fwd = fwd0 = fwd; cam.right = right; cam.up = up;
+}
+static void draw_preview(void)
+{
+    float f[4], q = PV_Q; pv_frame(HW, f);
+    uint32_t teal = 0x1C6266;
+    hud_rect(0, 0, HW, f[1], teal); hud_rect(0, f[3], HW, VH - f[3], teal);
+    hud_rect(0, f[1], f[0], f[3] - f[1], teal); hud_rect(f[2], f[1], HW - f[2], f[3] - f[1], teal);
+    int n = (int)roundf((f[2] - f[0]) / q), m = (int)roundf((f[3] - f[1]) / q);
+    float w = (f[2] - f[0]) / n, hh = (f[3] - f[1]) / m;
+    for (int j = 0; j < m; j++) {
+        hud_rect(f[0], f[1] + j * hh, q, hh, CHQ(j)); hud_rect(f[2] - q, f[1] + j * hh, q, hh, CHQ(n - 1 + j));
+    }
+    for (int i = 0; i < n; i++) {
+        hud_rect(f[0] + i * w, f[1], w, q, CHQ(i)); hud_rect(f[0] + i * w, f[3] - q, w, q, CHQ(i + m - 1));
+    }
+    hud_rect(f[0] + q, f[1] + q, f[2] - f[0] - 2 * q, 1.5f, 0xF4F4F4); hud_rect(f[0] + q, f[3] - q - 1.5f, f[2] - f[0] - 2 * q, 1.5f, 0xF4F4F4);
+    hud_rect(f[0] + q, f[1] + q, 1.5f, f[3] - f[1] - 2 * q, 0xF4F4F4); hud_rect(f[2] - q - 1.5f, f[1] + q, 1.5f, f[3] - f[1] - 2 * q, 0xF4F4F4);
+    char b[48]; track_title(b, sizeof b, cur_track);
+    float sc = 2, bw = fminf(fmaxf(text_width(b, sc) + 60, HW * 0.45f), HW - 40), bh = 24, bx = (HW - bw) / 2, by = VH - 46;
+    if (text_width(b, sc) > bw - 16) sc = (bw - 16) / text_width(b, 1);
+    hud_rect(bx - 2, by - 2, bw + 4, bh + 4, 0xB4B4B4); hud_rect(bx, by, bw, bh, 0x6E6E6E); hud_rect(bx + 1.5f, by + 1.5f, bw - 3, bh - 3, 0x080808);
+    hud_text_raw((HW - text_width(b, sc) + sc) / 2, by + (bh - 7 * sc) / 2, b, sc, 0xF0F0F0);
+    hud_text_c(VH - 12, "ENTER START   ESC BACK", 1, 0xA8CCCC);
+}
+static void preview_start(void)
+{
+    memset(cars, 0, sizeof cars); npart = 0; paused = 0;
+    state = ST_PREVIEW;
+}
+static void preview_key(SDL_Keycode k)
+{
+    if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) start_race();
+    else if (k == SDLK_ESCAPE) menu_go(race_mode == RM_SEASON ? MS_SEASON : MS_PRACTICE);
+}
 static void season_race(void)
 {
     Race *r = player_race();
@@ -289,7 +378,7 @@ static void season_race(void)
     race_mode = RM_SEASON; set_opponent(r->a == PLAYER ? r->b : r->a);
     sel_track = r->track;
     if (cur_track != sel_track) build_track(sel_track);
-    cockpit = 1; start_race();
+    cockpit = 1; preview_start();
 }
 /* out of a race (ENTER at the end, or ESC): the season's books, then back to where it came from */
 static void ed_return(void);
@@ -345,6 +434,7 @@ static void menu_text(const char *t)
 /* returns 0 to quit the game */
 static int menu_key(SDL_Keycode k)
 {
+    if (ask_quit) { int a = ask_answer(k); if (a >= 0) ask_quit = 0; return a != 1; }
     int *sel = &msel[ms], up = k == SDLK_UP, dn = k == SDLK_DOWN, ok = k == SDLK_RETURN || k == SDLK_KP_ENTER, back = k == SDLK_ESCAPE;
     const char *it[8];
     switch (ms) {
@@ -353,7 +443,7 @@ static int menu_key(SDL_Keycode k)
         if (k >= SDLK_1 && k < SDLK_1 + n) { *sel = (int)(k - SDLK_1); ok = 1; }
         if (up) *sel = (*sel + n - 1) % n;
         if (dn) *sel = (*sel + 1) % n;
-        if (back) return 0;
+        if (back) { ask_quit = 1; break; }
         if (!ok) break;
         if (*sel == 0) { hof_load(); menu_go(MS_HOF); }
         else if (*sel == 1) { msel[MS_PRACTICE] = sel_track < ntrk ? sel_track : 0; menu_go(MS_PRACTICE); }
@@ -370,7 +460,7 @@ static int menu_key(SDL_Keycode k)
         if (up) *sel = (*sel + ntrk - 1) % ntrk;
         if (dn) *sel = (*sel + 1) % ntrk;
         if (back) menu_go(MS_MAIN);
-        if (ok) { sel_track = *sel; if (cur_track != sel_track) build_track(sel_track); race_mode = RM_PRACTICE; cockpit = 1; start_race(); }
+        if (ok) { sel_track = *sel; if (cur_track != sel_track) build_track(sel_track); race_mode = RM_PRACTICE; cockpit = 1; preview_start(); }
         break;
     case MS_NAME:
         if (k == SDLK_BACKSPACE && name_buf[0]) name_buf[strlen(name_buf) - 1] = 0;
@@ -431,14 +521,19 @@ static void race_hud_extra(void)
     }
     if (race_mode == RM_PRACTICE) hud_text_c(36, "PRACTISE", 1.5f, 0xFFE060);
     if (race_mode == RM_TEST) hud_text_c(36, "TEST DRIVE - ESC: BUILDER", 1.5f, 0xFFE060);
-    if (esc_armed && esc_t > 0) hud_text_c(110, "ESC AGAIN TO RETIRE FROM THE RACE", 2, 0xFF8070);
+    if (ask_quit) ask_box(race_mode == RM_SEASON ? "YOU RETIRE AND LOSE THE RACE" : NULL);
 }
 static int race_key(SDL_Keycode k)
 {
+    if (ask_quit) {
+        int a = ask_answer(k);
+        if (a >= 0) { ask_quit = 0; paused = ask_paused; }
+        if (a == 1) { paused = 0; if (race_mode == RM_SEASON) result = -1; race_leave(1); }
+        return 1;
+    }
     if (k == SDLK_ESCAPE) {
-        if (state == ST_DONE || race_mode != RM_SEASON) { race_leave(state != ST_DONE); return 1; }
-        if (esc_armed && esc_t > 0) { result = -1; race_leave(1); return 1; }
-        esc_armed = 1; esc_t = 2.f;
+        if (state == ST_DONE) race_leave(0);
+        else { ask_quit = 1; ask_paused = paused; paused = 1; }
         return 1;
     }
     if (k == SDLK_P && state == ST_RACE) paused = !paused;

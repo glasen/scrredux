@@ -128,6 +128,7 @@ static void draw_hud_base(void)
         return;
     }
     if (state == ST_MENU) { draw_menu(); return; }
+    if (state == ST_PREVIEW) { draw_preview(); return; }
     if (state == ST_EDIT) { ed_draw(); return; }
     if (state == ST_REPLAY) { draw_replay_hud(); return; }
     const Car *p = &cars[0];                     /* speed, boost and damage are in the cockpit (draw_cockpit) */
@@ -154,7 +155,7 @@ static void draw_hud_base(void)
         if (p->bestlap > 0) { char b2[96]; fmt_time(b, sizeof b, p->bestlap); snprintf(b2, sizeof b2, "BEST LAP %s", b); hud_text_c(130, b2, 2, 0xFFFFFF); }
         if (state_t > 1.5f) hud_text_c(160, "PRESS ENTER", 2, 0xFFE040);
     }
-    if (paused) hud_text_c(110, "PAUSED", 4, 0xFFFFFF);
+    if (paused && !ask_quit) hud_text_c(110, "PAUSED", 4, 0xFFFFFF);
     race_hud_extra();
 }
 static void draw_hud(void) { draw_hud_base(); }
@@ -680,6 +681,7 @@ static void make_cascade(V3 center, float E, float D, int size, float *rows)
 static void gpu_render(const char *shot_path)
 {
     if (win) { int w, h; SDL_GetWindowSizeInPixels(win, &w, &h); if (w < 64) w = 64; if (h < 64) h = 64; if (ensure_targets(w, h)) return; }
+    if (state == ST_PREVIEW) preview_cam((float)rtw / rth);
     upload_static();
     build_frame();
     int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > 100000 ? 100000 : hb.n;
@@ -940,6 +942,7 @@ static int handle_key(SDL_Keycode k, SDL_Keymod mod)
     case ST_MENU: return menu_key(k);
     case ST_EDIT: ed_key(k, mod); return 1;
     case ST_REPLAY: replay_key(k); return 1;
+    case ST_PREVIEW: preview_key(k); return 1;
     default: return race_key(k);
     }
 }
@@ -947,7 +950,6 @@ static void frame_timers(float frame)
 {
     if (ms_note_t > 0) ms_note_t -= frame;
     if (ed_msg_t > 0) ed_msg_t -= frame;
-    if (esc_t > 0) esc_t -= frame; else esc_armed = 0;
     if (state == ST_REPLAY) replay_hold();
 }
 

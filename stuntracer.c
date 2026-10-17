@@ -793,7 +793,7 @@ static V3 CPTS[16];                                      /* body points that col
 /* eye position of the driver */
 static V3 EYE;
 
-enum { ST_MENU, ST_COUNT, ST_RACE, ST_DONE, ST_VIEW, ST_REPLAY, ST_EDIT };
+enum { ST_MENU, ST_COUNT, ST_RACE, ST_DONE, ST_VIEW, ST_REPLAY, ST_EDIT, ST_PREVIEW };
 static Car cars[2];
 static int state = ST_MENU, laps = 3, sel_track = 0, result = 0, paused = 0, cockpit = 1;
 static float state_t, racetime;
@@ -844,7 +844,7 @@ static void snd_tick(float dt)
     static int quiet;
     const Car *p = &cars[0];
     grounded_cd -= dt; hitcar_cd -= dt;
-    if (state == ST_MENU || state == ST_VIEW || state == ST_EDIT || (state == ST_REPLAY && (rp_paused || rp_speed != 1))) {
+    if (state == ST_MENU || state == ST_VIEW || state == ST_EDIT || state == ST_PREVIEW || (state == ST_REPLAY && (rp_paused || rp_speed != 1))) {
         if (!quiet) snd_stop_all(); quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
     quiet = 0;
     if (p->crane > 0) {                      /* on the crane all is quiet, the engine starts again from a standstill */
@@ -1672,7 +1672,7 @@ static void setup_menu(void)
     memset(&cars[0], 0, sizeof(Car)); memset(&cars[1], 0, sizeof(Car));
     cars[0].active = 1; cars[0].col = CAR_RED; cars[0].boost = 100;
     car_place(&cars[0], 40, 0, 25);
-    npart = 0;
+    npart = 0; paused = 0;
     state = ST_MENU;
 }
 
@@ -1762,6 +1762,7 @@ static void game_tick(float dt)
 static V3 cam_dir, cam_pos_s, cam_f, cam_u;
 static void update_camera(const Car *c, float dt, int snap)
 {
+    if (state == ST_PREVIEW) return;                                  /* fixed, set by preview_cam */
     if (state == ST_VIEW) {
         V3 tg = view_target;
         cam.pos = vadd(tg, vmul(V(cosf(view_pitch) * sinf(view_yaw), sinf(view_pitch), cosf(view_pitch) * cosf(view_yaw)), view_dist));
