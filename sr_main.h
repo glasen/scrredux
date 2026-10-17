@@ -1,0 +1,923 @@
+/* sr_main.h - HUD, PNG writer, SDL_GPU layer and main(). Included by stuntracer.c */
+
+#define PHYS_DT (1.0f / 240.0f)
+
+/* ------------------------------------------------------------- HUD (2D) */
+static int mdl_nv;
+static float HW = 480;           /* HUD virtual width (height is VH) */
+static void hud_rect(float x, float y, float w, float h, uint32_t col)
+{
+    VB *save = cur; cur = &hb; vb_reserve(&hb, 6);
+    float x0 = x / (HW * 0.5f) - 1, x1 = (x + w) / (HW * 0.5f) - 1;
+    float y0 = 1 - y / (VH * 0.5f), y1 = 1 - (y + h) / (VH * 0.5f);
+    emit(V(x0, y0, 0), col, 0); emit(V(x1, y0, 0), col, 0); emit(V(x1, y1, 0), col, 0);
+    emit(V(x0, y0, 0), col, 0); emit(V(x1, y1, 0), col, 0); emit(V(x0, y1, 0), col, 0);
+    cur = save;
+}
+
+static float text_width(const char *s, float sc) { return (float)strlen(s) * 6 * sc; }
+static void hud_text_raw(float x, float y, const char *s, float sc, uint32_t col)
+{
+    for (; *s; s++, x += 6 * sc) {
+        char ch = *s; if (ch >= 'a' && ch <= 'z') ch -= 32;
+        const char *p = strchr(FONT_CHARS, ch);
+        if (!p || !ch) continue;
+        const uint8_t *g = FONT[p - FONT_CHARS];
+        for (int row = 0; row < 7; row++) {
+            int col0 = -1;
+            for (int cx = 0; cx <= 5; cx++) {
+                int on = cx < 5 && (g[row] & (0x10 >> cx));
+                if (on && col0 < 0) col0 = cx;
+                if (!on && col0 >= 0) { hud_rect(x + col0 * sc, y + row * sc, (cx - col0) * sc, sc, col); col0 = -1; }
+            }
+        }
+    }
+}
+static void hud_text(float x, float y, const char *s, float sc, uint32_t col)
+{
+    hud_text_raw(x + sc * 0.6f, y + sc * 0.6f, s, sc, 0x101018);
+    hud_text_raw(x, y, s, sc, col);
+}
+static void hud_text_c(float y, const char *s, float sc, uint32_t col)
+{
+    hud_text((HW - text_width(s, sc) + sc) / 2, y, s, sc, col);
+}
+static void fmt_time(char *b, size_t n, float t)
+{
+    int m = (int)(t / 60); float s = t - m * 60;
+    snprintf(b, n, "%d:%04.1f", m, s);
+}
+static void hud_bar(float x, float y, float w, float h, float frac, uint32_t col)
+{
+    hud_rect(x - 1, y - 1, w + 2, h + 2, 0xE0E0E0);
+    hud_rect(x, y, w, h, 0x181820);
+    hud_rect(x, y, w * clampf(frac, 0, 1), h, col);
+}
+
+/* ------------------------------------------------------- vehicle physics constants */
+static void phys_defaults(void)
+{
+    ph.mass = 1000.f;
+    ph.grav = 13.f;
+    ph.power = 300000.f;
+    ph.fmax = 12000.f;
+    ph.boostp = 150000.f;
+    ph.boostf = 3500.f;
+    ph.brkf = 4500.f;
+    ph.brkr = 3200.f;
+    ph.drag = 3.f;
+    ph.mu = 1.9f;
+    ph.rgrip = 1.05f;
+    ph.steerlat = 45.f;
+    ph.keyrise = 5.f;
+    ph.keyret = 10.f;
+    ph.corner = 12.f;
+    ph.lowspd = 2.0f;
+    ph.loadmax = 6500.f;
+    ph.steer = 0.5f;
+    ph.steerfall = 30.f;
+    ph.steerrate = 3.f;
+    ph.kf = 26000.f;
+    ph.kr = 24000.f;
+    ph.ccomp = 2600.f;
+    ph.creb = 3600.f;
+    ph.kbump = 250000.f;
+    ph.sroll = 1100.f;
+    ph.syaw = 2000.f;
+    ph.spitch = 1000.f;
+    ph.air = 7000.f;
+    ph.leanr = 0.006f;
+    ph.leanp = 0.004f;
+}
+
+static void draw_hud_base(void)
+{
+    char b[96];
+    if (state == ST_VIEW) {
+        hud_text_c(8, "MODEL VIEWER", 3, 0xFFD030);
+        snprintf(b, sizeof b, "%d TRIANGLES PER CAR", mdl_nv / 3);
+        hud_text_c(36, b, 1, 0xE0E0E0);
+        hud_text_c(226, "DRAG/ARROWS: ROTATE   WHEEL/+-: ZOOM   HOME: RESET   SPACE: TURNTABLE", 1, 0xE0E0E0);
+        snprintf(b, sizeof b, "N: PAINT  Z: ANIMATION %s  F: FLAMES %s  R: CAGE %s  E: INTAKE %s  ESC: QUIT",
+                 view_anim ? "ON" : "OFF", view_flame ? "ON" : "OFF", (view_hide & 1) ? "OFF" : "ON", (view_hide & 4) ? "OFF" : "ON");
+        hud_text_c(238, b, 1, 0xE0E0E0);
+        return;
+    }
+    if (state == ST_MENU) {
+        hud_text_c(24, "STUNT RACER", 5, 0xFFD030);
+        hud_text_c(66, "ROLLER COASTER STADIUM RACING", 2, 0xE8E8F0);
+        const char *rows[3]; char r0[64], r1[64], r2[64];
+        snprintf(r0, sizeof r0, "TRACK: <%s>", tracks[sel_track].name);
+        snprintf(r1, sizeof r1, "LAPS: <%d>", laps);
+        snprintf(r2, sizeof r2, "OPPONENT: <%s>", skill_name[skill]);
+        rows[0] = r0; rows[1] = r1; rows[2] = r2;
+        for (int i = 0; i < 3; i++)
+            hud_text_c(110 + i * 22, rows[i], 2, i == menu_row ? 0xFFFF40 : 0xB0B0C0);
+        hud_text_c(190, "ENTER: START RACE", 2, 0x60FF60);
+        hud_text_c(236, "ARROWS DRIVE  SPACE BOOST  R RESET  P PAUSE  F11 FULLSCREEN", 1, 0xE0E0E0);
+        hud_text_c(250, "UP/DOWN SELECT  LEFT/RIGHT CHANGE  ESC QUIT", 1, 0xE0E0E0);
+        return;
+    }
+    const Car *p = &cars[0], *o = &cars[1];
+    int lp = p->lap < 1 ? 1 : (p->lap > laps ? laps : p->lap);
+    snprintf(b, sizeof b, "LAP %d/%d", lp, laps);
+    hud_text(6, 6, b, 2, 0xFFFFFF);
+    fmt_time(b, sizeof b, racetime);
+    hud_text(6, 24, b, 2, 0xFFE060);
+    int pos = (p->prog >= o->prog) ? 1 : 2;
+    snprintf(b, sizeof b, "POS %d/2", pos);
+    hud_text(HW - 6 - text_width(b, 2), 6, b, 2, pos == 1 ? 0x60FF60 : 0xFF7060);
+    float mw = 84, mh = 56, mx = HW - mw - 8, my = 28;
+    float sc = fminf((mw - 6) / (tr_maxx - tr_minx), (mh - 6) / (tr_maxz - tr_minz));
+    hud_rect(mx - 2, my - 2, mw + 4, mh + 4, 0x101018);
+    for (int i = 0; i < nseg; i += 6)
+        hud_rect(mx + 3 + (seg[i].c.x - tr_minx) * sc, my + 3 + (seg[i].c.z - tr_minz) * sc, 1.5f, 1.5f, seg[i].gap ? 0x806030 : 0x9090A0);
+    hud_rect(mx + 2 + (o->x.x - tr_minx) * sc, my + 2 + (o->x.z - tr_minz) * sc, 3.5f, 3.5f, 0x4880FF);
+    hud_rect(mx + 2 + (p->x.x - tr_minx) * sc, my + 2 + (p->x.z - tr_minz) * sc, 3.5f, 3.5f, 0xFF4040);
+    hud_text(6, 234, "DAMAGE", 1, 0xFFFFFF);
+    hud_bar(6, 244, 110, 8, p->damage / 100.f, p->damage < 50 ? 0x40D040 : (p->damage < 80 ? 0xE0C020 : 0xE03030));
+    hud_text(HW - 116, 234, "BOOST", 1, 0xFFFFFF);
+    hud_bar(HW - 116, 244, 110, 8, p->boost / 100.f, 0x40B0FF);
+    snprintf(b, sizeof b, "%d", (int)(fmaxf(vdot(p->v, p->F), 0) * 3.6f));
+    hud_text_c(236, b, 3, 0xFFFFFF);
+    hud_text_c(258, "KPH", 1, 0xB0B0C0);
+    if (p->lapshow > 0 && state == ST_RACE) {
+        char b2[96]; fmt_time(b, sizeof b, p->lastlap);
+        snprintf(b2, sizeof b2, "LAP TIME %s", b);
+        hud_text_c(44, b2, 2, 0xFFFFFF);
+    }
+    if (state == ST_COUNT) { snprintf(b, sizeof b, "%d", (int)ceilf(state_t)); hud_text_c(100, b, 8, 0xFFE040); }
+    if (msg_t > 0) hud_text_c(80, msg, 3, 0xFFFFFF);
+    if (state == ST_DONE) {
+        const char *t = result == 1 ? "YOU WIN!" : result == 2 ? "OPPONENT WRECKED - YOU WIN!" :
+                        result == -2 ? "YOU ARE WRECKED!" : "YOU LOSE!";
+        hud_text_c(80, t, result == 2 || result == -2 ? 2 : 4, result > 0 ? 0x60FF60 : 0xFF6050);
+        if (p->bestlap > 0) { char b2[96]; fmt_time(b, sizeof b, p->bestlap); snprintf(b2, sizeof b2, "BEST LAP %s", b); hud_text_c(130, b2, 2, 0xFFFFFF); }
+        if (state_t > 1.5f) hud_text_c(160, "PRESS ENTER", 2, 0xFFE040);
+    }
+    if (paused) hud_text_c(110, "PAUSED", 4, 0xFFFFFF);
+}
+static void draw_hud(void) { draw_hud_base(); }
+
+/* ------------------------------------------------------------ PNG writer */
+static uint32_t crc_tab[256];
+static uint32_t crc32u(uint32_t crc, const uint8_t *b, size_t n)
+{
+    if (!crc_tab[1]) for (uint32_t i = 0; i < 256; i++) { uint32_t c = i; for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1; crc_tab[i] = c; }
+    crc = ~crc;
+    while (n--) crc = crc_tab[(crc ^ *b++) & 255] ^ (crc >> 8);
+    return ~crc;
+}
+static void png_chunk(FILE *f, const char *type, const uint8_t *d, uint32_t len)
+{
+    uint8_t h[8] = {len >> 24, len >> 16, len >> 8, len, type[0], type[1], type[2], type[3]};
+    fwrite(h, 1, 8, f); if (len) fwrite(d, 1, len, f);
+    uint32_t c = crc32u(0, h + 4, 4); if (len) c = crc32u(c, d, len);
+    uint8_t cb[4] = {c >> 24, c >> 16, c >> 8, c}; fwrite(cb, 1, 4, f);
+}
+static int save_png(const char *path, const uint8_t *rgba, int w, int h)
+{
+    FILE *f = fopen(path, "wb"); if (!f) return -1;
+    size_t rawn = (size_t)h * (1 + w * 3);
+    uint8_t *raw = malloc(rawn), *z = malloc(rawn + rawn / 60000 * 5 + 64);
+    for (int y = 0; y < h; y++) { raw[y * (1 + w * 3)] = 0; for (int x = 0; x < w; x++) memcpy(raw + y * (1 + w * 3) + 1 + x * 3, rgba + ((size_t)y * w + x) * 4, 3); }
+    size_t zn = 0; z[zn++] = 0x78; z[zn++] = 0x01;
+    for (size_t o = 0; o < rawn; ) {
+        size_t bl = rawn - o > 65535 ? 65535 : rawn - o;
+        z[zn++] = (o + bl == rawn); z[zn++] = bl & 255; z[zn++] = bl >> 8; z[zn++] = ~bl & 255; z[zn++] = (~bl >> 8) & 255;
+        memcpy(z + zn, raw + o, bl); zn += bl; o += bl;
+    }
+    uint32_t a = 1, bb = 0;
+    for (size_t i = 0; i < rawn; i++) { a = (a + raw[i]) % 65521; bb = (bb + a) % 65521; }
+    z[zn++] = bb >> 8; z[zn++] = bb; z[zn++] = a >> 8; z[zn++] = a;
+    static const uint8_t sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    fwrite(sig, 1, 8, f);
+    uint8_t ihdr[13] = {w >> 24, w >> 16, w >> 8, w, h >> 24, h >> 16, h >> 8, h, 8, 2, 0, 0, 0};
+    png_chunk(f, "IHDR", ihdr, 13); png_chunk(f, "IDAT", z, (uint32_t)zn); png_chunk(f, "IEND", NULL, 0);
+    fclose(f); free(raw); free(z);
+    return 0;
+}
+
+/* ------------------------------------------------------------- GPU layer */
+static SDL_GPUDevice *dev;
+static SDL_Window *win;
+static SDL_GPUGraphicsPipeline *pipe3, *pipe2;
+static SDL_GPUBuffer *vbuf_s, *vbuf_d;
+static SDL_GPUTransferBuffer *tbuf, *dlbuf;
+static SDL_GPUTexture *rt_ms, *rt_res, *depthtex;
+static SDL_GPUTexture *sh_tex[2];
+static SDL_GPUSampler *sh_samp;
+static SDL_GPUGraphicsPipeline *pipe_sh;
+static const int SH_SIZE[2] = {3072, 4096};
+static int sky_n;
+static int rtw, rth, msaa = 1, static_track = -1, static_n;
+static size_t dlsize;
+static SDL_GPUTextureFormat dfmt;
+#define DYN_CAP 400000
+
+/* ---- the car model, loaded from models/stuntcar.scm (car_model.h) ---- */
+typedef struct { char name[8]; int role, corner, link; uint32_t first, count; } MGroup;
+static MGroup mdl_g[64]; static int mdl_ng, mdl_nv;
+static Vtx *mdl_v;
+static SDL_GPUBuffer *vbuf_m;
+
+#include "car_model.h"
+
+static SDL_GPUShader *load_shader(const char *file, SDL_GPUShaderStage stage, int nunif, int nsamp)
+{
+    char path[1024]; size_t sz;
+    snprintf(path, sizeof path, "%s%s", SDL_GetBasePath(), file);
+    void *code = SDL_LoadFile(path, &sz);
+    if (!code) { snprintf(path, sizeof path, "%s", file); code = SDL_LoadFile(path, &sz); }
+    if (!code) { fprintf(stderr, "cannot load shader %s (run make)\n", file); return NULL; }
+    SDL_GPUShaderCreateInfo ci; SDL_zero(ci);
+    ci.code_size = sz; ci.code = code; ci.entrypoint = "main";
+    ci.format = SDL_GPU_SHADERFORMAT_SPIRV; ci.stage = stage; ci.num_uniform_buffers = nunif; ci.num_samplers = nsamp;
+    SDL_GPUShader *s = SDL_CreateGPUShader(dev, &ci);
+    SDL_free(code);
+    if (!s) fprintf(stderr, "shader %s: %s\n", file, SDL_GetError());
+    return s;
+}
+
+static int ensure_targets(int w, int h)
+{
+    if (w == rtw && h == rth && rt_res) return 0;
+    if (rt_ms) SDL_ReleaseGPUTexture(dev, rt_ms);
+    if (rt_res) SDL_ReleaseGPUTexture(dev, rt_res);
+    if (depthtex) SDL_ReleaseGPUTexture(dev, depthtex);
+    rt_ms = rt_res = depthtex = NULL;
+    SDL_GPUTextureCreateInfo ti; SDL_zero(ti);
+    ti.type = SDL_GPU_TEXTURETYPE_2D; ti.width = w; ti.height = h; ti.layer_count_or_depth = 1; ti.num_levels = 1;
+    ti.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    rt_res = SDL_CreateGPUTexture(dev, &ti);
+    ti.sample_count = msaa > 1 ? SDL_GPU_SAMPLECOUNT_4 : SDL_GPU_SAMPLECOUNT_1;
+    if (msaa > 1) { ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET; rt_ms = SDL_CreateGPUTexture(dev, &ti); }
+    ti.format = dfmt; ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    depthtex = SDL_CreateGPUTexture(dev, &ti);
+    if (!rt_res || !depthtex || (msaa > 1 && !rt_ms)) { fprintf(stderr, "targets: %s\n", SDL_GetError()); return -1; }
+    rtw = w; rth = h;
+    if ((size_t)w * h * 4 != dlsize) {
+        if (dlbuf) SDL_ReleaseGPUTransferBuffer(dev, dlbuf);
+        SDL_GPUTransferBufferCreateInfo tb; SDL_zero(tb);
+        tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD; tb.size = (Uint32)((size_t)w * h * 4);
+        dlbuf = SDL_CreateGPUTransferBuffer(dev, &tb); dlsize = (size_t)w * h * 4;
+    }
+    return 0;
+}
+
+static int gpu_init(void)
+{
+    dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL);
+    if (!dev) { fprintf(stderr, "GPU device: %s\n", SDL_GetError()); return -1; }
+    if (win) {
+        if (!SDL_ClaimWindowForGPUDevice(dev, win)) { fprintf(stderr, "claim: %s\n", SDL_GetError()); return -1; }
+        SDL_SetGPUSwapchainParameters(dev, win, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+    }
+    SDL_GPUShader *vs = load_shader("game.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 2, 0);
+    SDL_GPUShader *fs = load_shader("game.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
+    if (!vs || !fs) return -1;
+    dfmt = SDL_GPUTextureSupportsFormat(dev, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)
+           ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT : SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+    if (SDL_GPUTextureSupportsSampleCount(dev, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_SAMPLECOUNT_4) &&
+        SDL_GPUTextureSupportsSampleCount(dev, dfmt, SDL_GPU_SAMPLECOUNT_4)) msaa = 4;
+    SDL_GPUVertexBufferDescription vbd; SDL_zero(vbd);
+    vbd.slot = 0; vbd.pitch = sizeof(Vtx); vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    SDL_GPUVertexAttribute at[2]; SDL_zero(at);
+    at[0].location = 0; at[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; at[0].offset = 0;
+    at[1].location = 1; at[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; at[1].offset = 12;
+    SDL_GPUColorTargetDescription ctd; SDL_zero(ctd);
+    ctd.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    for (int pass = 0; pass < 2; pass++) {
+        SDL_GPUGraphicsPipelineCreateInfo pi; SDL_zero(pi);
+        pi.vertex_shader = vs; pi.fragment_shader = fs;
+        pi.vertex_input_state.vertex_buffer_descriptions = &vbd; pi.vertex_input_state.num_vertex_buffers = 1;
+        pi.vertex_input_state.vertex_attributes = at; pi.vertex_input_state.num_vertex_attributes = 2;
+        pi.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pi.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL; pi.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pi.multisample_state.sample_count = msaa > 1 ? SDL_GPU_SAMPLECOUNT_4 : SDL_GPU_SAMPLECOUNT_1;
+        pi.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_GREATER_OR_EQUAL;   /* reversed depth: near = 1, far = 0 */
+        pi.depth_stencil_state.enable_depth_test = (pass == 0);
+        pi.depth_stencil_state.enable_depth_write = (pass == 0);
+        pi.target_info.color_target_descriptions = &ctd; pi.target_info.num_color_targets = 1;
+        pi.target_info.depth_stencil_format = dfmt; pi.target_info.has_depth_stencil_target = true;
+        SDL_GPUGraphicsPipeline *pl = SDL_CreateGPUGraphicsPipeline(dev, &pi);
+        if (!pl) { fprintf(stderr, "pipeline: %s\n", SDL_GetError()); return -1; }
+        if (pass == 0) pipe3 = pl; else pipe2 = pl;
+    }
+    /* shadow mapping: two cascades (D16), depth-only pipeline, comparison sampler */
+    {
+        SDL_GPUShader *sfs = load_shader("shadow.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+        if (!sfs) return -1;
+        SDL_GPUGraphicsPipelineCreateInfo pi; SDL_zero(pi);
+        pi.vertex_shader = vs; pi.fragment_shader = sfs;
+        pi.vertex_input_state.vertex_buffer_descriptions = &vbd; pi.vertex_input_state.num_vertex_buffers = 1;
+        pi.vertex_input_state.vertex_attributes = at; pi.vertex_input_state.num_vertex_attributes = 2;
+        pi.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pi.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL; pi.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pi.rasterizer_state.enable_depth_bias = true;
+        pi.rasterizer_state.depth_bias_constant_factor = 2.0f; pi.rasterizer_state.depth_bias_slope_factor = 2.0f;
+        pi.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pi.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+        pi.depth_stencil_state.enable_depth_test = true; pi.depth_stencil_state.enable_depth_write = true;
+        pi.target_info.num_color_targets = 0;
+        pi.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM; pi.target_info.has_depth_stencil_target = true;
+        pipe_sh = SDL_CreateGPUGraphicsPipeline(dev, &pi);
+        if (!pipe_sh) { fprintf(stderr, "shadow pipeline: %s\n", SDL_GetError()); return -1; }
+        for (int i = 0; i < 2; i++) {
+            SDL_GPUTextureCreateInfo ti; SDL_zero(ti);
+            ti.type = SDL_GPU_TEXTURETYPE_2D; ti.format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+            ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            ti.width = ti.height = SH_SIZE[i]; ti.layer_count_or_depth = 1; ti.num_levels = 1; ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            sh_tex[i] = SDL_CreateGPUTexture(dev, &ti);
+            if (!sh_tex[i]) { fprintf(stderr, "shadow texture: %s\n", SDL_GetError()); return -1; }
+        }
+        SDL_GPUSamplerCreateInfo sc; SDL_zero(sc);
+        sc.min_filter = SDL_GPU_FILTER_LINEAR; sc.mag_filter = SDL_GPU_FILTER_LINEAR; sc.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+        sc.address_mode_u = sc.address_mode_v = sc.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        sc.enable_compare = true; sc.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+        sh_samp = SDL_CreateGPUSampler(dev, &sc);
+        if (!sh_samp) { fprintf(stderr, "shadow sampler: %s\n", SDL_GetError()); return -1; }
+    }
+    SDL_GPUBufferCreateInfo bi; SDL_zero(bi);
+    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (DYN_CAP + 100000) * sizeof(Vtx);
+    vbuf_d = SDL_CreateGPUBuffer(dev, &bi);
+    SDL_GPUTransferBufferCreateInfo tb; SDL_zero(tb);
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; tb.size = (DYN_CAP + 100000) * sizeof(Vtx);
+    tbuf = SDL_CreateGPUTransferBuffer(dev, &tb);
+    if (!vbuf_d || !tbuf) { fprintf(stderr, "buffers: %s\n", SDL_GetError()); return -1; }
+    {
+        SDL_GPUBufferCreateInfo mb; SDL_zero(mb);
+        mb.usage = SDL_GPU_BUFFERUSAGE_VERTEX; mb.size = (Uint32)((size_t)mdl_nv * sizeof(Vtx));
+        vbuf_m = SDL_CreateGPUBuffer(dev, &mb);
+        SDL_GPUTransferBufferCreateInfo mt; SDL_zero(mt);
+        mt.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; mt.size = mb.size;
+        SDL_GPUTransferBuffer *t = SDL_CreateGPUTransferBuffer(dev, &mt);
+        void *m = SDL_MapGPUTransferBuffer(dev, t, false);
+        memcpy(m, mdl_v, mb.size);
+        SDL_UnmapGPUTransferBuffer(dev, t);
+        SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
+        SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTransferBufferLocation src = {t, 0}; SDL_GPUBufferRegion dst = {vbuf_m, 0, mb.size};
+        SDL_UploadToGPUBuffer(cp, &src, &dst, false);
+        SDL_EndGPUCopyPass(cp);
+        SDL_GPUFence *f = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        SDL_WaitForGPUFences(dev, true, &f, 1);
+        SDL_ReleaseGPUFence(dev, f);
+        SDL_ReleaseGPUTransferBuffer(dev, t);
+        fprintf(stderr, "car model: %d triangles per car\n", mdl_nv / 3);
+    }
+    return 0;
+}
+
+/* upload the static world mesh (track + stadium) once per track */
+static void upload_static(void)
+{
+    if (static_track == cur_track) return;
+    if (vbuf_s) SDL_ReleaseGPUBuffer(dev, vbuf_s);
+    SDL_GPUBufferCreateInfo bi; SDL_zero(bi);
+    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (Uint32)((size_t)sb.n * sizeof(Vtx));
+    vbuf_s = SDL_CreateGPUBuffer(dev, &bi);
+    SDL_GPUTransferBufferCreateInfo tb; SDL_zero(tb);
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; tb.size = bi.size;
+    SDL_GPUTransferBuffer *t = SDL_CreateGPUTransferBuffer(dev, &tb);
+    void *m = SDL_MapGPUTransferBuffer(dev, t, false);
+    memcpy(m, sb.v, bi.size);
+    SDL_UnmapGPUTransferBuffer(dev, t);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTransferBufferLocation src = {t, 0};
+    SDL_GPUBufferRegion dst = {vbuf_s, 0, bi.size};
+    SDL_UploadToGPUBuffer(cp, &src, &dst, false);
+    SDL_EndGPUCopyPass(cp);
+    SDL_GPUFence *f = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    SDL_WaitForGPUFences(dev, true, &f, 1);
+    SDL_ReleaseGPUFence(dev, f);
+    SDL_ReleaseGPUTransferBuffer(dev, t);
+    static_track = cur_track; static_n = sb.n;
+    fprintf(stderr, "static mesh: %d triangles\n", sb.n / 3);
+}
+
+static int dyn_shadow_end, frame_no;
+static void draw_flames(void);
+
+/* ---------------------------------------------------------------- crane and chains */
+static void chain(V3 a, V3 b)
+{
+    V3 d = vsub(b, a); float L = vlen(d); if (L < 0.05f) return;
+    V3 ax = vmul(d, 1 / L), u = vnorm(vcross(ax, fabsf(ax.y) < 0.9f ? UP : V(1, 0, 0))), w = vcross(ax, u);
+    int n = (int)(L / 0.11f);
+    for (int k = 0; k < n; k++) {                                     /* links alternate by 90 degrees */
+        V3 c = vadd(a, vmul(ax, (k + 0.5f) * L / n));
+        obox(c, ax, (k & 1) ? u : w, (k & 1) ? w : u, 0.07f, 0.035f, 0.012f, 0x5A5A62);
+    }
+}
+static void lattice(V3 a, V3 b, V3 side, float wdt, uint32_t col)  /* two-chord lattice beam with zig-zag web */
+{
+    V3 o = vmul(vnorm(side), wdt * 0.5f);
+    V3 a0 = vsub(a, o), a1 = vadd(a, o), b0 = vsub(b, o), b1 = vadd(b, o);
+    cyl(a0, b0, 0.11f, 0.11f, 6, col, 0); cyl(a1, b1, 0.11f, 0.11f, 6, col, 0);
+    int n = (int)(vlen(vsub(b, a)) / 1.6f) + 1;
+    for (int k = 0; k < n; k++) {
+        float t0 = (float)k / n, t1 = (float)(k + 1) / n;
+        cyl(vlerp(a0, b0, t0), vlerp(a1, b1, t1), 0.06f, 0.06f, 5, col, 0);
+        cyl(vlerp(a1, b1, t0), vlerp(a0, b0, t0), 0.06f, 0.06f, 5, col, 0);
+    }
+}
+static void draw_crane(const Car *c)
+{
+    if (!c->active || (c->crane <= 0 && c->hook <= 0)) return;
+    const Seg *s = &seg[c->crane_seg];
+    V3 Rh = vnorm(V(s->R.x, 0, s->R.z)), Th = vnorm(V(s->T.x, 0, s->T.z));
+    V3 base = vadd(c->crane_x, vmul(Rh, TRACK_HW + 11.f)); base.y = ground_h(base.x, base.z);
+    float topy = c->crane_x.y + 12.f;
+    V3 top = V(base.x, topy, base.z), tip = V(c->crane_x.x, topy + 0.8f, c->crane_x.z);
+    { Frm cf = frm_at(V(base.x + Th.x * 1.5f, base.y, base.z + Th.z * 1.5f), Th); crane_carrier(&cf); }   /* carrier */
+    for (int k = 0; k < 4; k++) {                                                                   /* tower */
+        V3 o = vadd(vmul(Rh, (k & 1) ? 0.8f : -0.8f), vmul(Th, (k & 2) ? 0.8f : -0.8f));
+        cyl(vadd(vadd(base, V(0, 1.35f, 0)), o), vadd(top, o), 0.13f, 0.13f, 6, 0xE8C020, 0);
+    }
+    for (float y = 3.f; y < topy - base.y - 1; y += 2.2f) {
+        V3 p0 = V(base.x, base.y + y, base.z);
+        cyl(vadd(p0, vmul(Rh, -0.8f)), vadd(vadd(p0, vmul(Rh, 0.8f)), V(0, 1.1f, 0)), 0.06f, 0.06f, 5, 0x2A2A2E, 0);
+        cyl(vadd(p0, vmul(Th, -0.8f)), vadd(vadd(p0, vmul(Th, 0.8f)), V(0, 1.1f, 0)), 0.06f, 0.06f, 5, 0x2A2A2E, 0);
+    }
+    lattice(top, tip, Th, 1.4f, 0xE8C020);                                                          /* jib over the track */
+    obox(vsub(top, vmul(Rh, 3.f)), Rh, UP, Th, 1.4f, 1.0f, 1.2f, 0x3A3A40);                          /* counterweight */
+    lattice(top, vsub(top, vmul(Rh, 3.f)), Th, 1.4f, 0xE8C020);
+    /* four chains hang straight down from a spreader frame: the front pair to the bumper hoop, so the driver sees them
+     * in front of the windscreen like in the original, the rear pair to the back of the roll cage */
+    static const V3 att[4] = {{-0.5f, 0.17f, 2.08f}, {0.5f, 0.17f, 2.08f}, {-0.6f, 1.107f, -1.438f}, {0.6f, 1.107f, -1.438f}};
+    const float sy = 4.2f;
+    V3 hook, pts[4], spr[4];
+    for (int k = 0; k < 4; k++) { pts[k] = body_pt(c, att[k]); spr[k] = body_pt(c, V(att[k].x, sy, att[k].z)); }
+    V3 above = body_pt(c, V(0, sy + 2.4f, 0.32f));
+    if (c->crane > 0) hook = above;
+    else hook = vlerp(tip, above, smooth01(c->hook / 2.0f));                                         /* released: hook winds up */
+    cyl(tip, hook, 0.04f, 0.04f, 4, 0x1A1A1E, 0);
+    obox(hook, V(1, 0, 0), UP, V(0, 0, 1), 0.22f, 0.3f, 0.12f, 0xE8C020);
+    if (c->crane > 0) {
+        for (int k = 0; k < 4; k++) {
+            cyl(spr[k], spr[(k == 0) ? 1 : (k == 1) ? 3 : (k == 3) ? 2 : 0], 0.07f, 0.07f, 5, 0xE8C020, 0);   /* spreader frame */
+            cyl(hook, spr[k], 0.03f, 0.03f, 4, 0x1A1A1E, 0);                                             /* slings */
+            chain(spr[k], pts[k]);
+        }
+    }
+}
+
+/* ---------------------------------------------------------------- particles */
+static void draw_parts(void)
+{
+    for (int i = 0; i < npart; i++) {
+        const Part *q = &parts[i];
+        float a = q->t / q->life;
+        if (q->kind == P_SPARK) {
+            V3 d = vmul(q->v, 0.05f); float dl = vlen(d);
+            if (dl < 1e-3f) continue;
+            if (dl > 0.22f) d = vmul(d, 0.22f / dl);                                   /* short streaks, even when flying past the camera */
+            V3 tail = vsub(q->p, d);
+            float wdt = fminf(0.03f, 0.006f * vlen(vsub(q->p, cam.pos)));               /* thin close to the eye */
+            V3 sd = vmul(vnorm(vcross(d, cam.fwd)), wdt);
+            draw_quad_unlit(vsub(tail, sd), vadd(tail, sd), vadd(q->p, sd), vsub(q->p, sd), q->col);
+            continue;
+        }
+        float r = q->size * (q->kind == P_FIRE ? 1.f - a : 1.f - a * a * a);
+        uint32_t col = q->kind == P_FIRE ? q->col : mixcol(q->col, FOGCOL, a * a * 0.8f);       /* thin out into the air */
+        V3 pr[6];
+        for (int k = 0; k < 6; k++) {
+            float an = k * PI_F / 3 + i;
+            pr[k] = vadd(q->p, vadd(vmul(cam.right, cosf(an) * r), vmul(cam.up, sinf(an) * r)));
+        }
+        for (int k = 0; k < 6; k++) draw_tri_unlit(q->p, pr[k], pr[(k + 1) % 6], col);
+    }
+}
+static void build_frame(void)
+{
+    db.n = 0; hb.n = 0; cur = &db;
+    draw_sky();
+    sky_n = db.n;
+    if (state == ST_VIEW) {                       /* plain checkered floor for the model viewer */
+        for (int iz = -16; iz < 16; iz++) for (int ix = -16; ix < 16; ix++)
+            draw_quad(V(ix * 1.5f, 0, iz * 1.5f), V(ix * 1.5f + 1.5f, 0, iz * 1.5f), V(ix * 1.5f + 1.5f, 0, iz * 1.5f + 1.5f), V(ix * 1.5f, 0, iz * 1.5f + 1.5f), ((ix + iz) & 1) ? 0x6A707C : 0x8C929E);
+    }
+    if (state != ST_VIEW) for (int i = 0; i < 2; i++) draw_crane(&cars[i]);
+    dyn_shadow_end = db.n;                        /* everything after this (flames, effects) is unlit and casts no shadow */
+    draw_flames();
+    draw_parts();
+    frame_no++;
+    HW = VH * (float)rtw / (float)rth;
+    if (!getenv("SR_NOHUD")) draw_hud();
+    cur = &db;
+}
+
+static const float IDENT_ROWS[12] = {1,0,0,0, 0,1,0,0, 0,0,1,0};
+
+/* draw both cars from the shared model; the body leans, the wheels follow the suspension */
+static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int shadow, float *fu)
+{
+    SDL_GPUBufferBinding mb = {vbuf_m, 0};
+    SDL_BindGPUVertexBuffers(rp, 0, &mb, 1);
+    for (int ci = 0; ci < 2; ci++) {
+        const Car *c = &cars[ci];
+        if (!c->active) continue;
+        int first_person = ci == 0 && cockpit && state != ST_MENU && state != ST_VIEW;
+        int vw = state == ST_VIEW;
+        if (!shadow) {
+            fu[52] = ((c->col >> 16) & 255) / 255.f * 1.25f; fu[53] = ((c->col >> 8) & 255) / 255.f * 1.25f;
+            fu[54] = (c->col & 255) / 255.f * 1.25f; fu[55] = 0;
+            SDL_PushGPUFragmentUniformData(cmd, 0, fu, 56 * 4);
+        }
+        for (int g = 0; g < mdl_ng; g++) {                                   /* the engine top stays visible in the cockpit */
+            float m[12];
+            if (!car_group_rows(c, g, m, first_person, vw ? view_hide : 0)) continue;
+            SDL_PushGPUVertexUniformData(cmd, 1, m, sizeof m);
+            SDL_DrawGPUPrimitives(rp, mdl_g[g].count, 1, mdl_g[g].first, 0);
+        }
+    }
+    SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+}
+
+/* ---------------------------------------------------------------- live exhaust flames */
+static void flame_cone(V3 base, V3 ax1, V3 ax2, V3 apex, float r, uint32_t col)
+{
+    V3 ring[6];
+    for (int k = 0; k < 6; k++) { float an = k * PI_F / 3; ring[k] = vadd(base, vadd(vmul(ax1, cosf(an) * r), vmul(ax2, sinf(an) * r))); }
+    for (int k = 0; k < 6; k++) draw_tri_unlit(ring[k], ring[(k + 1) % 6], apex, col);
+}
+/* flames come out of the eight zoomie pipes while the boost burns; they flicker every frame */
+static void draw_flames(void)
+{
+    for (int ci = 0; ci < 2; ci++) {
+        const Car *c = &cars[ci];
+        if (!c->active || c->flame < 0.03f) continue;
+        float m[12]; car_body_rows(c, m);
+        V3 R = V(m[0], m[4], m[8]), U = V(m[1], m[5], m[9]), F = V(m[2], m[6], m[10]), T = V(m[3], m[7], m[11]);
+        float spd = clampf(vdot(c->v, c->F) / 40.f, 0, 1.5f);
+        for (int sd = -1; sd <= 1; sd += 2)
+            for (int k = 0; k < 4; k++) {
+                V3 lp = FLAMEP[(sd + 1) / 2 * 4 + k], ld = FLAMED[(sd + 1) / 2 * 4 + k];
+                V3 base = vadd(T, vadd(vmul(R, lp.x), vadd(vmul(U, lp.y), vmul(F, lp.z))));
+                V3 D = vnorm(vadd(vmul(R, ld.x), vadd(vmul(U, ld.y), vmul(F, ld.z))));   /* out of the pipe */
+                float rnd = (float)(hash2(frame_no * 13 + ci * 7 + k + (sd + 1) * 5, 99) & 1023) / 1023.f;
+                float rn2 = (float)(hash2(frame_no * 7 + ci * 11 + k * 3 + (sd + 1) * 2, 17) & 1023) / 1023.f;
+                float fs = (ci == 0 && cockpit && state != ST_MENU && state != ST_VIEW) ? 0.75f : 1.f;          /* smaller when seen from the driver's eye */
+                float h = fs * (0.07f + 0.40f * c->flame) * (0.55f + 0.9f * rnd), w = fs * 0.058f * (0.85f + 0.25f * c->flame);   /* base just fills the 12 cm zoomie mouth */
+                V3 tilt = vadd(vmul(F, -h * (0.15f + 0.45f * spd)), vmul(R, sd * h * 0.08f * (rn2 - 0.5f)));     /* blown back by the airflow */
+                V3 a1 = vnorm(vcross(D, fabsf(vdot(D, F)) < 0.9f ? F : R)), a2 = vcross(D, a1);                /* cone base fills the pipe mouth */
+                flame_cone(base, a1, a2, vadd(vadd(base, vmul(D, h)), tilt), w, 0xFF7A10);                           /* orange outer */
+                flame_cone(base, a1, a2, vadd(vadd(base, vmul(D, h * 0.62f)), vmul(tilt, 0.6f)), w * 1.08f, 0xFFC020);          /* yellow body, wider so it shows at the base */
+                flame_cone(base, a1, a2, vadd(vadd(base, vmul(D, h * 0.32f)), vmul(tilt, 0.3f)), w * 1.15f, 0xFFF4B0);          /* hot white-yellow root */
+            }
+    }
+}
+
+/* orthographic sun cascade: fills 4 rows mapping world -> light clip (x,y in -1..1, z in 0..1) */
+static void make_cascade(V3 center, float E, float D, int size, float *rows)
+{
+    V3 L = vnorm(V(0.42f, 0.78f, 0.46f)), lf = vmul(L, -1.f);
+    V3 lr = vnorm(vcross(lf, UP)), lu = vcross(lr, lf);
+    float texel = 2 * E / size, cxr = vdot(center, lr), cyu = vdot(center, lu);
+    center = vadd(center, vadd(vmul(lr, floorf(cxr / texel) * texel - cxr), vmul(lu, floorf(cyu / texel) * texel - cyu)));
+    float r0[4] = {lr.x / E, lr.y / E, lr.z / E, -vdot(center, lr) / E};
+    float r1[4] = {lu.x / E, lu.y / E, lu.z / E, -vdot(center, lu) / E};
+    float r2[4] = {lf.x / (2 * D), lf.y / (2 * D), lf.z / (2 * D), (D - vdot(center, lf)) / (2 * D)};
+    float r3[4] = {0, 0, 0, 1};
+    memcpy(rows, r0, 16); memcpy(rows + 4, r1, 16); memcpy(rows + 8, r2, 16); memcpy(rows + 12, r3, 16);
+}
+
+/* If shot_path != NULL: render offscreen and write PNG. Otherwise present to the window. */
+static void gpu_render(const char *shot_path)
+{
+    if (win) { int w, h; SDL_GetWindowSizeInPixels(win, &w, &h); if (w < 64) w = 64; if (h < 64) h = 64; if (ensure_targets(w, h)) return; }
+    upload_static();
+    build_frame();
+    int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > 100000 ? 100000 : hb.n;
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
+    uint8_t *map = SDL_MapGPUTransferBuffer(dev, tbuf, true);
+    memcpy(map, db.v, (size_t)nd * sizeof(Vtx));
+    memcpy(map + (size_t)nd * sizeof(Vtx), hb.v, (size_t)nhud * sizeof(Vtx));
+    SDL_UnmapGPUTransferBuffer(dev, tbuf);
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTransferBufferLocation src = {tbuf, 0};
+    SDL_GPUBufferRegion dst = {vbuf_d, 0, (Uint32)((nd + nhud) * sizeof(Vtx))};
+    SDL_UploadToGPUBuffer(cp, &src, &dst, true);
+    SDL_EndGPUCopyPass(cp);
+
+    /* sun shadow cascades */
+    float nrows[16], frows[16];
+    float Ef = 0.5f * sqrtf(sq(ar_x1 - ar_x0) + sq(ar_z1 - ar_z0)) + 80.f, Df = 0.7f * Ef + 160.f, En = 70.f, Dn = 250.f;
+    int vwm = state == ST_VIEW;
+    if (vwm) { En = 6.f; Dn = 24.f; Ef = 24.f; Df = 50.f; }
+    make_cascade(vwm ? V(0, 0.6f, 0) : vadd(cam.pos, vmul(cam.fwd, 40.f)), En, Dn, SH_SIZE[0], nrows);
+    make_cascade(vwm ? V(0, 0, 0) : V((ar_x0 + ar_x1) / 2, 20.f, (ar_z0 + ar_z1) / 2), Ef, Df, SH_SIZE[1], frows);
+    int sn = vwm ? 0 : static_n;
+    for (int ci = 0; ci < 2; ci++) {
+        SDL_GPUDepthStencilTargetInfo sd; SDL_zero(sd);
+        sd.texture = sh_tex[ci]; sd.clear_depth = 1.f; sd.load_op = SDL_GPU_LOADOP_CLEAR; sd.store_op = SDL_GPU_STOREOP_STORE;
+        sd.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE; sd.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+        SDL_GPURenderPass *sp_ = SDL_BeginGPURenderPass(cmd, NULL, 0, &sd);
+        SDL_BindGPUGraphicsPipeline(sp_, pipe_sh);
+        SDL_PushGPUVertexUniformData(cmd, 0, ci ? frows : nrows, 64);
+        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+        if (sn) {
+            SDL_GPUBufferBinding b0 = {vbuf_s, 0};
+            SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
+            SDL_DrawGPUPrimitives(sp_, sn, 1, 0, 0);
+        }
+        int she = dyn_shadow_end < nd ? dyn_shadow_end : nd;
+        if (she > sky_n) {
+            SDL_GPUBufferBinding b1 = {vbuf_d, (Uint32)((size_t)sky_n * sizeof(Vtx))};
+            SDL_BindGPUVertexBuffers(sp_, 0, &b1, 1);
+            SDL_DrawGPUPrimitives(sp_, she - sky_n, 1, 0, 0);
+        }
+        draw_cars_gpu(sp_, cmd, 1, NULL);
+        SDL_EndGPURenderPass(sp_);
+    }
+
+    uint32_t fc = FOGCOL;
+    SDL_GPUColorTargetInfo ct; SDL_zero(ct);
+    ct.texture = msaa > 1 ? rt_ms : rt_res; ct.load_op = SDL_GPU_LOADOP_CLEAR;
+    if (msaa > 1) { ct.resolve_texture = rt_res; ct.store_op = SDL_GPU_STOREOP_RESOLVE; } else ct.store_op = SDL_GPU_STOREOP_STORE;
+    ct.clear_color = (SDL_FColor){((fc >> 16) & 255) / 255.f, ((fc >> 8) & 255) / 255.f, (fc & 255) / 255.f, 1};
+    SDL_GPUDepthStencilTargetInfo dt; SDL_zero(dt);
+    dt.texture = depthtex; dt.clear_depth = 0.f; dt.load_op = SDL_GPU_LOADOP_CLEAR; dt.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    dt.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE; dt.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+    SDL_GPURenderPass *rp_ = SDL_BeginGPURenderPass(cmd, &ct, 1, &dt);
+
+    /* reversed depth (near 1, far 0) in a float buffer: precision stays fine out to the mountains, no z-fighting */
+    float fy = FOCAL_Y, fx = fy / ((float)rtw / rth), B = NEAR_Z / (FAR_Z - NEAR_Z);
+    float pr[16] = {
+        fx*cam.right.x, fx*cam.right.y, fx*cam.right.z, -fx*vdot(cam.pos, cam.right),
+        fy*cam.up.x,    fy*cam.up.y,    fy*cam.up.z,    -fy*vdot(cam.pos, cam.up),
+        -B*cam.fwd.x,   -B*cam.fwd.y,   -B*cam.fwd.z,   B*(FAR_Z + vdot(cam.pos, cam.fwd)),
+        cam.fwd.x,      cam.fwd.y,      cam.fwd.z,      -vdot(cam.pos, cam.fwd) };
+    static const float ident[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    V3 L = vnorm(V(0.42f, 0.78f, 0.46f));
+    float fu[56] = { cam.pos.x, cam.pos.y, cam.pos.z, 0,
+                     ((fc >> 16) & 255) / 255.f, ((fc >> 8) & 255) / 255.f, (fc & 255) / 255.f, 0,
+                     FOG0, FOG1, 0, 0,  L.x, L.y, L.z, 0 };
+    memcpy(fu + 16, nrows, 64); memcpy(fu + 32, frows, 64);
+    fu[48] = 1.f / SH_SIZE[0]; fu[49] = 1.f / SH_SIZE[1]; fu[50] = 0.15f / (2 * Dn); fu[51] = 1.6f / (2 * Df);
+    SDL_PushGPUFragmentUniformData(cmd, 0, fu, sizeof fu);
+    SDL_BindGPUGraphicsPipeline(rp_, pipe3);
+    SDL_GPUTextureSamplerBinding shb[2] = {{sh_tex[0], sh_samp}, {sh_tex[1], sh_samp}};
+    SDL_BindGPUFragmentSamplers(rp_, 0, shb, 2);
+    SDL_PushGPUVertexUniformData(cmd, 0, pr, sizeof pr);
+    SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+    if (sn) {
+        SDL_GPUBufferBinding vbs = {vbuf_s, 0};
+        SDL_BindGPUVertexBuffers(rp_, 0, &vbs, 1);
+        SDL_DrawGPUPrimitives(rp_, sn, 1, 0, 0);
+    }
+    SDL_GPUBufferBinding vbd_ = {vbuf_d, 0};
+    SDL_BindGPUVertexBuffers(rp_, 0, &vbd_, 1);
+    if (nd) SDL_DrawGPUPrimitives(rp_, nd, 1, 0, 0);
+    draw_cars_gpu(rp_, cmd, 0, fu);
+    if (nhud) {
+        SDL_BindGPUGraphicsPipeline(rp_, pipe2);
+        SDL_PushGPUVertexUniformData(cmd, 0, ident, sizeof ident);
+        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+        SDL_GPUBufferBinding vb2 = {vbuf_d, (Uint32)((size_t)nd * sizeof(Vtx))};
+        SDL_BindGPUVertexBuffers(rp_, 0, &vb2, 1);
+        SDL_DrawGPUPrimitives(rp_, nhud, 1, 0, 0);
+    }
+    SDL_EndGPURenderPass(rp_);
+
+    if (shot_path) {
+        SDL_GPUCopyPass *dp = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureRegion reg; SDL_zero(reg);
+        reg.texture = rt_res; reg.w = rtw; reg.h = rth; reg.d = 1;
+        SDL_GPUTextureTransferInfo ti; SDL_zero(ti);
+        ti.transfer_buffer = dlbuf; ti.pixels_per_row = rtw; ti.rows_per_layer = rth;
+        SDL_DownloadFromGPUTexture(dp, &reg, &ti);
+        SDL_EndGPUCopyPass(dp);
+        SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        SDL_WaitForGPUFences(dev, true, &fence, 1);
+        SDL_ReleaseGPUFence(dev, fence);
+        uint8_t *px = SDL_MapGPUTransferBuffer(dev, dlbuf, false);
+        save_png(shot_path, px, rtw, rth);
+        SDL_UnmapGPUTransferBuffer(dev, dlbuf);
+        return;
+    }
+    SDL_GPUTexture *sw = NULL; Uint32 w = 0, h = 0;
+    if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, win, &sw, &w, &h) && sw) {
+        SDL_GPUBlitInfo bl; SDL_zero(bl);
+        bl.source.texture = rt_res; bl.source.w = rtw; bl.source.h = rth;
+        bl.destination.texture = sw; bl.destination.w = w; bl.destination.h = h;
+        bl.load_op = SDL_GPU_LOADOP_DONT_CARE;
+        bl.filter = SDL_GPU_FILTER_NEAREST;
+        SDL_BlitGPUTexture(cmd, &bl);
+    }
+    SDL_SubmitGPUCommandBuffer(cmd);
+}
+
+/* ------------------------------------------------------------------ main */
+static void menu_key(SDL_Keycode k)
+{
+    if (k == SDLK_UP) menu_row = (menu_row + 2) % 3;
+    else if (k == SDLK_DOWN) menu_row = (menu_row + 1) % 3;
+    else if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+        int d = k == SDLK_RIGHT ? 1 : -1;
+        if (menu_row == 0) { sel_track = (sel_track + d + NTRACKS) % NTRACKS; setup_menu(); }
+        else if (menu_row == 1) { laps += d; if (laps < 1) laps = 1; if (laps > 9) laps = 9; }
+        else skill = (skill + d + 3) % 3;
+    } else if (k == SDLK_RETURN) start_race();
+}
+
+/* debug: gap between each drawn tyre's lowest point and the road while physics has the wheel on the ground */
+static double wg_sum[4], wg_max[4], wg_min[4]; static int wg_n[4], wg_float[4];
+static float drawn_tyre_gap(const Car *c, int g)
+{
+    float m[12], lo = 1e9f;
+    if (!car_group_rows(c, g, m, 0, 0)) return 1e9f;
+    for (uint32_t k = 0; k < mdl_g[g].count; k++) {
+        const Vtx *v = &mdl_v[mdl_g[g].first + k];
+        Q q; track_query(m34_apply(m, V(v->x, v->y, v->z)), c->seg, 12, &q);
+        if (q.valid && q.road) lo = fminf(lo, q.h);
+    }
+    return lo;
+}
+static void wheel_gap_sample(const Car *c)
+{
+    for (int g = 0; g < mdl_ng; g++) {
+        if (mdl_g[g].role != R_WHEEL) continue;
+        int i = mdl_g[g].corner;
+        if (c->wl[i] >= WLF[i] - 1e-3f || car_out(c)) continue;           /* wheel in the air */
+        float gap = drawn_tyre_gap(c, g);
+        if (gap > 1e8f) continue;
+        if (gap < -0.05f && getenv("SR_WHEELS")[0] == '2') {
+            float body[12]; car_body_rows(c, body);
+            V3 lm = m34_apply(body, WMOUNT[i]), pm = body_pt(c, WMOUNT[i]);
+            printf("SINK %d gap %+.3f  wl-lmin %+.3f  lean %+.3f  dz %+.3f bump %.3f  lr %.3f lp %.3f\n", i, gap, c->wl[i] - WLMIN[i],
+                   vdot(c->U, vsub(lm, pm)), WREST[i] - c->wl[i] - vdot(c->U, vsub(lm, pm)), WBUMP[i], c->lr, c->lp);
+        }
+        if (!wg_n[i]) wg_min[i] = wg_max[i] = gap;
+        wg_sum[i] += gap; wg_n[i]++; wg_max[i] = fmax(wg_max[i], gap); wg_min[i] = fmin(wg_min[i], gap);
+        if (gap > 0.02f) wg_float[i]++;
+    }
+}
+static void wheel_gap_report(void)
+{
+    static const char *nm[4] = {"FL", "FR", "RL", "RR"};
+    for (int i = 0; i < 4; i++)
+        if (wg_n[i]) printf("GAP %s: mean %+.3f  min %+.3f  max %+.3f m, %d of %d samples float > 2 cm\n",
+                            nm[i], wg_sum[i] / wg_n[i], wg_min[i], wg_max[i], wg_float[i], wg_n[i]);
+}
+
+static void run_headless(int shot, const char *path, float secs, int track, int camsel)
+{
+    sel_track = track; build_track(track); cockpit = camsel;
+    if (getenv("SR_PROFILE")) { for (int k = 0; k < nseg; k += 25) printf("%d x=%.0f y=%.1f z=%.0f gap=%d\n", k, seg[k].c.x, seg[k].c.y, seg[k].c.z, seg[k].gap); }
+    autoplay = 1; start_race();
+    if (getenv("SR_LAUNCH")) { int lk = 0; float lv = 0; sscanf(getenv("SR_LAUNCH"), "%d,%f", &lk, &lv);
+        car_place(&cars[0], lk, 0, lv); car_place(&cars[1], (lk + 300) % nseg, 2.0f, 0); state = ST_RACE; }
+    if (camsel == 4) { start_view(); view_auto = 0; view_yaw = secs * PI_F / 180.f; secs = 0;
+        if (getenv("SR_VIEW")) sscanf(getenv("SR_VIEW"), "%f,%f", &view_pitch, &view_dist);
+        if (getenv("SR_TARGET")) sscanf(getenv("SR_TARGET"), "%f,%f,%f", &view_target.x, &view_target.y, &view_target.z);
+        if (getenv("SR_FLAME")) view_flame = 1;
+        if (getenv("SR_FREEZE")) view_anim = 0;
+        if (getenv("SR_POSE")) {                     /* debug: SR_POSE="travel,steer", travel -1 = full droop .. +1 = full bump */
+            float f = 0, st = 0; sscanf(getenv("SR_POSE"), "%f,%f", &f, &st); view_anim = 0; cars[0].delta = st;
+            for (int i = 0; i < 4; i++) cars[0].wl[i] = WREST[i] - f * (f > 0 ? WREST[i] - WLMIN[i] : WLF[i] - WREST[i]);
+        } }
+    int ticks = (int)(secs * 240);
+    for (int i = 0; i < ticks; i++) {
+        game_tick(PHYS_DT);
+        if (state == ST_DONE) break;
+        if (getenv("SR_TRACE") && i % 24 == 0) { Q q; track_query(cars[0].x, cars[0].seg, 30, &q); fprintf(stderr, "t=%5.2f seg %4d lat %5.2f h %5.2f v %5.1f str %5.2f delta %5.2f thr %.2f brk %.2f nwc %d yaw %5.2f roll %5.2f lean %5.3f %5.3f\n", i*PHYS_DT, cars[0].seg, q.lat, q.h, vdot(cars[0].v,cars[0].F), cars[0].str, cars[0].delta, cars[0].thr, cars[0].brk, cars[0].nwc, cars[0].w.y, vdot(cars[0].w, cars[0].F), cars[0].lr, cars[0].lp); }
+        if (i % 1200 == 0)
+            printf("t=%5.1f p: seg %4d/%d lap %d v=%5.1f dmg=%4.1f | ai: lap %d v=%5.1f dmg=%4.1f falls=%d\n",
+                   i * PHYS_DT, cars[0].seg, nseg, cars[0].lap, vlen(cars[0].v), cars[0].damage,
+                   cars[1].lap, vlen(cars[1].v), cars[1].damage, stat_falls);
+        if (i % 4 == 0) update_camera(&cars[0], 1.f / 60.f, i == 0);
+        if (getenv("SR_WHEELS") && i % 24 == 0 && state == ST_RACE) wheel_gap_sample(&cars[0]);
+    }
+    if (getenv("SR_WHEELS")) wheel_gap_report();
+    if (getenv("SR_WHEELS")) {                       /* debug: how far each drawn tyre's lowest point sits above the road */
+        const Car *c = &cars[0];
+        for (int g = 0; g < mdl_ng; g++) {
+            if (mdl_g[g].role != R_WHEEL) continue;
+            float m[12]; if (!car_group_rows(c, g, m, 0, 0)) continue;
+            float lo = 1e9f;
+            for (uint32_t k = 0; k < mdl_g[g].count; k++) {
+                const Vtx *v = &mdl_v[mdl_g[g].first + k];
+                Q q; track_query(m34_apply(m, V(v->x, v->y, v->z)), c->seg, 12, &q);
+                if (q.valid && q.road) lo = fminf(lo, q.h);
+            }
+            int i = mdl_g[g].corner;
+            Q hq; track_query(car_hub(c, i), c->seg, 12, &hq);
+            printf("WHEEL %s: drawn tyre bottom %+.3f m above road, physics hub %.3f above road (radius %.3f), wl %.3f\n",
+                   mdl_g[g].name, lo, hq.h, WRAD[i], c->wl[i]);
+        }
+    }
+    printf("CONTACT samples=%d impulse=%.0f Ns sparks=%d\n", stat_contacts, stat_push, stat_sparks);
+    printf("END state=%d result=%d racetime=%.1f p lap=%d dmg=%.1f best=%.1f | ai lap=%d dmg=%.1f | falls=%d nseg=%d len=%.0f\n",
+           state, result, racetime, cars[0].lap, cars[0].damage, cars[0].bestlap, cars[1].lap, cars[1].damage, stat_falls, nseg, nseg * ds);
+    if (shot) {
+        if (!SDL_Init(SDL_INIT_VIDEO)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return; }
+        if (gpu_init() == 0 && ensure_targets(1920, 1080) == 0) {
+            update_camera(&cars[0], 1.f / 60.f, 1);
+            if (camsel == 4) {
+                cars[0].flame = view_flame ? 1.f : 0.f;
+                update_camera(&cars[0], 1.f / 60.f, 1);
+            }
+            if (camsel == 5) {                       /* debug: overview of the whole track, like the original's title shots */
+                V3 mid = V((tr_minx + tr_maxx) * 0.5f, 6, (tr_minz + tr_maxz) * 0.5f);
+                cam.pos = V(mid.x + 40, 190, tr_minz - 230);
+                cam.fwd = vnorm(vsub(mid, cam.pos));
+                cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
+            }
+            if (camsel == 3) {                       /* debug: side view */
+                const Car *c = &cars[0];
+                cam.pos = vadd(vadd(c->x, vmul(c->R, 6.5f)), vmul(c->U, 0.6f));
+                cam.fwd = vnorm(vsub(vadd(c->x, vmul(c->U, 0.0f)), cam.pos));
+                cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
+            }
+            if (getenv("SR_CAM")) {                  /* debug: free camera "px,py,pz,tx,ty,tz" */
+                V3 p = cam.pos, t = vadd(cam.pos, cam.fwd);
+                sscanf(getenv("SR_CAM"), "%f,%f,%f,%f,%f,%f", &p.x, &p.y, &p.z, &t.x, &t.y, &t.z);
+                cam.pos = p; cam.fwd = vnorm(vsub(t, p)); cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
+            }
+            if (camsel == 2) {                       /* debug: front three-quarter view of the car */
+                const Car *c = &cars[0];
+                cam.pos = vadd(vadd(vadd(c->x, vmul(c->F, 6.5f)), vmul(c->R, 4.0f)), vmul(c->U, 1.6f));
+                cam.fwd = vnorm(vsub(vadd(c->x, vmul(c->U, 0.3f)), cam.pos));
+                cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
+            }
+            gpu_render(path); printf("wrote %s\n", path);
+        }
+        SDL_Quit();
+    }
+}
+
+int main(int argc, char **argv)
+{
+    if (!car_model_load()) return 1;
+    phys_defaults();
+    if (argc >= 3 && !strcmp(argv[1], "--sim")) {
+        run_headless(0, NULL, (float)atof(argv[2]), argc > 3 ? atoi(argv[3]) % NTRACKS : 0, 0);
+        return 0;
+    }
+    if (argc >= 4 && !strcmp(argv[1], "--menu-frames")) {       /* debug: record the menu at 60 fps into DIR/fNNN.png */
+        if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) return 1;
+        setup_menu(); update_camera(&cars[0], 1.f / 60.f, 1);
+        int n = (int)(atof(argv[3]) * 60);
+        for (int f = 0; f < n; f++) {
+            for (int k = 0; k < 4; k++) game_tick(PHYS_DT);
+            update_camera(&cars[0], 1.f / 60.f, 0);
+            char path[1024]; snprintf(path, sizeof path, "%s/f%03d.png", argv[2], f);
+            gpu_render(path);
+        }
+        SDL_Quit();
+        return 0;
+    }
+    if (argc >= 4 && !strcmp(argv[1], "--shot")) {
+        run_headless(1, argv[2], (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0, argc > 5 ? atoi(argv[5]) : 0);
+        return 0;
+    }
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
+    win = SDL_CreateWindow("STUNT RACER", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    if (!win || gpu_init() != 0) { fprintf(stderr, "init failed: %s\n", SDL_GetError()); return 1; }
+    SDL_AudioSpec spec = {SDL_AUDIO_S16, 1, 22050};
+    SDL_AudioStream *as = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, audio_cb, NULL);
+    if (as) SDL_ResumeAudioStreamDevice(as);
+    keys = SDL_GetKeyboardState(NULL);
+
+    setup_menu();
+    for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--view")) start_view();
+    update_camera(&cars[0], 0.016f, 1);
+    uint64_t last = SDL_GetTicksNS(); float acc = 0;
+    int full = 0;
+    for (int running = 1; running; ) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_EVENT_QUIT) running = 0;
+            else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e.motion.state & SDL_BUTTON_LMASK)) {
+                view_yaw -= e.motion.xrel * 0.008f; view_pitch += e.motion.yrel * 0.006f; view_auto = 0;
+            } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) view_dist *= 1.f - 0.1f * e.wheel.y;
+            else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+                SDL_Keycode k = e.key.key;
+                if (k == SDLK_ESCAPE) { if (state == ST_MENU || state == ST_VIEW) running = 0; else { setup_menu(); paused = 0; } }
+                else if (k == SDLK_F11) { full = !full; SDL_SetWindowFullscreen(win, full); }
+                else if (k == SDLK_P && state == ST_RACE) paused = !paused;
+                else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) { car_hurt(&cars[0], 8, 0); start_crane(&cars[0], cars[0].safe, 0, 2.6f); }
+                else if (state == ST_VIEW) view_key(k);
+                else if (state == ST_MENU) menu_key(k);
+                else if (state == ST_DONE && k == SDLK_RETURN && state_t > 1.5f) setup_menu();
+            }
+        }
+        uint64_t now = SDL_GetTicksNS();
+        float frame = (float)(now - last) * 1e-9f; last = now;
+        if (frame > 0.1f) frame = 0.1f;
+        if (!paused) {
+            acc += frame;
+            while (acc >= PHYS_DT) { game_tick(PHYS_DT); acc -= PHYS_DT; }
+        }
+        update_camera(&cars[0], frame, 0);
+        if (!as) a_vol = 0;
+        gpu_render(NULL);
+    }
+    SDL_Quit();
+    return 0;
+}
