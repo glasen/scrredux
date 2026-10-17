@@ -1750,6 +1750,9 @@ static void game_tick(float dt)
         break;
     case ST_EDIT:
         break;
+    case ST_PREVIEW:
+        state_t += dt;
+        break;
     }
     if (state == ST_COUNT || state == ST_RACE || state == ST_DONE) rec_tick();
     if (msg_t > 0) msg_t -= dt;

@@ -305,38 +305,54 @@ static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
         b[0] = fminf(b[0], x); b[1] = fminf(b[1], y); b[2] = fmaxf(b[2], x); b[3] = fmaxf(b[3], y);
     }
 }
-/* seen square to the track's long axis, a little from the side and from above, as big as the picture allows */
+/* the camera turns slowly round the track, starting square to its long axis, from above and at one distance: the
+ * nearest that keeps the track in the picture all the way round. Worked out at PV_NA angles, the aim between them */
+#define PV_NA 24
+#define PV_EL 0.42f
+static V3 pv_fwd(float th) { return vnorm(V(cosf(th) * cosf(PV_EL), -sinf(PV_EL), sinf(th) * cosf(PV_EL))); }
+static void pv_fit(V3 fwd, float fx, const float n[4], V3 *tg, float *D, int fixed)
+{
+    V3 right = vnorm(vcross(fwd, UP)), up = vcross(right, fwd);
+    float b[4];
+    for (int it = 0; it < 3; it++) {
+        if (!fixed) {
+            float lo = 5, hi = 5000;
+            for (int k = 0; k < 24; k++) {
+                *D = 0.5f * (lo + hi);
+                pv_bounds(vsub(*tg, vmul(fwd, *D)), fwd, right, up, fx, b);
+                if (b[2] - b[0] <= (n[2] - n[0]) * 0.92f && b[3] - b[1] <= (n[3] - n[1]) * 0.92f) hi = *D; else lo = *D;
+            }
+            *D = hi;
+        }
+        pv_bounds(vsub(*tg, vmul(fwd, *D)), fwd, right, up, fx, b);
+        *tg = vadd(*tg, vadd(vmul(right, ((b[0] + b[2]) - (n[0] + n[2])) * 0.5f / fx * *D), vmul(up, ((b[1] + b[3]) - (n[1] + n[3])) * 0.5f / FOCAL_Y * *D)));
+    }
+}
 static void preview_cam(float asp)
 {
-    static float was_asp; static int was_gen = -1; static V3 pos, fwd0;
-    if (asp == was_asp && track_gen == was_gen) {
-        cam.pos = pos; cam.fwd = fwd0; cam.right = vnorm(vcross(fwd0, UP)); cam.up = vcross(cam.right, fwd0); return;
-    }
-    was_asp = asp; was_gen = track_gen;
-    float f[4]; pv_frame(VH * asp, f);
-    float in = PV_Q + 1.5f, fx = FOCAL_Y / asp, hw = VH * asp;
-    float nx0 = (f[0] + in) / hw * 2 - 1, nx1 = (f[2] - in) / hw * 2 - 1, ny0 = 1 - (f[3] - in) / VH * 2, ny1 = 1 - (f[1] + in) / VH * 2;
-    double mx = 0, mz = 0, sxx = 0, szz = 0, sxz = 0; float ymax = 0;
-    for (int k = 0; k < nseg; k++) { mx += seg[k].c.x; mz += seg[k].c.z; ymax = fmaxf(ymax, seg[k].c.y); }
-    mx /= nseg; mz /= nseg;
-    for (int k = 0; k < nseg; k++) { double dx = seg[k].c.x - mx, dz = seg[k].c.z - mz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; }
-    float th = 0.5f * (float)atan2(2 * sxz, sxx - szz) + PI_F / 2 + 0.3f, el = 0.42f;
-    V3 h = V(cosf(th), 0, sinf(th));
-    if (h.z < 0) h = vmul(h, -1);
-    V3 fwd = vnorm(V(h.x * cosf(el), -sinf(el), h.z * cosf(el))), right = vnorm(vcross(fwd, UP)), up = vcross(right, fwd);
-    V3 tg = V((float)mx, ymax * 0.4f, (float)mz);
-    float D = 300, b[4];
-    for (int it = 0; it < 4; it++) {
-        float lo = 5, hi = 5000;
-        for (int k = 0; k < 28; k++) {
-            D = 0.5f * (lo + hi);
-            pv_bounds(vsub(tg, vmul(fwd, D)), fwd, right, up, fx, b);
-            if (b[2] - b[0] <= (nx1 - nx0) * 0.92f && b[3] - b[1] <= (ny1 - ny0) * 0.92f) hi = D; else lo = D;
+    static float was_asp, th0, D; static int was_gen = -1; static V3 tg[PV_NA];
+    if (asp != was_asp || track_gen != was_gen) {
+        was_asp = asp; was_gen = track_gen;
+        float f[4], hw = VH * asp, in = PV_Q + 1.5f, fx = FOCAL_Y / asp; pv_frame(hw, f);
+        float n[4] = {(f[0] + in) / hw * 2 - 1, 1 - (f[3] - in) / VH * 2, (f[2] - in) / hw * 2 - 1, 1 - (f[1] + in) / VH * 2};
+        double mx = 0, mz = 0, sxx = 0, szz = 0, sxz = 0; float ymax = 0;
+        for (int k = 0; k < nseg; k++) { mx += seg[k].c.x; mz += seg[k].c.z; ymax = fmaxf(ymax, seg[k].c.y); }
+        mx /= nseg; mz /= nseg;
+        for (int k = 0; k < nseg; k++) { double dx = seg[k].c.x - mx, dz = seg[k].c.z - mz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; }
+        th0 = 0.5f * (float)atan2(2 * sxz, sxx - szz) + PI_F / 2 + 0.3f;
+        if (sinf(th0) < 0) th0 += PI_F;
+        D = 0;
+        for (int a = 0; a < PV_NA; a++) {
+            float d; tg[a] = V((float)mx, ymax * 0.4f, (float)mz);
+            pv_fit(pv_fwd(th0 + 2 * PI_F * a / PV_NA), fx, n, &tg[a], &d, 0);
+            D = fmaxf(D, d);
         }
-        D = hi; pv_bounds(vsub(tg, vmul(fwd, D)), fwd, right, up, fx, b);
-        tg = vadd(tg, vadd(vmul(right, ((b[0] + b[2]) - (nx0 + nx1)) * 0.5f / fx * D), vmul(up, ((b[1] + b[3]) - (ny0 + ny1)) * 0.5f / FOCAL_Y * D)));
+        for (int a = 0; a < PV_NA; a++) pv_fit(pv_fwd(th0 + 2 * PI_F * a / PV_NA), fx, n, &tg[a], &D, 1);
     }
-    cam.pos = pos = vsub(tg, vmul(fwd, D)); cam.fwd = fwd0 = fwd; cam.right = right; cam.up = up;
+    float u = fmodf(state_t * 0.12f / (2 * PI_F), 1.f) * PV_NA, fr = u - floorf(u);
+    int a = (int)u % PV_NA;
+    V3 fwd = pv_fwd(th0 + 2 * PI_F * u / PV_NA), t = vlerp(tg[a], tg[(a + 1) % PV_NA], fr);
+    cam.pos = vsub(t, vmul(fwd, D)); cam.fwd = fwd; cam.right = vnorm(vcross(fwd, UP)); cam.up = vcross(cam.right, fwd);
 }
 static void draw_preview(void)
 {
@@ -364,7 +380,7 @@ static void draw_preview(void)
 static void preview_start(void)
 {
     memset(cars, 0, sizeof cars); npart = 0; paused = 0;
-    state = ST_PREVIEW;
+    state = ST_PREVIEW; state_t = 0;
 }
 static void preview_key(SDL_Keycode k)
 {

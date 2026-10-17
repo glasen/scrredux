@@ -10,8 +10,8 @@ Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen,
 ## Menu
 Like the original's: the logo, your division, SELECT and grey bars (the chosen one orange) between two wooden posts, over
 the stadium with a car lapping the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
-Before every season race and practice session the track is shown from the stands in a chequered frame with its name
-below, like the original's; ENTER starts, ESC goes back.
+Before every season race and practice session the camera turns slowly round the track in a chequered frame with its
+name below, like the original's; ENTER starts, ESC goes back.
 
 1. **Hall of Fame**: the lap record and the race record on every track, and who drove them. The originals start with
    records by the computer drivers; laps in season races and in practice count, race times in season races.
