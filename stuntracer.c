@@ -712,6 +712,7 @@ typedef struct {
     unsigned char hit[16], wbot[4];
     float lr, lp, lrr, lpr, alat_f, along_f;      /* visual body roll/pitch (angle, rate) and filtered accelerations */
     float flame;                                  /* exhaust flame strength (0..1.4), boost only */
+    float holes[6]; int nholes;                   /* big hits: holes in the cockpit's top tube, as damage fractions along the crack */
     uint32_t col;
 } Car;
 
@@ -764,6 +765,7 @@ static void car_hurt(Car *c, float amt, float loud)
         a_thump = fmaxf(a_thump, clampf(amt / 12.f, 0.1f, 0.8f) * loud);
     }
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
+    if (amt >= 8.f && loud > 0 && c->nholes < 6) c->holes[c->nholes++] = c->damage / 100.f;   /* at the crack's tip */
 }
 
 /* ---- particles: sparks, dust, smoke, fire (world space, drawn as unlit camera-facing shapes) ---- */

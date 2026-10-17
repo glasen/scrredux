@@ -6,7 +6,9 @@ Stunt Car Racer inspired roller-coaster racer in a stadium. SDL3 + SDL_GPU, flat
     ./stuntracer    # run from this directory (shaders are loaded from next to the binary)
 
 Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen, ESC menu/quit.
-Races are driven from the cockpit only, like the original.
+Races are driven from the cockpit only, like the original. Boost and speed are gauges clamped to the roll cage beside the
+steering wheel; damage is a crack growing along the cage's top tube (holes where big hits landed), at the right end the car
+is wrecked. Lap, race time and best lap are overlay text in the top corners.
 
 * Renders at native window resolution with 4x MSAA (when supported).
 * The car is a rigid body: 4 spring/damper suspensions with progressive hydraulic bump stops, tyre friction (traction circle),
