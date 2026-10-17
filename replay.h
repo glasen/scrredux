@@ -11,7 +11,7 @@ typedef struct {
     char title[64], names[2][16];
     int result, laps;
     uint32_t col[2];
-    float holes[2][6];
+    float spare[2][6];                      /* keeps the file layout */
     int64_t when;
     TrackDef td;
 } RHead;
@@ -76,7 +76,7 @@ static void rec_save(const char *title, const char *n0, const char *n1, int resu
     h.magic = RP_MAGIC; h.ver = 1; h.seq = seq + 1; h.nt = (uint32_t)nrec; h.result = result; h.laps = laps;
     snprintf(h.title, sizeof h.title, "%s", title);
     snprintf(h.names[0], sizeof h.names[0], "%s", n0); snprintf(h.names[1], sizeof h.names[1], "%s", n1);
-    for (int i = 0; i < 2; i++) { h.col[i] = cars[i].col; memcpy(h.holes[i], cars[i].holes, sizeof h.holes[i]); }
+    for (int i = 0; i < 2; i++) h.col[i] = cars[i].col;
     h.when = (int64_t)time(NULL);
     h.td = trk[cur_track];
     char p[1024]; save_path(p, sizeof p, "save/replay%d.rpl", slot);

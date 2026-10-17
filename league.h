@@ -21,7 +21,7 @@ typedef struct {
     int on, season, race;                   /* race: the next of each division's six, raced in step */
     char pname[16];
     int div[NDRV], pts[NDRV], raced[NDRV], wins[NDRV], lapp[NDRV];
-    float holes[6]; int nholes;             /* the player's cage damage stays for the season */
+    float spare[6]; int nholes;             /* the player's cage holes stay for the season; spare keeps the save layout */
     Race sched[4][6];
 } Season;
 #define SEA_MAGIC 0x53525345u

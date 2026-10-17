@@ -776,11 +776,14 @@ typedef struct {
     unsigned char hit[16], wbot[4], wcon[4];
     float lr, lp, lrr, lpr, alat_f, along_f;      /* visual body roll/pitch (angle, rate) and filtered accelerations */
     float flame;                                  /* exhaust flame strength (0..1.4), boost only */
-    float holes[6]; int nholes;                   /* big hits: holes in the cockpit's top tube, as damage fractions along the crack */
+    int nholes;                                   /* big hits: holes in the cockpit's top tube this season (see hole_at) */
     uint32_t col;
     float ai_lane; int ai_lset;                   /* AI: the lane it is easing towards its target */
-    int carry;                                    /* holes carried over from earlier races of the season */
 } Car;
+/* the original's ten hole spots on the 240-pixel crack: 12 pixels wide, every 24, filled from the right end */
+#define NHOLE 10
+#define HOLE_W 5.f
+static float hole_at(int k) { return (8 + 24 * (NHOLE - 1 - k)) / 2.4f; }   /* k-th hole's start, in % of the crack */
 
 /* car geometry relative to the centre of mass (FL, FR, RL, RR), read from models/stuntcar.scm (car_model.h) */
 static V3 WMOUNT[4];
@@ -890,12 +893,21 @@ static void car_hurt(Car *c, float amt, float loud)
 {
     if (c->wrecked || amt <= 0) return;
     if (c->hurt_cd > 0) amt *= 0.12f; else c->hurt_cd = 0.3f;
-    amt *= 1.f + 0.15f * c->carry;                                      /* old holes: the frame cracks faster */
-    c->damage += amt;
+    float x = c->damage, left = amt;                                    /* the crack crosses holes for free */
+    while (left > 0) {
+        float next = 1e9f; int in = 0;
+        for (int k = 0; k < c->nholes && !in; k++) {
+            float a = hole_at(k);
+            if (x >= a && x < a + HOLE_W) { x = a + HOLE_W; in = 1; }
+            else if (a > x && a < next) next = a;
+        }
+        if (!in) { float st = fminf(left, next - x); x += st; left -= st; }
+    }
+    c->damage = x;
     if (getenv("SR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
-    int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0;           /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
-    if (smash) { c->smash_t = 6.9f; if (c->nholes < 6) c->holes[c->nholes++] = c->damage / 100.f; }   /* at the crack's tip */
+    int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0 && c->nholes < NHOLE;   /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
+    if (smash) { c->smash_t = 6.9f; c->nholes++; }
     if (snd_live(c) && loud > 0) {
         if (smash) snd_play(S_SMASH, 280, 64);
         else if (amt >= 0.5f) snd_play(S_CREAK, 238, (int)clampf(amt * 10.f, 28, 64));
@@ -1642,7 +1654,7 @@ static void start_race(void)
         c->active = 1; c->boost = 100; c->col = i ? 0x2860D8 : CAR_RED;
         start_crane(c, nseg - 14, solo ? 0.f : i ? 2.0f : -2.0f, 2.4f);
     }
-    if (race_mode == RM_SEASON) { cars[0].nholes = cars[0].carry = sea.nholes; memcpy(cars[0].holes, sea.holes, sizeof sea.holes); }
+    if (race_mode == RM_SEASON) cars[0].nholes = sea.nholes;
     npart = 0;
     racetime = 0; state = ST_COUNT; state_t = 3.99f; result = 0; msg_t = 0; stat_falls = 0; paused = 0;
     if (race_mode == RM_SEASON) rec_begin(); else rec_on = 0;

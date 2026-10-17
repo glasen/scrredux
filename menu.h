@@ -418,7 +418,7 @@ static void race_leave(int retired)
         const char *tn = trk[r->track].name;
         if (tp > 0) last_race_rec |= hof_race(tn, player_name(), tp);
         if (to > 0) hof_race(tn, drv_name(opp_drv), to);
-        sea.nholes = p->nholes; memcpy(sea.holes, p->holes, sizeof sea.holes);
+        sea.nholes = p->nholes;
         char title[64];
         snprintf(title, sizeof title, "%s - %s v %s - %s", tn, player_name(), drv_name(opp_drv), win_p ? "won" : "lost");
         rec_save(title, player_name(), drv_name(opp_drv), result);
@@ -435,7 +435,7 @@ static void replay_start(int i)
     if (h->td.orig >= 0 && h->td.orig < SCR_NTRACKS) { if (cur_track != h->td.orig) build_track(h->td.orig); }
     else { trk[ED_SLOT] = h->td; build_track(ED_SLOT); }
     memset(cars, 0, sizeof cars);
-    for (int k = 0; k < 2; k++) { cars[k].col = h->col[k]; memcpy(cars[k].holes, h->holes[k], sizeof cars[k].holes); }
+    for (int k = 0; k < 2; k++) cars[k].col = h->col[k];
     laps = h->laps; npart = 0; rp_t = 0; rp_speed = 1; rp_paused = 0; rp_cam = RC_COCKPIT; paused = 0;
     state = ST_REPLAY;
     rp_step(0);
