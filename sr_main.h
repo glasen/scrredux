@@ -15,24 +15,46 @@ static void hud_rect(float x, float y, float w, float h, uint32_t col)
     cur = save;
 }
 
+static void hud_tri(float x0, float y0, float x1, float y1, float x2, float y2, uint32_t col)
+{
+    VB *save = cur; cur = &hb; vb_reserve(&hb, 3);
+    float sx = 2.f / HW, sy = 2.f / VH;
+    emit(V(x0 * sx - 1, 1 - y0 * sy, 0), col, 0); emit(V(x1 * sx - 1, 1 - y1 * sy, 0), col, 0); emit(V(x2 * sx - 1, 1 - y2 * sy, 0), col, 0);
+    cur = save;
+}
+static void hud_quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, uint32_t col)
+{
+    hud_tri(x0, y0, x1, y1, x2, y2, col); hud_tri(x0, y0, x2, y2, x3, y3, col);
+}
+static void hud_line(float x0, float y0, float x1, float y1, float w, uint32_t col)
+{
+    float dx = x1 - x0, dy = y1 - y0, l = sqrtf(dx * dx + dy * dy);
+    if (l < 1e-4f) return;
+    float nx = -dy / l * w * 0.5f, ny = dx / l * w * 0.5f;
+    hud_quad(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, col);
+}
+
 static float text_width(const char *s, float sc) { return (float)strlen(s) * 6 * sc; }
-static void hud_text_raw(float x, float y, const char *s, float sc, uint32_t col)
+/* rows shade from col_top to col_bot; shear > 0 leans the letters forward */
+static void hud_text_ex(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
 {
     for (; *s; s++, x += 6 * sc) {
-        char ch = *s; if (ch >= 'a' && ch <= 'z') ch -= 32;
-        const char *p = strchr(FONT_CHARS, ch);
-        if (!p || !ch) continue;
+        const char *p = strchr(FONT_CHARS, *s);
+        if (!p || !*s) continue;
         const uint8_t *g = FONT[p - FONT_CHARS];
         for (int row = 0; row < 7; row++) {
             int col0 = -1;
+            uint32_t col = ctop == cbot ? ctop : mixcol(ctop, cbot, row / 6.f);
+            float xo = x + (6 - row) * sc * shear;
             for (int cx = 0; cx <= 5; cx++) {
                 int on = cx < 5 && (g[row] & (0x10 >> cx));
                 if (on && col0 < 0) col0 = cx;
-                if (!on && col0 >= 0) { hud_rect(x + col0 * sc, y + row * sc, (cx - col0) * sc, sc, col); col0 = -1; }
+                if (!on && col0 >= 0) { hud_rect(xo + col0 * sc, y + row * sc, (cx - col0) * sc, sc, col); col0 = -1; }
             }
         }
     }
 }
+static void hud_text_raw(float x, float y, const char *s, float sc, uint32_t col) { hud_text_ex(x, y, s, sc, col, col, 0); }
 static void hud_text(float x, float y, const char *s, float sc, uint32_t col)
 {
     hud_text_raw(x + sc * 0.6f, y + sc * 0.6f, s, sc, 0x101018);
@@ -47,6 +69,9 @@ static void fmt_time(char *b, size_t n, float t)
     int m = (int)(t / 60); float s = t - m * 60;
     snprintf(b, n, "%d:%04.1f", m, s);
 }
+static SDL_Window *win;
+#include "menu.h"
+#include "editor.h"
 
 /* ------------------------------------------------------- vehicle physics constants */
 static void phys_defaults(void)
@@ -102,24 +127,12 @@ static void draw_hud_base(void)
         hud_text_c(238, b, 1, 0xE0E0E0);
         return;
     }
-    if (state == ST_MENU) {
-        hud_text_c(24, "STUNT RACER", 5, 0xFFD030);
-        hud_text_c(66, "ROLLER COASTER STADIUM RACING", 2, 0xE8E8F0);
-        const char *rows[3]; char r0[64], r1[64], r2[64];
-        snprintf(r0, sizeof r0, "TRACK: <%s>", SCR_TITLE[sel_track]);
-        snprintf(r1, sizeof r1, "LAPS: <%d>", laps);
-        snprintf(r2, sizeof r2, "OPPONENT: <%s>", skill_name[skill]);
-        rows[0] = r0; rows[1] = r1; rows[2] = r2;
-        for (int i = 0; i < 3; i++)
-            hud_text_c(110 + i * 22, rows[i], 2, i == menu_row ? 0xFFFF40 : 0xB0B0C0);
-        hud_text_c(190, "ENTER: START RACE", 2, 0x60FF60);
-        hud_text_c(236, "ARROWS DRIVE  SPACE BOOST  R RESET  P PAUSE  F11 FULLSCREEN", 1, 0xE0E0E0);
-        hud_text_c(250, "UP/DOWN SELECT  LEFT/RIGHT CHANGE  ESC QUIT", 1, 0xE0E0E0);
-        return;
-    }
+    if (state == ST_MENU) { draw_menu(); return; }
+    if (state == ST_EDIT) { ed_draw(); return; }
+    if (state == ST_REPLAY) { draw_replay_hud(); return; }
     const Car *p = &cars[0];                     /* speed, boost and damage are in the cockpit (draw_cockpit) */
-    int lp = p->lap < 1 ? 1 : (p->lap > laps ? laps : p->lap);
-    snprintf(b, sizeof b, "LAP %d/%d", lp, laps);
+    int lp = p->lap < 1 ? 1 : (laps > 0 && p->lap > laps ? laps : p->lap);
+    if (laps > 0) snprintf(b, sizeof b, "LAP %d/%d", lp, laps); else snprintf(b, sizeof b, "LAP %d", lp);
     hud_text(8, 33, b, 1.5f, 0xFFFFFF);          /* below the cage's top tube, which carries the damage crack */
     fmt_time(b, sizeof b, racetime);
     hud_text(8, 47, b, 1.5f, 0xFFE060);
@@ -142,6 +155,7 @@ static void draw_hud_base(void)
         if (state_t > 1.5f) hud_text_c(160, "PRESS ENTER", 2, 0xFFE040);
     }
     if (paused) hud_text_c(110, "PAUSED", 4, 0xFFFFFF);
+    race_hud_extra();
 }
 static void draw_hud(void) { draw_hud_base(); }
 
@@ -186,7 +200,6 @@ static int save_png(const char *path, const uint8_t *rgba, int w, int h)
 
 /* ------------------------------------------------------------- GPU layer */
 static SDL_GPUDevice *dev;
-static SDL_Window *win;
 static SDL_GPUGraphicsPipeline *pipe3, *pipe2;
 static SDL_GPUBuffer *vbuf_s, *vbuf_d;
 static SDL_GPUTransferBuffer *tbuf, *dlbuf;
@@ -196,7 +209,7 @@ static SDL_GPUSampler *sh_samp;
 static SDL_GPUGraphicsPipeline *pipe_sh;
 static const int SH_SIZE[2] = {3072, 4096};
 static int sky_n;
-static int rtw, rth, msaa = 1, static_track = -1, static_n;
+static int rtw, rth, msaa = 1, static_gen = -1, static_n;
 static size_t dlsize;
 static SDL_GPUTextureFormat dfmt;
 #define DYN_CAP 400000
@@ -360,7 +373,7 @@ static int gpu_init(void)
 /* upload the static world mesh (track + stadium) once per track */
 static void upload_static(void)
 {
-    if (static_track == cur_track) return;
+    if (static_gen == track_gen) return;
     if (vbuf_s) SDL_ReleaseGPUBuffer(dev, vbuf_s);
     SDL_GPUBufferCreateInfo bi; SDL_zero(bi);
     bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (Uint32)((size_t)sb.n * sizeof(Vtx));
@@ -381,7 +394,7 @@ static void upload_static(void)
     SDL_WaitForGPUFences(dev, true, &f, 1);
     SDL_ReleaseGPUFence(dev, f);
     SDL_ReleaseGPUTransferBuffer(dev, t);
-    static_track = cur_track; static_n = sb.n;
+    static_gen = track_gen; static_n = sb.n;
     fprintf(stderr, "static mesh: %d triangles\n", sb.n / 3);
 }
 
@@ -558,8 +571,9 @@ static void draw_crack(const Car *c)
 }
 static void draw_cockpit(void)
 {
-    const Car *c = &cars[0];
-    if (!c->active || !cockpit || state == ST_MENU || state == ST_VIEW) return;
+    int fp = fp_car();
+    if (fp < 0 || !cars[fp].active) return;
+    const Car *c = &cars[fp];
     car_body_rows(c, ck_m);
     static const char *bst[] = {"0", "", "50", "", "100"}, *spd[] = {"0", "40", "80", "120", "160", "200", "240", "280"};
     gauge(V(-0.35f, 0.535f, -0.10f), 0.052f, c->boost / 100.f, 4, bst, "BOOST", V(-0.35f, 0.45f, -0.04f));
@@ -576,7 +590,7 @@ static void build_frame(void)
         for (int iz = -16; iz < 16; iz++) for (int ix = -16; ix < 16; ix++)
             draw_quad(V(ix * 1.5f, 0, iz * 1.5f), V(ix * 1.5f + 1.5f, 0, iz * 1.5f), V(ix * 1.5f + 1.5f, 0, iz * 1.5f + 1.5f), V(ix * 1.5f, 0, iz * 1.5f + 1.5f), ((ix + iz) & 1) ? 0x6A707C : 0x8C929E);
     }
-    if (state != ST_VIEW) for (int i = 0; i < 2; i++) draw_crane(&cars[i]);
+    if (state != ST_VIEW && state != ST_EDIT) for (int i = 0; i < 2; i++) draw_crane(&cars[i]);
     dyn_shadow_end = db.n;                        /* everything after this (flames, effects) is unlit and casts no shadow */
     draw_cockpit();
     draw_flames();
@@ -597,7 +611,7 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
     for (int ci = 0; ci < 2; ci++) {
         const Car *c = &cars[ci];
         if (!c->active) continue;
-        int first_person = ci == 0 && cockpit && state != ST_MENU && state != ST_VIEW;
+        int first_person = ci == fp_car();
         int vw = state == ST_VIEW;
         if (!shadow) {
             fu[52] = ((c->col >> 16) & 255) / 255.f * 1.25f; fu[53] = ((c->col >> 8) & 255) / 255.f * 1.25f;
@@ -637,7 +651,7 @@ static void draw_flames(void)
                 V3 D = vnorm(vadd(vmul(R, ld.x), vadd(vmul(U, ld.y), vmul(F, ld.z))));   /* out of the pipe */
                 float rnd = (float)(hash2(frame_no * 13 + ci * 7 + k + (sd + 1) * 5, 99) & 1023) / 1023.f;
                 float rn2 = (float)(hash2(frame_no * 7 + ci * 11 + k * 3 + (sd + 1) * 2, 17) & 1023) / 1023.f;
-                float fs = (ci == 0 && cockpit && state != ST_MENU && state != ST_VIEW) ? 0.75f : 1.f;          /* smaller when seen from the driver's eye */
+                float fs = ci == fp_car() ? 0.75f : 1.f;          /* smaller when seen from the driver's eye */
                 float h = fs * (0.07f + 0.40f * c->flame) * (0.55f + 0.9f * rnd), w = fs * 0.058f * (0.85f + 0.25f * c->flame);   /* base just fills the 12 cm zoomie mouth */
                 V3 tilt = vadd(vmul(F, -h * (0.15f + 0.45f * spd)), vmul(R, sd * h * 0.08f * (rn2 - 0.5f)));     /* blown back by the airflow */
                 V3 a1 = vnorm(vcross(D, fabsf(vdot(D, F)) < 0.9f ? F : R)), a2 = vcross(D, a1);                /* cone base fills the pipe mouth */
@@ -789,18 +803,6 @@ static void gpu_render(const char *shot_path)
 }
 
 /* ------------------------------------------------------------------ main */
-static void menu_key(SDL_Keycode k)
-{
-    if (k == SDLK_UP) menu_row = (menu_row + 2) % 3;
-    else if (k == SDLK_DOWN) menu_row = (menu_row + 1) % 3;
-    else if (k == SDLK_LEFT || k == SDLK_RIGHT) {
-        int d = k == SDLK_RIGHT ? 1 : -1;
-        if (menu_row == 0) { sel_track = (sel_track + d + NTRACKS) % NTRACKS; setup_menu(); }
-        else if (menu_row == 1) { laps += d; if (laps < 1) laps = 1; if (laps > 9) laps = 9; }
-        else skill = (skill + d + 3) % 3;
-    } else if (k == SDLK_RETURN) start_race();
-}
-
 /* debug: gap between each drawn tyre's lowest point and the road while physics has the wheel on the ground */
 static double wg_sum[4], wg_max[4], wg_min[4]; static int wg_n[4], wg_float[4];
 static float drawn_tyre_gap(const Car *c, int g)
@@ -928,10 +930,68 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
     }
 }
 
+/* one key press, wherever the game is; 0 = quit */
+static int full;
+static int handle_key(SDL_Keycode k, SDL_Keymod mod)
+{
+    if (k == SDLK_F11 && win) { full = !full; SDL_SetWindowFullscreen(win, full); return 1; }
+    switch (state) {
+    case ST_VIEW: if (k == SDLK_ESCAPE) return 0; view_key(k); return 1;
+    case ST_MENU: return menu_key(k);
+    case ST_EDIT: ed_key(k, mod); return 1;
+    case ST_REPLAY: replay_key(k); return 1;
+    default: return race_key(k);
+    }
+}
+static void frame_timers(float frame)
+{
+    if (ms_note_t > 0) ms_note_t -= frame;
+    if (ed_msg_t > 0) ed_msg_t -= frame;
+    if (esc_t > 0) esc_t -= frame; else esc_armed = 0;
+    if (state == ST_REPLAY) replay_hold();
+}
+
+/* debug: drive the menus and the builder headless with a script of key names, then render one frame:
+ * "Down Down Return wait2 text:Bob" (wait N runs N seconds of the game, text: types into a name field) */
+static void ui_shot(const char *path, const char *script)
+{
+    if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) return;
+    setup_menu(); update_camera(&cars[0], 1.f / 60.f, 1);
+    autoplay = getenv("SR_AUTO") != NULL;                 /* the autopilot drives the player's races */
+    char buf[2048]; snprintf(buf, sizeof buf, "%s", script);
+    for (char *tok = strtok(buf, " "); tok; tok = strtok(NULL, " ")) {
+        if (!strncmp(tok, "wait", 4)) {
+            int n = (int)(atof(tok + 4) * 60);
+            for (int f = 0; f < n; f++) { for (int k = 0; k < 4; k++) if (!paused) game_tick(PHYS_DT); frame_timers(1.f / 60); update_camera(&cars[cam_car()], 1.f / 60.f, 0); }
+            continue;
+        }
+        if (!strncmp(tok, "text:", 5)) { if (state == ST_MENU) menu_text(tok + 5); else ed_text(tok + 5); continue; }
+        SDL_Keymod mod = 0;
+        if (!strncmp(tok, "shift+", 6)) { mod = SDL_KMOD_SHIFT; tok += 6; }
+        SDL_Keycode k = SDL_GetKeyFromName(tok);
+        if (k == SDLK_UNKNOWN) { fprintf(stderr, "ui-shot: unknown key %s\n", tok); continue; }
+        if (!handle_key(k, mod)) break;
+        update_camera(&cars[cam_car()], 1.f / 60.f, 1);
+    }
+    if (getenv("SR_OVERVIEW")) {                             /* the whole track from high up, like --shot's CAM 5 */
+        V3 mid = V((tr_minx + tr_maxx) * 0.5f, 6, (tr_minz + tr_maxz) * 0.5f);
+        cam.pos = V(mid.x + 40, 150, tr_minz - 170);
+        cam.fwd = vnorm(vsub(mid, cam.pos)); cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
+    }
+    if (state == ST_RACE || state == ST_DONE) printf("race: t=%.1f lap %d dmg %.1f falls %d best %.1f\n", racetime, cars[0].lap, cars[0].damage, stat_falls, cars[0].bestlap);
+    gpu_render(path); printf("wrote %s\n", path);
+    SDL_Quit();
+}
+
 int main(int argc, char **argv)
 {
     if (!car_model_load()) return 1;
+    tracks_scan();
     phys_defaults();
+    hof_load();
+    if (season_peek(0, &sea) || !sea.on) memset(&sea, 0, sizeof sea);
+    if (argc >= 2 && !strcmp(argv[1], "--check-tracks")) { ed_check_originals(); return 0; }
+    if (argc >= 4 && !strcmp(argv[1], "--ui-shot")) { ui_shot(argv[2], argv[3]); return 0; }
     if (argc >= 3 && !strcmp(argv[1], "--sim")) {
         run_headless(0, NULL, (float)atof(argv[2]), argc > 3 ? atoi(argv[3]) % NTRACKS : 0, 0);
         snd_report();
@@ -970,7 +1030,6 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--view")) start_view();
     update_camera(&cars[0], 0.016f, 1);
     uint64_t last = SDL_GetTicksNS(); float acc = 0;
-    int full = 0;
     for (int running = 1; running; ) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
@@ -978,25 +1037,25 @@ int main(int argc, char **argv)
             else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e.motion.state & SDL_BUTTON_LMASK)) {
                 view_yaw -= e.motion.xrel * 0.008f; view_pitch += e.motion.yrel * 0.006f; view_auto = 0;
             } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) view_dist *= 1.f - 0.1f * e.wheel.y;
-            else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
-                SDL_Keycode k = e.key.key;
-                if (k == SDLK_ESCAPE) { if (state == ST_MENU || state == ST_VIEW) running = 0; else { setup_menu(); paused = 0; } }
-                else if (k == SDLK_F11) { full = !full; SDL_SetWindowFullscreen(win, full); }
-                else if (k == SDLK_P && state == ST_RACE) paused = !paused;
-                else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) { car_hurt(&cars[0], 8, 0); start_crane(&cars[0], restart_seg(&cars[0]), 0, 2.6f); }
-                else if (state == ST_VIEW) view_key(k);
-                else if (state == ST_MENU) menu_key(k);
-                else if (state == ST_DONE && k == SDLK_RETURN && state_t > 1.5f) setup_menu();
+            else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) ed_mouse(0, 0, 0, e.wheel.y);
+            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && state == ST_EDIT) {
+                int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
+                ed_mouse(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button, 0);
+            } else if (e.type == SDL_EVENT_TEXT_INPUT) { if (state == ST_MENU) menu_text(e.text.text); else if (state == ST_EDIT) ed_text(e.text.text); }
+            else if (e.type == SDL_EVENT_KEY_DOWN && (!e.key.repeat || ((state == ST_EDIT || state == ST_MENU) &&
+                     e.key.key != SDLK_RETURN && e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C && e.key.key != SDLK_T))) {
+                if (!handle_key(e.key.key, e.key.mod)) running = 0;
             }
         }
         uint64_t now = SDL_GetTicksNS();
         float frame = (float)(now - last) * 1e-9f; last = now;
         if (frame > 0.1f) frame = 0.1f;
+        frame_timers(frame);
         if (!paused) {
             acc += frame;
             while (acc >= PHYS_DT) { game_tick(PHYS_DT); acc -= PHYS_DT; }
         } else snd_paused();
-        update_camera(&cars[0], frame, 0);
+        update_camera(&cars[cam_car()], frame, 0);
         gpu_render(NULL);
     }
     SDL_Quit();

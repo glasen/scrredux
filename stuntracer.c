@@ -5,7 +5,7 @@
  * The car is a real rigid body: 4 spring/damper suspensions, tyre friction with
  * weight transfer, full 3D rotation, solid track deck / barrier collisions.
  *
- * Controls: arrows/WASD drive, SPACE boost, C camera, R reset to track,
+ * Controls: arrows/WASD drive, SPACE boost, R reset to track,
  *           P pause, F11 fullscreen, ESC menu/quit.
  *
  * Debug:  stuntracer --sim SECONDS [TRACK]
@@ -13,6 +13,8 @@
  *
  * Layout: this file = maths, world geometry, physics, AI, car model, game logic.
  *         scenery.h = stadium, arena floor and props, service vehicles.
+ *         trackdef.h = tracks as grid pieces (originals and the builder's), league.h = season, Hall of Fame,
+ *         saves and replays, menu.h = the menus, editor.h = the track builder.
  *         sr_main.h = HUD, PNG writer, SDL_GPU layer and main().
  */
 #include <SDL3/SDL.h>
@@ -21,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <ctype.h>
+#include <time.h>
 
 #define FOCAL_Y 2.2222f           /* 1/tan(fovy/2) */
 #define NEAR_Z 0.25f
@@ -90,7 +94,7 @@ static float vnoise(float x, float y, int seed)
 }
 
 /* 5x7 bitmap font (HUD and lettering in the world) */
-static const char FONT_CHARS[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/!+<>?,";
+static const char FONT_CHARS[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/!+<>?,abcdefghijklmnopqrstuvwxyz'()_=*%";
 static const uint8_t FONT[][7] = {
  {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E},{0x04,0x0C,0x04,0x04,0x04,0x04,0x0E},
  {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F},{0x1E,0x01,0x01,0x0E,0x01,0x01,0x1E},
@@ -115,6 +119,23 @@ static const uint8_t FONT[][7] = {
  {0x04,0x04,0x04,0x04,0x04,0x00,0x04},{0x00,0x04,0x04,0x1F,0x04,0x04,0x00},
  {0x02,0x04,0x08,0x10,0x08,0x04,0x02},{0x08,0x04,0x02,0x01,0x02,0x04,0x08},
  {0x0E,0x11,0x01,0x02,0x04,0x00,0x04},{0x00,0x00,0x00,0x00,0x0C,0x04,0x08},
+ {0x00,0x00,0x0E,0x01,0x0F,0x11,0x0F},{0x10,0x10,0x16,0x19,0x11,0x11,0x1E},   /* lower case: the menus */
+ {0x00,0x00,0x0E,0x10,0x10,0x11,0x0E},{0x01,0x01,0x0D,0x13,0x11,0x11,0x0F},
+ {0x00,0x00,0x0E,0x11,0x1F,0x10,0x0E},{0x06,0x09,0x08,0x1C,0x08,0x08,0x08},
+ {0x00,0x0F,0x11,0x11,0x0F,0x01,0x0E},{0x10,0x10,0x16,0x19,0x11,0x11,0x11},
+ {0x04,0x00,0x0C,0x04,0x04,0x04,0x0E},{0x02,0x00,0x06,0x02,0x02,0x12,0x0C},
+ {0x10,0x10,0x12,0x14,0x18,0x14,0x12},{0x0C,0x04,0x04,0x04,0x04,0x04,0x0E},
+ {0x00,0x00,0x1A,0x15,0x15,0x11,0x11},{0x00,0x00,0x16,0x19,0x11,0x11,0x11},
+ {0x00,0x00,0x0E,0x11,0x11,0x11,0x0E},{0x00,0x00,0x1E,0x11,0x1E,0x10,0x10},
+ {0x00,0x00,0x0D,0x13,0x0F,0x01,0x01},{0x00,0x00,0x16,0x19,0x10,0x10,0x10},
+ {0x00,0x00,0x0E,0x10,0x0E,0x01,0x1E},{0x08,0x08,0x1C,0x08,0x08,0x09,0x06},
+ {0x00,0x00,0x11,0x11,0x11,0x13,0x0D},{0x00,0x00,0x11,0x11,0x11,0x0A,0x04},
+ {0x00,0x00,0x11,0x11,0x15,0x15,0x0A},{0x00,0x00,0x11,0x0A,0x04,0x0A,0x11},
+ {0x00,0x00,0x11,0x11,0x0F,0x01,0x0E},{0x00,0x00,0x1F,0x02,0x04,0x08,0x1F},
+ {0x04,0x04,0x08,0x00,0x00,0x00,0x00},{0x02,0x04,0x08,0x08,0x08,0x04,0x02},
+ {0x08,0x04,0x02,0x02,0x02,0x04,0x08},{0x00,0x00,0x00,0x00,0x00,0x00,0x1F},
+ {0x00,0x00,0x1F,0x00,0x1F,0x00,0x00},{0x00,0x04,0x15,0x0E,0x15,0x04,0x00},
+ {0x18,0x19,0x02,0x04,0x08,0x13,0x03},
 };
 
 /* ------------------------------------------------------- vertex buffers */
@@ -210,6 +231,7 @@ typedef struct { V3 c, T, R, N; float u, curv, vcurv, bin; unsigned char gap, st
 #include "scr_tracks.h"
 #define NTRACKS SCR_NTRACKS
 #define SCR_U (2.95f / 128.f)                          /* metres per x/z unit: the car's 2.95 m wheelbase is 128 units */
+#include "trackdef.h"
 
 static Seg seg[MAXSEG]; static int nseg; static float ds;
 static float jump_v[MAXSEG];                           /* AI: speed to hold here for the jump ahead (its run-up and the bend before it), 0 = none */
@@ -232,7 +254,7 @@ static const struct { unsigned char track, sec, kind; float m; } TRACK_EDIT[] = 
     {6, 40, ED_LIFT, 8}, {6, 43, ED_TOWER, 12}};
 static const struct { unsigned char track, sec; signed char from; float vd, smax, c, R; } TRACK_HILL[] = {
     {4, 3, -1, 50, 0.5f, 4, 120}, {5, 37, -1, 50, 0.5f, 4, 120}, {6, 40, 44, 56, 0.9f, 4, 150}};
-static short seg_sec[MAXSEG]; static int sec_mid[100], nsec; static unsigned char sec_ok[100];
+static short seg_sec[MAXSEG]; static int sec_mid[MAXPC], nsec; static unsigned char sec_ok[MAXPC];
 static float tr_minx, tr_maxx, tr_minz, tr_maxz;
 static float ar_x0, ar_x1, ar_z0, ar_z1;        /* stadium arena bounds */
 
@@ -249,33 +271,29 @@ static void smooth_circ(float *a, int passes)
 static void plan_jumps(void);
 static int planning;                                   /* a scratch car is on the track (plan_jumps): no debug output */
 
-static void build_track_geometry(int idx)
+/* the track's cross-sections in driving order from the start line, with the jump edits: x/z in metres, heights in units */
+enum { MAXX = MAXPC * 13, PER = 24 };
+static float tx_ex[MAXX][2], tx_ez[MAXX][2]; static int tx_ey[MAXX][2], tx_sec[MAXX];
+static int track_xsecs(const TrackDef *td)
 {
-    const unsigned char *b = SCR_BIN[idx];
-    int np = b[0], start = b[1];
-    cur_track = idx;
+    float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez; int (*ey)[2] = tx_ey, *xsec = tx_sec;
+    int np = td->np, start = td->start, orig = td->orig;
     /* cross-sections round the loop from the start line (the end of the start piece); a piece's last one is the next one's first */
-    enum { MAXX = 100 * 13, PER = 24 };
-    static float ex[MAXX][2], ez[MAXX][2]; static int ey[MAXX][2], xsec[MAXX];
     int nx = 0;
     nsec = np;
     for (int q = 0; q < np; q++) {
-        int p = (start + 1 + q) % np, at = b[102 + p], t = at & 15, ang = at & 0xc0, ns = SCR_TPL_NS[t];
-        int cx = (b[2 + p] & 15) * 2048, cz = (b[2 + p] >> 4) * 2048;
-        int sh[2] = {(short)(b[402 + 2 * p] << 8 | b[403 + 2 * p]), (short)(b[602 + 2 * p] << 8 | b[603 + 2 * p])};
-        int id[2] = {b[202 + p] & 0x7f, b[302 + p] & 0x7f};
+        int p = (start + 1 + q) % np;
+        const TPiece *pc = &td->p[p];
+        int t = pc->at & 15, ns = SCR_TPL_NS[t];
         sec_ok[p] = t != 1 && t != 3 && t != 6 && t != 7;
-        for (int k = 0; k < SCR_NNOREST[idx]; k++) if (SCR_NOREST[idx][k] == p) sec_ok[p] = 0;
+        for (int k = 0; orig >= 0 && k < SCR_NNOREST[orig]; k++) if (SCR_NOREST[orig][k] == p) sec_ok[p] = 0;
         for (int i = 0; i < ns; i++) {
-            const short *r = SCR_TPL_XZ[t][(at & 0x10) ? ns - i : i];
+            int xz[2][2];
+            tpl_cross(pc->at, i, pc->cx, pc->cz, xz);
             for (int e = 0; e < 2; e++) {
-                int x = (at & 0x10) ? r[2 - 2 * e] : r[2 * e], z = (at & 0x10) ? r[3 - 2 * e] : r[2 * e + 1], rx = x, rz = z;
-                if (ang == 0x40) { rx = z; rz = 0x800 - x; }
-                else if (ang == 0x80) { rx = 0x800 - x; rz = 0x800 - z; }
-                else if (ang == 0xc0) { rx = 0x800 - z; rz = x; }
-                ex[nx][e] = -(cx + rx - 8 * 2048) * SCR_U;     /* mirrored: the original's world is left-handed */
-                ez[nx][e] = (cz + rz - 8 * 2048) * SCR_U;
-                ey[nx][e] = SCR_PROF[id[e]][i] + sh[e];
+                ex[nx][e] = -(xz[e][0] - 8 * 2048) * SCR_U;     /* mirrored: the original's world is left-handed */
+                ez[nx][e] = (xz[e][1] - 8 * 2048) * SCR_U;
+                ey[nx][e] = pc->h[e][i];
             }
             xsec[nx++] = p;
         }
@@ -283,7 +301,7 @@ static void build_track_geometry(int idx)
     /* the jump edits, m metres each (a sheer face is a step of 640 units or more between cross-sections) */
     const float U = 0.25f * SCR_U;
     for (int e = 0; e < (int)(sizeof TRACK_EDIT / sizeof TRACK_EDIT[0]); e++) {
-        if (TRACK_EDIT[e].track != idx) continue;
+        if (TRACK_EDIT[e].track != orig) continue;
         int i0 = 0, i, M = (int)(TRACK_EDIT[e].m / U);
         while (i0 < nx && xsec[i0] != TRACK_EDIT[e].sec) i0++;
         switch (TRACK_EDIT[e].kind) {
@@ -318,7 +336,7 @@ static void build_track_geometry(int idx)
     /* a drop too deep to land flat after at our speeds becomes a landing hill: a sheer step of c metres at the lip, then a
      * knoll the car follows up to vd m/s, steepening to a straight slope smax and curving out (radius ~R) onto the floor */
     for (int e = 0; e < (int)(sizeof TRACK_HILL / sizeof TRACK_HILL[0]); e++) {
-        if (TRACK_HILL[e].track != idx) continue;
+        if (TRACK_HILL[e].track != orig) continue;
         int i0 = 0;
         while (i0 < nx && xsec[i0] != TRACK_HILL[e].sec) i0++;
         int i = i0;
@@ -352,6 +370,17 @@ static void build_track_geometry(int idx)
             for (int ed = 0; ed < 2; ed++) ey[k][ed] = ey[i][ed] + (int)(y / U);
         }
     }
+    return nx;
+}
+
+static void build_track_geometry(int idx)
+{
+    const TrackDef *td = &trk[idx];
+    int np = td->np, start = td->start, orig = td->orig;
+    cur_track = idx; track_gen++;
+    float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez; int (*ey)[2] = tx_ey, *xsec = tx_sec;
+    int nx = track_xsecs(td);
+    (void)np; (void)start; (void)orig; (void)xsec;
     float ymin = 1e9f;
     for (int i = 0; i < nx; i++) ymin = fminf(ymin, fminf(ey[i][0], ey[i][1]) * 0.25f * SCR_U);
     float lift = fmaxf(0.f, 1.3f - ymin);                  /* roads at ground level sit on their deck slab */
@@ -749,6 +778,7 @@ typedef struct {
     float holes[6]; int nholes;                   /* big hits: holes in the cockpit's top tube, as damage fractions along the crack */
     uint32_t col;
     float ai_lane; int ai_lset;                   /* AI: the lane it is easing towards its target */
+    int carry;                                    /* holes carried over from earlier races of the season */
 } Car;
 
 /* car geometry relative to the centre of mass (FL, FR, RL, RR), read from models/stuntcar.scm (car_model.h) */
@@ -763,16 +793,17 @@ static V3 CPTS[16];                                      /* body points that col
 /* eye position of the driver */
 static V3 EYE;
 
-enum { ST_MENU, ST_COUNT, ST_RACE, ST_DONE, ST_VIEW };
+enum { ST_MENU, ST_COUNT, ST_RACE, ST_DONE, ST_VIEW, ST_REPLAY, ST_EDIT };
 static Car cars[2];
-static int state = ST_MENU, laps = 3, skill = 1, sel_track = 0, menu_row = 0, result = 0, paused = 0, cockpit = 1;
+static int state = ST_MENU, laps = 3, sel_track = 0, result = 0, paused = 0, cockpit = 1;
 static float state_t, racetime;
 static char msg[64]; static float msg_t;
 static int stat_falls, stat_contacts; static float stat_push;
-static const char *skill_name[3] = {"ROOKIE", "PRO", "ACE"};
 static const float skill_vcap[3] = {56, 62, 69}, skill_alat[3] = {11.0f, 13.5f, 16.0f};
 
 static void set_msg(const char *s, float t) { snprintf(msg, sizeof msg, "%s", s); msg_t = t; }
+#include "league.h"
+#include "replay.h"
 
 /* ---- sound: when the original's samples play (StuntCarRacer.s, Car_Behaviour.cpp), periods and volumes from its tables ---- */
 #define AMI_V (30720.f / 72.f)               /* original speed units per m/s: its top speed 0x7800 = our unboosted ~72 m/s */
@@ -813,7 +844,8 @@ static void snd_tick(float dt)
     static int quiet;
     const Car *p = &cars[0];
     grounded_cd -= dt; hitcar_cd -= dt;
-    if (state == ST_MENU || state == ST_VIEW) { if (!quiet) snd_stop_all(); quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
+    if (state == ST_MENU || state == ST_VIEW || state == ST_EDIT || (state == ST_REPLAY && (rp_paused || rp_speed != 1))) {
+        if (!quiet) snd_stop_all(); quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
     quiet = 0;
     if (p->crane > 0) {                      /* on the crane all is quiet, the engine starts again from a standstill */
         if (eng_on) snd_engine_stop();
@@ -823,7 +855,7 @@ static void snd_tick(float dt)
             snd_t10 -= 0.1f;
             int zs = (int)(fabsf(vdot(p->v, p->F)) * AMI_V), fer = zs >> 8 < 50 ? zs >> 8 : 50;
             if (state == ST_DONE) eng_chg = -8;      /* race over: the revs wind down to nothing */
-            else engine_revs(p->nwc > 0, state == ST_RACE && !p->wrecked && p->crash <= 0 && (p->thr > 0 || p->brk > 0), zs);
+            else engine_revs(p->nwc > 0, (state == ST_RACE || state == ST_REPLAY) && !p->wrecked && p->crash <= 0 && (p->thr > 0 || p->brk > 0), zs);
             if (snd_scrape && p->crash <= 0 && fer >= 1) snd_play(S_WRECK, (31 - (fer >> 1)) * 4 + 170, 64);
             if (snd_dirt && vlen(p->v) > 1.5f) snd_play(S_OFFROAD, 450 + (snd_rand() & 0x1c), 64);
             snd_scrape = snd_dirt = 0;
@@ -857,6 +889,7 @@ static void car_hurt(Car *c, float amt, float loud)
 {
     if (c->wrecked || amt <= 0) return;
     if (c->hurt_cd > 0) amt *= 0.12f; else c->hurt_cd = 0.3f;
+    amt *= 1.f + 0.15f * c->carry;                                      /* old holes: the frame cracks faster */
     c->damage += amt;
     if (getenv("SR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
@@ -1079,6 +1112,13 @@ static float ground_contact(Car *c, V3 *F, V3 *Tq, int *touch)
     return worst;
 }
 
+static void crash_smoke(const Car *c)
+{
+    V3 eng = body_pt(c, V(0, FLAMEP[1].y, (FLAMEP[1].z + FLAMEP[2].z) * 0.5f));
+    spawn(P_SMOKE, vadd(eng, vmul(rnd_dir(), 0.3f)), V(frand() - 0.5f, 1.5f, frand() - 0.5f), 2.5f + frand(), 0.3f, (frand() < 0.5f) ? 0x4A4A4E : 0x66666A);
+    if (frand() < 0.6f) spawn(P_FIRE, vadd(eng, vmul(rnd_dir(), 0.4f)), V(0, 1.f, 0), 0.4f + 0.3f * frand(), 0.35f, frand() < 0.5f ? 0xFF8A18 : 0xFFD040);
+}
+static void lap_done(Car *c);
 static void car_step(Car *c, float dt)
 {
     if (!c->active) return;
@@ -1094,9 +1134,10 @@ static void car_step(Car *c, float dt)
                 c->lastlap = racetime - c->lapstart;
                 if (c->bestlap <= 0 || c->lastlap < c->bestlap) c->bestlap = c->lastlap;
                 c->lapshow = 3.f;
+                lap_done(c);
             }
             c->lapstart = racetime;
-            if (c->lap > laps && !c->finished) { c->finished = 1; c->ftime = racetime; }
+            if (laps > 0 && c->lap > laps && !c->finished && state == ST_RACE) { c->finished = 1; c->ftime = racetime; }
         } else if (prev < nseg / 4 && cu > nseg * 3 / 4) c->lap--;
         c->seg = cu; c->prog = (float)c->lap * nseg + cu + q.u;
     }
@@ -1240,12 +1281,7 @@ static void car_step(Car *c, float dt)
     if (nwc >= 3 && q.valid && q.road && fabsf(q.lat) < TRACK_HW - 1.5f) c->safe = q.seg;
     if (c->crash > 0) {                                              /* lying in the dirt: smoke, a little fire, then the crane */
         c->crash += dt; c->dust_t -= dt;
-        if (c->dust_t <= 0) {
-            c->dust_t = 0.12f;
-            V3 eng = body_pt(c, V(0, FLAMEP[1].y, (FLAMEP[1].z + FLAMEP[2].z) * 0.5f));
-            spawn(P_SMOKE, vadd(eng, vmul(rnd_dir(), 0.3f)), V(frand() - 0.5f, 1.5f, frand() - 0.5f), 2.5f + frand(), 0.3f, (frand() < 0.5f) ? 0x4A4A4E : 0x66666A);
-            if (frand() < 0.6f) spawn(P_FIRE, vadd(eng, vmul(rnd_dir(), 0.4f)), V(0, 1.f, 0), 0.4f + 0.3f * frand(), 0.35f, frand() < 0.5f ? 0xFF8A18 : 0xFFD040);
-        }
+        if (c->dust_t <= 0) { c->dust_t = 0.12f; crash_smoke(c); }
         if (c->crash > 3.4f) start_crane(c, restart_seg(c), 0, 2.6f);
         return;
     }
@@ -1414,9 +1450,11 @@ static float try_jumps(const int *l, int n, float v, int b, int s, float v0, int
  * land: far below the lip (a pit) or above it (a wall to clear). Jumps with little road between them (stepping
  * stones) form a chain taken at one speed: the one the scratch car got over cleanest, with a little either side to
  * spare, that the run-up can reach (without boost if it can) */
+static int badj[NJ], nbadj;                     /* lips of jumps nothing gets over cleanly */
 static void plan_jumps(void)
 {
     int lip[NJ], end[NJ], back[NJ], nj = 0;
+    nbadj = 0;
     memset(jump_v, 0, sizeof(float) * nseg); memset(jump_b, 0, nseg);
     for (int k = 0; k < nseg && nj < NJ; k++) {
         int l = (k + nseg - 1) % nseg;
@@ -1475,6 +1513,7 @@ static void plan_jumps(void)
                 } else if (pass == 0 && cost < best) { best = cost; bv = v; }
             }
         cv[nc] = (float)bv; cb[nc] = bv > vr[0] - 1.5f; cn[nc] = n;
+        if (nbadj < NJ && best >= 500.f) badj[nbadj++] = L;          /* no take-off speed gets over it: the builder says so */
         if (getenv("SR_DEBUG")) printf("jump seg %d..%d (%d): %.1f m/s (reach %.1f, %.1f on boost; risk %.1f)\n", L, E, n, cv[nc], vr[0], vr[1], best);
         nc++;
     }
@@ -1551,17 +1590,56 @@ static void draw_sky(void)
 static const bool *keys;
 static int autoplay;
 
+static const char *player_name(void) { return sea.pname[0] ? sea.pname : "Player"; }
+/* season races: three laps against one opponent; practice and the builder's test drive: alone, laps until ESC */
 static void start_race(void)
 {
+    int solo = race_mode == RM_PRACTICE || race_mode == RM_TEST;
+    if (race_mode == RM_SEASON) laps = 3; else if (solo) laps = 0;
     for (int i = 0; i < 2; i++) {
         Car *c = &cars[i];
         memset(c, 0, sizeof *c);
+        if (i && solo) continue;
         c->active = 1; c->boost = 100; c->col = i ? 0x2860D8 : CAR_RED;
-        start_crane(c, nseg - 14, i ? 2.0f : -2.0f, 2.4f);
+        start_crane(c, nseg - 14, solo ? 0.f : i ? 2.0f : -2.0f, 2.4f);
     }
+    if (race_mode == RM_SEASON) { cars[0].nholes = cars[0].carry = sea.nholes; memcpy(cars[0].holes, sea.holes, sizeof sea.holes); }
     npart = 0;
-    racetime = 0; state = ST_COUNT; state_t = 3.99f; result = 0; msg_t = 0; stat_falls = 0;
+    racetime = 0; state = ST_COUNT; state_t = 3.99f; result = 0; msg_t = 0; stat_falls = 0; paused = 0;
+    if (race_mode == RM_SEASON) rec_begin(); else rec_on = 0;
 }
+/* a lap in a season race or in practice: the Hall of Fame's lap record */
+static void lap_done(Car *c)
+{
+    if (planning || (race_mode != RM_SEASON && race_mode != RM_PRACTICE)) return;
+    int me = c == &cars[0];
+    if (hof_lap(trk[cur_track].name, me ? player_name() : drv_name(opp_drv), c->lastlap) && me) set_msg("NEW LAP RECORD!", 2.5f);
+}
+/* replay: the recorded cars at the replay clock; crashes smoke again */
+static void rp_step(float dt)
+{
+    if (!rp_paused) rp_t += dt * rp_speed;
+    float tmax = (nrp - 1) / (float)RP_HZ;
+    rp_t = clampf(rp_t, 0, tmax);
+    int k = (int)(rp_t * RP_HZ); if (k >= nrp) k = nrp - 1;
+    const RTick *t = &rpb[k];
+    for (int i = 0; i < 2; i++) {
+        Car *c = &cars[i]; float was = c->crash;
+        rec_unpack(c, &t->c[i]);
+        if (rp_paused || rp_speed < 0) continue;
+        if (c->crash > 0 && was <= 0) dust_burst(c->x, 36, 4.f);
+        if (c->crash > 0 && (rp_smoke[i] -= dt) <= 0) { rp_smoke[i] = 0.12f; crash_smoke(c); }
+    }
+    racetime = t->t;
+}
+/* the car seen from its driver's seat, -1 for none */
+static int fp_car(void)
+{
+    if (state == ST_COUNT || state == ST_RACE || state == ST_DONE) return cockpit ? 0 : -1;
+    if (state == ST_REPLAY) return rp_cam == RC_COCKPIT ? 0 : rp_cam == RC_OPP_COCKPIT && cars[1].active ? 1 : -1;
+    return -1;
+}
+static int cam_car(void) { return state == ST_REPLAY && (rp_cam == RC_OPP_COCKPIT || rp_cam == RC_OPP_CHASE) && cars[1].active ? 1 : 0; }
 
 /* ---- model viewer: the car alone on a plain floor, orbit camera ---- */
 static float view_yaw = 0.6f, view_pitch = 0.22f, view_dist = 7.5f;
@@ -1626,7 +1704,7 @@ static void game_tick(float dt)
             p->bst = keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_LSHIFT];
         } else { static float push = -1; if (push < 0) push = getenv("SR_PUSH") ? (float)atof(getenv("SR_PUSH")) : 1.f; static float plane = -9; if (plane < -8) plane = getenv("SR_PLANE") ? (float)atof(getenv("SR_PLANE")) : -1.f;
                ai_drive(p, plane, 67 * push, 13.f * push, NULL); if (push > 1.f) p->bst = 1; }   /* autopilot ignores the rival: worst case */
-        ai_drive(o, 1.8f, skill_vcap[skill], skill_alat[skill], p);
+        if (o->active) ai_drive(o, 1.8f, opp_vcap, opp_alat, p);
         car_step(p, dt); car_step(o, dt);
         cars_interact(p, o, dt);
         if (p->finished || o->finished || p->wrecked || o->wrecked) {
@@ -1667,7 +1745,13 @@ static void game_tick(float dt)
         state_t += dt;
         for (int i = 0; i < 2; i++) { cars[i].thr = 0; cars[i].brk = 0.4f; cars[i].hold = 1; cars[i].str = 0; cars[i].bst = 0; car_step(&cars[i], dt); }
         break;
+    case ST_REPLAY:
+        rp_step(dt);
+        break;
+    case ST_EDIT:
+        break;
     }
+    if (state == ST_COUNT || state == ST_RACE || state == ST_DONE) rec_tick();
     if (msg_t > 0) msg_t -= dt;
     for (int i = 0; i < 2; i++) if (cars[i].lapshow > 0) cars[i].lapshow -= dt;
     parts_step(dt);
@@ -1695,11 +1779,18 @@ static void update_camera(const Car *c, float dt, int snap)
         cam.pos = vadd(c->x, V(cosf(a) * 14.f, 6.f, sinf(a) * 14.f));
         cam.pos.y = fmaxf(cam.pos.y, ground_h(cam.pos.x, cam.pos.z) + 3.f);
         cam.fwd = vnorm(vsub(c->x, cam.pos)); up_ref = UP;
-    } else if (cockpit && state != ST_MENU && state != ST_VIEW) {     /* races: driver's view only, like the original */
+    } else if (fp_car() >= 0) {                                       /* races: driver's view only, like the original */
         float m[12]; car_body_rows(c, m);
         cam.pos = V(m[0]*EYE.x + m[1]*EYE.y + m[2]*EYE.z + m[3], m[4]*EYE.x + m[5]*EYE.y + m[6]*EYE.z + m[7], m[8]*EYE.x + m[9]*EYE.y + m[10]*EYE.z + m[11]);
         cam.fwd = vnorm(vsub(cam_f, vmul(cam_u, 0.04f)));
         up_ref = cam_u;
+    } else if (state == ST_REPLAY && rp_cam == RC_TV) {               /* replay: trackside cameras, each takes the car past it */
+        int k = ((c->seg / 120 + 1) * 120) % nseg;
+        const Seg *s = &seg[k];
+        V3 Rh = vnorm(V(s->R.x, 0, s->R.z));
+        cam.pos = vadd(s->c, vadd(vmul(Rh, ((c->seg / 120) & 1 ? 1.f : -1.f) * (TRACK_HW + 9.f)), V(0, 3.5f, 0)));
+        cam.pos.y = fmaxf(cam.pos.y, 2.f);
+        cam.fwd = vnorm(vsub(vadd(c->x, V(0, 0.5f, 0)), cam.pos)); up_ref = UP;
     } else {
         V3 fh = vnorm(V(c->F.x, c->F.y * 0.3f, c->F.z));
         if (snap) cam_dir = fh;

@@ -6,6 +6,39 @@ Stunt Car Racer inspired roller-coaster racer in a stadium. SDL3 + SDL_GPU, flat
     ./stuntracer    # run from this directory (shaders are loaded from next to the binary)
 
 Keys: arrows/WASD drive, SPACE boost, R reset to track, P pause, F11 fullscreen, ESC menu/quit.
+
+## Menu
+Like the original's: the logo, your division, SELECT and grey bars (the chosen one orange) between two wooden posts, over
+the stadium with a car lapping the track. UP/DOWN or the number keys pick, ENTER chooses, ESC goes back.
+
+1. **Hall of Fame**: the lap record and the race record on every track, and who drove them. The originals start with
+   records by the computer drivers; laps in season races and in practice count, race times in season races.
+2. **Practise**: any track, the eight originals and your own, alone and for as many laps as you like; ESC ends it.
+3. **Start/Continue the Racing Season**: the original's single player league. Twelve drivers (you and Hot Rod, Whizz Kid,
+   Bad Guy, The Dodger, Big Ed, Max Boost, Dare Devil, High Flyer, Bully Boy, Jumping Jack, Road Hog) in four divisions
+   of three, two tracks each: Division 4 Little Ramp and Hump Back, 3 Stepping Stones and Big Ramp, 2 High Jump and
+   Roller Coaster, 1 Draw Bridge and Ski Jump. Every driver races the other two on both tracks (three laps), 2 points
+   a win and 1 for the fastest lap; at the season's end the top driver of each division goes up and the bottom one down.
+   You start in Division 4. Races between computer drivers are worked out from their pace on the track, with the odd
+   fall and wreck. The holes in your cage stay for the whole season and make the frame crack faster. ESC twice in a
+   race retires from it (the opponent wins). The season is kept in `save/season0.sav` as you go.
+4. **Load/Save/Replay**: four save slots for the season, and replays of the last five season races (cockpit, chase,
+   trackside TV and the opponent's cameras on C, SPACE pause, hold LEFT/RIGHT to wind back or forward).
+5. **Track Builder**: see below.
+
+## Track builder
+Tracks are built like the original's: pieces on a 16 x 16 grid, seen from above. The track grows from its open end:
+UP adds a straight, LEFT/RIGHT a 45 degree bend, SHIFT+LEFT/RIGHT a 90 degree bend. Only pieces that join on and leave
+the other pieces' cubes free are offered (the outlines at the open end show what fits, and which key adds it).
+BACKSPACE takes the last piece off, C closes the loop the shortest way round.
+Heights are set where two pieces meet: TAB/click picks a piece, W/S (or the mouse wheel) raise and lower its start by
+half a metre (SHIFT: 2 m), Q/E bank it. 1-6 give a piece its shape between its two ends: smooth, linear, hump (a dip
+with a negative size), kicker (a lip at the end and a drop to the next piece: a jump), step (a sheer face at the start)
+and pit; -/= change the size of a hump, kicker or pit. A drop of 3.7 m or more is a sheer face (red on the map).
+F puts the start line on the chosen straight, T test-drives the track, J asks the AI's jump planner whether every jump
+can be made (the ones it can't are outlined in red), F2 saves to `tracks/NAME.trk`, F3 opens a track (the originals
+open as a copy with their jump edits baked in), F4 renames, N starts afresh. Your tracks show up in Practise and the
+Hall of Fame; the season keeps to the originals.
 Races are driven from the cockpit only, like the original. Boost and speed are gauges clamped to the roll cage beside the
 steering wheel; damage is a crack growing along the cage's top tube (holes where big hits landed), at the right end the car
 is wrecked. Lap, race time and best lap are overlay text in the top corners.
@@ -46,6 +79,10 @@ Debug: `./stuntracer --sim SECS [TRACK]` (autopilot, prints lap/damage/contact s
 `SR_WHEELS=1` reports the gap between the drawn tyres and the road, `SR_CAM=px,py,pz,tx,ty,tz` places the `--shot` camera freely.
 `./stuntracer --audio-dump out.wav SECS [TRACK]` mixes the autopilot's race into a WAV; `SR_SND=1` logs every sound as it starts.
 `./stuntracer --menu-frames DIR SECS` records the menu scene at 60 fps as PNGs (`SR_NOHUD=1` hides the HUD).
+`./stuntracer --ui-shot out.png "KEYS"` plays a script of SDL key names through the menus and the builder headless and
+renders the last frame (`wait5` runs five seconds of the game, `text:Name` types into a name field, `shift+Left`;
+`SR_AUTO=1` lets the autopilot drive, `SR_OVERVIEW=1` looks at the whole track from above).
+`./stuntracer --check-tracks` checks the originals against the builder's joining and overlap rules.
 
 ## Car
 A single-seat tube-frame buggy in the spirit of the original Stunt Car Racer car: roll cage, exposed V8 with eight chrome zoomie
