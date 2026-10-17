@@ -59,14 +59,15 @@ static void phys_defaults(void)
 {
     ph.mass = 1000.f;
     ph.grav = 13.f;
-    ph.power = 300000.f;
-    ph.fmax = 12000.f;
-    ph.boostp = 150000.f;
-    ph.boostf = 3500.f;
+    ph.power = 337000.f;
+    ph.fmax = 9900.f;
+    ph.boostp = 758000.f;
+    ph.boostf = 9750.f;
+    ph.boostrate = 2.f;              /* boost tank (100) drains this much per second */
     ph.brkf = 4500.f;
     ph.brkr = 3200.f;
-    ph.drag = 3.f;
-    ph.mu = 1.9f;
+    ph.drag = 0.88f;
+    ph.mu = 2.35f;
     ph.rgrip = 1.05f;
     ph.steerlat = 45.f;
     ph.keyrise = 5.f;
@@ -88,6 +89,8 @@ static void phys_defaults(void)
     ph.air = 7000.f;
     ph.leanr = 0.006f;
     ph.leanp = 0.004f;
+    ph.shw = 1.5f;                   /* invisible shoulder past the deck edge: wheels still find ground up to shw out, */
+    ph.shdrop = 0.25f;               /* shdrop lower at the edge and falling 1:2 outwards, like the original */
 }
 
 static void draw_hud_base(void)
@@ -107,7 +110,7 @@ static void draw_hud_base(void)
         hud_text_c(24, "STUNT RACER", 5, 0xFFD030);
         hud_text_c(66, "ROLLER COASTER STADIUM RACING", 2, 0xE8E8F0);
         const char *rows[3]; char r0[64], r1[64], r2[64];
-        snprintf(r0, sizeof r0, "TRACK: <%s>", tracks[sel_track].name);
+        snprintf(r0, sizeof r0, "TRACK: <%s>", SCR_TITLE[sel_track]);
         snprintf(r1, sizeof r1, "LAPS: <%d>", laps);
         snprintf(r2, sizeof r2, "OPPONENT: <%s>", skill_name[skill]);
         rows[0] = r0; rows[1] = r1; rows[2] = r2;
@@ -131,7 +134,7 @@ static void draw_hud_base(void)
     float sc = fminf((mw - 6) / (tr_maxx - tr_minx), (mh - 6) / (tr_maxz - tr_minz));
     hud_rect(mx - 2, my - 2, mw + 4, mh + 4, 0x101018);
     for (int i = 0; i < nseg; i += 6)
-        hud_rect(mx + 3 + (seg[i].c.x - tr_minx) * sc, my + 3 + (seg[i].c.z - tr_minz) * sc, 1.5f, 1.5f, seg[i].gap ? 0x806030 : 0x9090A0);
+        hud_rect(mx + 3 + (seg[i].c.x - tr_minx) * sc, my + 3 + (seg[i].c.z - tr_minz) * sc, 1.5f, 1.5f, (seg[i].gap || seg[i].steep) ? 0x806030 : 0x9090A0);
     hud_rect(mx + 2 + (o->x.x - tr_minx) * sc, my + 2 + (o->x.z - tr_minz) * sc, 3.5f, 3.5f, 0x4880FF);
     hud_rect(mx + 2 + (p->x.x - tr_minx) * sc, my + 2 + (p->x.z - tr_minz) * sc, 3.5f, 3.5f, 0xFF4040);
     hud_text(6, 234, "DAMAGE", 1, 0xFFFFFF);
