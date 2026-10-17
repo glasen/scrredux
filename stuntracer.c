@@ -257,6 +257,7 @@ static const struct { unsigned char track, sec; signed char from; float vd, smax
 static short seg_sec[MAXSEG]; static int sec_mid[MAXPC], nsec; static unsigned char sec_ok[MAXPC];
 static float tr_minx, tr_maxx, tr_minz, tr_maxz;
 static float ar_x0, ar_x1, ar_z0, ar_z1;        /* stadium arena bounds */
+#define NET_H 8.f                               /* top of the catch net on the arena wall */
 
 static float smooth01(float t) { t = clampf(t, 0, 1); return t * t * (3 - 2 * t); }
 static void smooth_circ(float *a, int passes)
@@ -1112,6 +1113,38 @@ static float ground_contact(Car *c, V3 *F, V3 *Tq, int *touch)
     return worst;
 }
 
+/* the catch net on the arena wall: it brakes the car at up to ~80 g and hardly pushes back, so a car is caught in it
+ * instead of bouncing off. A car that went over the top is outside and stays there. */
+static float fence_contact(Car *c, V3 *F, V3 *Tq, int *touch)
+{
+    V3 P[20], n[20]; float fn[20], sum = 0, worst = 0; int np = 0;
+    for (int side = 0; side < 4; side++) {
+        float out = side == 0 ? ar_x0 - c->x.x : side == 1 ? c->x.x - ar_x1 : side == 2 ? ar_z0 - c->x.z : c->x.z - ar_z1;
+        if (out > 3.f) continue;
+        V3 nn = side == 0 ? V(1, 0, 0) : side == 1 ? V(-1, 0, 0) : side == 2 ? V(0, 0, 1) : V(0, 0, -1);
+        for (int i = 0; i < 20 && np < 20; i++) {
+            V3 lp = i < 16 ? CPTS[i] : vsub(WMOUNT[i - 16], V(0, WREST[i - 16] + WRAD[i - 16], 0));
+            V3 p = body_pt(c, lp);
+            float pen = -vdot(vsub(p, c->x), nn) + out;
+            if (pen <= 0 || p.y >= NET_H) continue;
+            float vn = vdot(vadd(c->v, vcross(c->w, vsub(p, c->x))), nn);
+            worst = fmaxf(worst, -vn);
+            P[np] = p; n[np] = nn; fn[np] = fmaxf(300.f * pen - 8000.f * vn, 0.f); sum += fn[np++];
+        }
+    }
+    if (!np) return 0;
+    *touch = 1;
+    float k = sum > 800000.f ? 800000.f / sum : 1.f;
+    for (int j = 0; j < np; j++) {
+        V3 r = vsub(P[j], c->x), vp = vadd(c->v, vcross(c->w, r)), vt = vsub(vp, vmul(n[j], vdot(vp, n[j])));
+        float Fn = fn[j] * k, vts = vlen(vt);
+        V3 f = vmul(n[j], Fn);
+        if (vts > 1e-3f) f = vadd(f, vmul(vt, -0.5f * Fn * tanhf(vts / 0.5f) / vts));
+        *F = vadd(*F, f); *Tq = vadd(*Tq, vcross(r, f));
+    }
+    return worst;
+}
+
 static void crash_smoke(const Car *c)
 {
     V3 eng = body_pt(c, V(0, FLAMEP[1].y, (FLAMEP[1].z + FLAMEP[2].z) * 0.5f));
@@ -1222,10 +1255,11 @@ static void car_step(Car *c, float dt)
     c->nwc = nwc;
     for (int i = 0; i < 16; i++) contact_point(c, i, CPTS[i], &Fo, &To);
     edge_contact(c, &Fo, &To);
-    int touch = 0;
+    int touch = 0, net = 0;
     float impact = ground_contact(c, &Fo, &To, &touch);
     if (touch && c == &cars[0]) snd_dirt = 1;
-    if (touch && c->crash <= 0) {                                    /* landed beside the track: crash */
+    impact = fmaxf(impact, 0.5f * fence_contact(c, &Fo, &To, &net));   /* the net gives: a softer hit */
+    if ((touch || net) && c->crash <= 0) {                           /* landed beside the track or caught in the net: crash */
         c->crash = 1e-4f; stat_falls++;
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
         dust_burst(c->x, 36, 3.f + 0.3f * impact);

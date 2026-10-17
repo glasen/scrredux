@@ -65,6 +65,8 @@ is wrecked. Lap, race time and best lap are overlay text in the top corners.
   the track crashes in a cloud of dust and smoke (seen from outside) before the crane picks it up. Steel scraping the deck throws sparks.
 * Stadium (`scenery.h`): roofed grandstands with a VIP tier, open end terraces, a crowd, sponsor boards, a scoreboard, lattice
   floodlights and a service gate; outside, car parks, trees, big-top tents and faceted mountains under drifting clouds.
+* An 8 m catch net on the arena wall stops a car that leaves the track before it reaches the stands: it gives a few
+  metres and holds the car, which counts as a crash. Only a car flying higher than the net goes over it.
 * Arena floor: grass with mowing stripes, dirt worn under the track and a gravel service road to a compound with a recovery
   truck, water bowser, ambulance, TV truck, cabins and containers; TV towers, marshal posts, tyre stacks and hay bales around.
 * The deck is weathered concrete in precast slabs, with rubber laid down in the bends.

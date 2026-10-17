@@ -725,6 +725,31 @@ static void build_stadium(void)
             draw_quad(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)), vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)),
                       vadd(vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)), vmul(out, 0.5f)), vadd(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)), vmul(out, 0.5f)), 0xEEEEEA);
         }
+        /* catch net above the boards (down to the ground across the gate): steel posts, a mesh of thin strands, cables */
+        {
+            V3 nb = vadd(base, vmul(out, 0.2f));
+            for (float a = 0; a <= L + 0.01f; a += 8) {
+                if (a > gate - 7 && a < gate + 7) continue;
+                obox(vadd(vadd(vadd(nb, vmul(along, a)), vmul(out, 0.1f)), V(0, NET_H / 2 + 0.15f, 0)), along, UP, out, 0.09f, NET_H / 2 + 0.15f, 0.09f, 0x70747A);
+            }
+            for (float a = 0; a + 0.5f <= L + 0.01f; a += 0.5f) {
+                float y0 = a + 0.5f > gate - 6 && a < gate + 6 ? 0.f : 2.6f;
+                V3 p = vadd(nb, vmul(along, a));
+                draw_quad(vadd(p, V(0, y0, 0)), vadd(vadd(p, vmul(along, 0.03f)), V(0, y0, 0)), vadd(vadd(p, vmul(along, 0.03f)), V(0, NET_H, 0)), vadd(p, V(0, NET_H, 0)), 0x3A3E44);
+            }
+            for (float y = 0.5f; y < NET_H; y += 0.5f) {
+                float th = y == 5.f ? 0.07f : 0.03f;                           /* the middle cable */
+                if (y < 2.6f) {                                                /* below the boards only across the gate */
+                    V3 g0 = vadd(nb, vmul(along, gate - 6)), g1 = vadd(nb, vmul(along, gate + 6));
+                    if (gate > 0) draw_quad(vadd(g0, V(0, y, 0)), vadd(g1, V(0, y, 0)), vadd(g1, V(0, y + th, 0)), vadd(g0, V(0, y + th, 0)), 0x3A3E44);
+                    continue;
+                }
+                V3 e = vadd(nb, vmul(along, L));
+                draw_quad(vadd(nb, V(0, y, 0)), vadd(e, V(0, y, 0)), vadd(e, V(0, y + th, 0)), vadd(nb, V(0, y + th, 0)), th > 0.05f ? 0x2A2C30 : 0x3A3E44);
+            }
+            V3 e = vadd(nb, vmul(along, L));
+            draw_quad(vadd(nb, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H, 0)), vadd(nb, V(0, NET_H, 0)), 0x2A2C30);
+        }
         /* stands with stair blocks between them */
         int rows = side == 0 ? 16 : side == 2 ? 20 : 12, upper = side == 0 ? 9 : 0, roofed = side == 0 || side == 2;
         uint32_t seat = side == 0 ? 0x2A54B4 : side == 2 ? 0xB42A2A : side == 1 ? 0xE0B020 : 0x2A8A44;
