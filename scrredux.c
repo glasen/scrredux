@@ -734,7 +734,7 @@ static void build_track(int idx)
 
 typedef struct {
     V3 x, v, R, U, F, w;
-    int seg, lap, finished, wrecked, active, safe, bst, nwc, hold;
+    int seg, lap, lapmax, finished, wrecked, active, safe, bst, nwc, hold;   /* lapmax: the furthest lap begun */
     float thr, brk, str, delta, boost, damage, prog, ftime, lapstart, bestlap, lastlap, lapshow;
     float crash, crane, crane_T, hook, dust_t;    /* crash on the ground / crane lowering timers, hook retract timer */
     V3 crane_x;                                   /* where the crane sets the car down */
@@ -979,7 +979,7 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         for (int k = 0; k < 4; k++)
             spawn(P_SPARK, P, vadd(vadd(vmul(vt, 0.55f + 0.3f * frand()), vmul(bn, 1.5f + 2.f * frand())), vmul(rnd_dir(), 2.f)),
                   0.25f + 0.35f * frand(), 0.05f, frand() < 0.5f ? 0xFFF0A0 : 0xFFB030);
-    if (!c->hit[idx] && -vn > 6.0f) car_hurt(c, (-vn - 6.0f) * 0.9f, 1.f);
+    if (!c->hit[idx] && -vn > 9.0f) car_hurt(c, (-vn - 9.0f) * 0.5f, 1.f);
     c->hit[idx] = 1;
 }
 
@@ -1058,6 +1058,8 @@ static int restart_seg(const Car *c)
 /* the crane picks the car up and lowers it onto the track at segment s, like the original */
 static void start_crane(Car *c, int s, float lat, float T)
 {
+    s = ((s % nseg) + nseg) % nseg;
+    if (c->lap > 0 && c->seg < nseg / 4 && s > nseg * 3 / 4) c->lap--;   /* set down behind the start line: that lap again */
     car_place(c, s, lat, 0);
     c->crane_x = c->x; c->crane_seg = c->seg; c->crane = 1e-4f; c->crane_T = T; c->crash = 0; c->hook = 0;
     c->lr = c->lp = c->lrr = c->lpr = 0;
@@ -1146,14 +1148,17 @@ static void car_step(Car *c, float dt)
         int prev = c->seg, cu = q.seg;
         if (prev > nseg * 3 / 4 && cu < nseg / 4) {
             c->lap++;
-            if (state == ST_RACE && c->lap >= 2) {
-                c->lastlap = racetime - c->lapstart;
-                if (c->bestlap <= 0 || c->lastlap < c->bestlap) c->bestlap = c->lastlap;
-                c->lapshow = 3.f;
-                lap_done(c);
+            if (c->lap > c->lapmax) {          /* a new lap; not the line again after reversing or a crane drop behind it */
+                c->lapmax = c->lap;
+                if (state == ST_RACE && c->lap >= 2) {
+                    c->lastlap = racetime - c->lapstart;
+                    if (c->bestlap <= 0 || c->lastlap < c->bestlap) c->bestlap = c->lastlap;
+                    c->lapshow = 3.f;
+                    lap_done(c);
+                }
+                c->lapstart = racetime;
+                if (laps > 0 && c->lap > laps && !c->finished && state == ST_RACE) { c->finished = 1; c->ftime = racetime; }
             }
-            c->lapstart = racetime;
-            if (laps > 0 && c->lap > laps && !c->finished && state == ST_RACE) { c->finished = 1; c->ftime = racetime; }
         } else if (prev < nseg / 4 && cu > nseg * 3 / 4) c->lap--;
         c->seg = cu; c->prog = (float)c->lap * nseg + cu + q.u;
     }
@@ -1208,7 +1213,7 @@ static void car_step(Car *c, float dt)
             float x = WLMIN[i] - l;                                          /* progressive hydraulic stop */
             Fs += K_BUMP * x + 6.0e6f * x * x + (rate > 0 ? 9000.f * rate : 0.f);
             if (!c->wbot[i] && rate > 2.5f) snd_grounded(c, rate);          /* bottomed out: the original's grounded sound */
-            if (!c->wbot[i] && rate > 4.5f) car_hurt(c, (rate - 4.5f) * 1.2f, 1.f);
+            if (!c->wbot[i] && rate > 7.f) car_hurt(c, (rate - 7.f) * 0.6f, 1.f);
             c->wbot[i] = 1;
         } else c->wbot[i] = 0;
         if (Fs < 0) Fs = 0;
