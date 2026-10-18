@@ -1,5 +1,5 @@
 /* trackdef.h - tracks as pieces on the original's 16x16 grid: the eight originals (decoded from scr_tracks.h) and the
- * player's own from the track builder (tracks/NAME.trk). Included by scrredux.c */
+ * player's own from the track builder (tracks/NAME.trk in the player's folder, see user_path). Included by scrredux.c */
 #define MAXPC 100                                      /* pieces per track, like the original's road tables */
 #define MAXTRK 48
 #define ED_SLOT (MAXTRK - 1)                           /* the track builder's test drive */
@@ -18,6 +18,25 @@ static void data_path(char *out, size_t n, const char *rel)
 {
     const char *b = SDL_GetBasePath();
     snprintf(out, n, "%s%s", b ? b : "", rel);
+}
+/* the player's own files - settings, saves, replays, tracks - go in SDL's folder for them, not beside the game (an app
+ * bundle or a folder the game cannot write to): ~/Library/Application Support/SCR Redux/SCR Redux/ on macOS,
+ * %APPDATA%\SCR Redux\SCR Redux\ on Windows, ~/.local/share/SCR Redux/SCR Redux/ on Linux. SCR_HOME overrides it
+ * (a portable copy, tests) */
+#define PREF_ORG "SCR Redux"
+#define PREF_APP "SCR Redux"
+static void user_path(char *out, size_t n, const char *rel)
+{
+    static char dir[1024];
+    if (!dir[0]) {
+        const char *e = getenv("SCR_HOME");
+        char *pp = e && *e ? NULL : SDL_GetPrefPath(PREF_ORG, PREF_APP);
+        if (e && *e) { size_t k = strlen(e); snprintf(dir, sizeof dir, "%s%s", e, e[k - 1] == '/' || e[k - 1] == '\\' ? "" : "/"); SDL_CreateDirectory(dir); }
+        else if (pp) snprintf(dir, sizeof dir, "%s", pp);
+        else data_path(dir, sizeof dir, "");                    /* no such folder here: beside the game, as before */
+        SDL_free(pp);
+    }
+    snprintf(out, n, "%s%s", dir, rel);
 }
 
 /* cross-section i of a piece in the original's x/z units (not mirrored), edge 0 and edge 1 */
@@ -62,8 +81,8 @@ static int track_save(TrackDef *td)
 {
     char fn[64], path[1024];
     track_filename(td->name, fn, sizeof fn);
-    data_path(path, sizeof path, "tracks"); SDL_CreateDirectory(path);
-    data_path(path, sizeof path, "tracks/"); snprintf(path + strlen(path), sizeof path - strlen(path), "%s", fn);
+    user_path(path, sizeof path, "tracks"); SDL_CreateDirectory(path);
+    user_path(path, sizeof path, "tracks/"); snprintf(path + strlen(path), sizeof path - strlen(path), "%s", fn);
     FILE *f = fopen(path, "w");
     if (!f) return -1;
     fprintf(f, "SCRREDUX-TRACK 1\nNAME %s\nSTART %d\n", td->name, td->start);
@@ -75,7 +94,7 @@ static int track_save(TrackDef *td)
     }
     fclose(f);
     if (td->file[0] && strcmp(td->file, fn)) {                   /* renamed: the old file goes */
-        data_path(path, sizeof path, "tracks/"); snprintf(path + strlen(path), sizeof path - strlen(path), "%s", td->file);
+        user_path(path, sizeof path, "tracks/"); snprintf(path + strlen(path), sizeof path - strlen(path), "%s", td->file);
         remove(path);
     }
     snprintf(td->file, sizeof td->file, "%s", fn);
@@ -117,7 +136,7 @@ static void tracks_scan(void)
     ntrk = 0;
     for (int i = 0; i < SCR_NTRACKS; i++) decode_original(i, &trk[ntrk++]);
     char dir[1024]; int n = 0;
-    data_path(dir, sizeof dir, "tracks");
+    user_path(dir, sizeof dir, "tracks");
     char **files = SDL_GlobDirectory(dir, "*.trk", 0, &n);
     for (int i = 0; files && i < n && ntrk < ED_SLOT; i++) {
         char path[1024]; snprintf(path, sizeof path, "%s/%s", dir, files[i]);

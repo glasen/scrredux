@@ -23,9 +23,9 @@ binary.
 | `trackdef.h` | Tracks as pieces on the 16 × 16 grid: the originals (decoded from `scr_tracks.h`) and `tracks/*.trk` |
 | `scr_tracks.h` | The eight original tracks (generated, see below) |
 | `league.h` | Racing season, Hall of Fame, season saves |
-| `replay.h` | Replays of the last five season races (`save/replayN.rpl`, 60 Hz) |
-| `options.h` | Volume, fullscreen and rumble settings (`save/options.txt`) |
-| `controls.h` | Driving key bindings (`save/controls.txt`), gamepads, joysticks and rumble |
+| `replay.h` | Replays of the last five season races (`replayN.rpl`, 60 Hz) |
+| `options.h` | Volume, fullscreen and rumble settings (`options.txt`) |
+| `controls.h` | Driving key bindings (`controls.txt`), gamepads, joysticks and rumble |
 | `menu.h` | Menus, the pause menu |
 | `editor.h` | Track builder |
 | `audio.h` | Sample mixer; when sounds trigger is decided in `scrredux.c` |
@@ -48,7 +48,14 @@ scale the physics is tuned to: 128 original units = the 2.95 m wheelbase, 8.85 m
   originals as copies with these edits baked in.
 - `./scrredux --check-tracks` checks the originals against the builder's joining and overlap rules.
 
-User tracks are saved as `tracks/NAME.trk`; the season is saved in `save/season0.sav`.
+The player's files live in SDL's pref folder (`user_path()` in `trackdef.h`, org and app both "SCR Redux"), or in
+`$SCR_HOME` when that is set: `tracks/NAME.trk`, `options.txt`, `controls.txt`, `halloffame.txt`, `replayN.rpl`, and
+the season as `season0.txt` (slots 1-4 for Load/Save). Seasons are text, a keyed line per item (`season_write()` /
+`season_peek()` in `league.h`): unknown lines are skipped, so a later version can add fields and still read old saves,
+and a save missing a driver or a fixture is refused. Writes go to a `.tmp` file renamed over the old one.
+`user_migrate()` copies an older version's `save/` and `tracks/` from beside the binary on the first start, converting
+the binary `seasonN.sav` files, and writes `moved.txt`. Point `SCR_HOME` at a scratch folder when testing, so test runs
+leave the real saves alone.
 
 ## Physics
 

@@ -17,14 +17,12 @@ static float opp_vcap = 62, opp_alat = 13.5f;
 
 typedef struct { int a, b, track, done, winner, fast; float ta, tb, la, lb; } Race;   /* times < 0: did not finish */
 typedef struct {
-    uint32_t magic, ver;
     int on, season, race;                   /* race: the next of each division's six, raced in step */
     char pname[16];
     int div[NDRV], pts[NDRV], raced[NDRV], wins[NDRV], lapp[NDRV];
-    float spare[6]; int nholes;             /* the player's cage holes stay for the season; spare keeps the save layout */
+    int nholes;                             /* the player's cage holes stay for the season */
     Race sched[4][6];
 } Season;
-#define SEA_MAGIC 0x53525345u
 static Season sea, sea_end;                 /* sea_end: the season just finished, for its final tables */
 static int sea_moved;                       /* player at the season's end: -1 promoted, +1 relegated, 2 champion */
 static Race last_res; static int last_sim[6], nlast_sim, last_retired;
@@ -59,7 +57,7 @@ static void season_schedule(void)
 static void season_new(const char *name)
 {
     memset(&sea, 0, sizeof sea);
-    sea.magic = SEA_MAGIC; sea.ver = 1; sea.on = 1; sea.season = 1;
+    sea.on = 1; sea.season = 1;
     snprintf(sea.pname, sizeof sea.pname, "%s", name[0] ? name : "Player");
     for (int i = 0; i < 11; i++) sea.div[i] = i < 9 ? i / 3 : 3;
     sea.div[PLAYER] = 3;
@@ -150,28 +148,62 @@ static void season_end(void)
     season_schedule();
 }
 
-/* ---- saves: save/season0.sav is the running season, 1..4 the Load/Save slots ---- */
+/* ---- saves, in the player's folder (user_path): season0.txt is the running season, 1..4 the Load/Save slots ---- */
 static void save_path(char *out, size_t n, const char *fmt, int k)
 {
     char rel[64]; snprintf(rel, sizeof rel, fmt, k);
-    data_path(out, n, "save"); SDL_CreateDirectory(out);
-    data_path(out, n, rel);
+    user_path(out, n, rel);
 }
+/* plain text, a line per item, so a later version can add to it and still read this one: lines it does not know are
+ * skipped, and a save missing a driver or a race is no save */
+#define SEA_HEAD "SCRREDUX-SEASON 1"
 static int season_write(int slot)
 {
-    char p[1024]; save_path(p, sizeof p, "save/season%d.sav", slot);
-    FILE *f = fopen(p, "wb"); if (!f) return -1;
-    int ok = fwrite(&sea, sizeof sea, 1, f) == 1;
-    fclose(f);
-    return ok ? 0 : -1;
+    char p[1024], tmp[1024];
+    save_path(p, sizeof p, "season%d.txt", slot); save_path(tmp, sizeof tmp, "season%d.tmp", slot);
+    FILE *f = fopen(tmp, "w"); if (!f) return -1;
+    fprintf(f, "%s\nname %s\nseason %d\nrace %d\nholes %d\n", SEA_HEAD, sea.pname, sea.season, sea.race, sea.nholes);
+    for (int i = 0; i < NDRV; i++) fprintf(f, "driver %d %d %d %d %d %d\n", i, sea.div[i], sea.pts[i], sea.raced[i], sea.wins[i], sea.lapp[i]);
+    for (int d = 0; d < 4; d++) for (int k = 0; k < 6; k++) {
+        const Race *r = &sea.sched[d][k];
+        fprintf(f, "fixture %d %d %d %d %d %d %d %d %.9g %.9g %.9g %.9g\n", d, k, r->a, r->b, r->track, r->done, r->winner, r->fast,
+                r->ta, r->tb, r->la, r->lb);
+    }
+    int ok = !ferror(f);
+    if (fclose(f) || !ok || !SDL_RenamePath(tmp, p)) { remove(tmp); return -1; }   /* the old save stays until the new one is whole */
+    return 0;
 }
+static int in_rng(int v, int lo, int hi) { return v >= lo && v <= hi; }
 static int season_peek(int slot, Season *s)
 {
-    char p[1024]; save_path(p, sizeof p, "save/season%d.sav", slot);
-    FILE *f = fopen(p, "rb"); if (!f) return -1;
-    int ok = fread(s, sizeof *s, 1, f) == 1 && s->magic == SEA_MAGIC && s->ver == 1;
+    char p[1024], line[256]; save_path(p, sizeof p, "season%d.txt", slot);
+    FILE *f = fopen(p, "r"); if (!f) return -1;
+    memset(s, 0, sizeof *s);
+    int ok = fgets(line, sizeof line, f) && !strncmp(line, SEA_HEAD, strlen(SEA_HEAD)), drv = 0, fix = 0;
+    while (ok && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        int i, d, k, v[6]; Race r;
+        if (!strncmp(line, "name ", 5)) snprintf(s->pname, sizeof s->pname, "%s", line + 5);
+        else if (sscanf(line, "season %d", &v[0]) == 1) s->season = v[0];
+        else if (sscanf(line, "race %d", &v[0]) == 1) s->race = v[0];
+        else if (sscanf(line, "holes %d", &v[0]) == 1) s->nholes = v[0];
+        else if (sscanf(line, "driver %d %d %d %d %d %d", &i, &v[0], &v[1], &v[2], &v[3], &v[4]) == 6) {
+            if (!in_rng(i, 0, NDRV - 1) || !in_rng(v[0], 0, 3)) { ok = 0; break; }
+            s->div[i] = v[0]; s->pts[i] = v[1]; s->raced[i] = v[2]; s->wins[i] = v[3]; s->lapp[i] = v[4];
+            drv |= 1 << i;
+        } else if (sscanf(line, "fixture %d %d %d %d %d %d %d %d %f %f %f %f", &d, &k, &r.a, &r.b, &r.track, &r.done, &r.winner,
+                          &r.fast, &r.ta, &r.tb, &r.la, &r.lb) == 12) {
+            if (!in_rng(d, 0, 3) || !in_rng(k, 0, 5) || !in_rng(r.a, 0, NDRV - 1) || !in_rng(r.b, 0, NDRV - 1) ||
+                !in_rng(r.track, 0, SCR_NTRACKS - 1) || !in_rng(r.winner, -1, NDRV - 1) || !in_rng(r.fast, -1, NDRV - 1)) { ok = 0; break; }
+            s->sched[d][k] = r; fix |= 1 << (d * 6 + k);
+        }
+    }
     fclose(f);
-    return ok ? 0 : -1;
+    if (!ok || drv != (1 << NDRV) - 1 || fix != (1 << 24) - 1 || s->season < 1 || !in_rng(s->race, 0, 6)) return -1;
+    if (!s->pname[0]) snprintf(s->pname, sizeof s->pname, "Player");
+    s->nholes = s->nholes < 0 ? 0 : s->nholes > NHOLE ? NHOLE : s->nholes;
+    s->on = 1;
+    return 0;
 }
 static int season_read(int slot)
 {
@@ -181,12 +213,73 @@ static int season_read(int slot)
     return 0;
 }
 
+/* the first start since the files moved: whatever is in save/ and tracks/ beside the game is copied to the player's
+ * folder, the old binary seasons (the Season struct as it was in memory) turned into text. The old files stay where
+ * they were; moved.txt in the new folder says this has been done */
+typedef struct { int a, b, track, done, winner, fast; float ta, tb, la, lb; } RaceV1;
+typedef struct {
+    uint32_t magic, ver; int on, season, race; char pname[16];
+    int div[NDRV], pts[NDRV], raced[NDRV], wins[NDRV], lapp[NDRV];
+    float spare[6]; int nholes; RaceV1 sched[4][6];
+} SeasonV1;
+static int season_from_v1(const char *path)
+{
+    SeasonV1 o; FILE *f = fopen(path, "rb"); if (!f) return -1;
+    int ok = fread(&o, sizeof o, 1, f) == 1 && o.magic == 0x53525345u && o.ver == 1 && o.on;
+    fclose(f);
+    if (!ok) return -1;
+    memset(&sea, 0, sizeof sea);
+    sea.on = 1; sea.season = o.season; sea.race = o.race; sea.nholes = o.nholes;
+    memcpy(sea.pname, o.pname, sizeof sea.pname); sea.pname[sizeof sea.pname - 1] = 0;
+    for (int i = 0; i < NDRV; i++) { sea.div[i] = o.div[i]; sea.pts[i] = o.pts[i]; sea.raced[i] = o.raced[i]; sea.wins[i] = o.wins[i]; sea.lapp[i] = o.lapp[i]; }
+    for (int d = 0; d < 4; d++) for (int k = 0; k < 6; k++) {
+        const RaceV1 *a = &o.sched[d][k]; Race *r = &sea.sched[d][k];
+        r->a = a->a; r->b = a->b; r->track = a->track; r->done = a->done; r->winner = a->winner; r->fast = a->fast;
+        r->ta = a->ta; r->tb = a->tb; r->la = a->la; r->lb = a->lb;
+    }
+    return 0;
+}
+static int file_exists(const char *p) { return SDL_GetPathInfo(p, NULL); }
+static void user_migrate(void)
+{
+    char mark[1024], from[1024], to[1024], dir[1024];
+    user_path(mark, sizeof mark, "moved.txt");
+    if (file_exists(mark)) return;
+    int moved = 0;
+    for (int t = 0; t < 2; t++) {
+        const char *sub = t ? "tracks" : "save";
+        data_path(dir, sizeof dir, sub);
+        user_path(to, sizeof to, sub);
+        if (!strcmp(dir, to)) continue;                          /* SCR_HOME is the game's own folder */
+        int n = 0; char **fl = SDL_GlobDirectory(dir, "*", 0, &n);
+        if (t && n) SDL_CreateDirectory(to);
+        for (int i = 0; fl && i < n; i++) {
+            int slot; char end;
+            snprintf(from, sizeof from, "%s/%s", dir, fl[i]);
+            if (!t && sscanf(fl[i], "season%d.sa%c", &slot, &end) == 2 && end == 'v') {   /* an old binary season */
+                save_path(to, sizeof to, "season%d.txt", slot);
+                Season keep = sea;
+                if (!file_exists(to) && season_from_v1(from) == 0 && season_write(slot) == 0) moved++;
+                sea = keep;
+                continue;
+            }
+            char rel[512]; snprintf(rel, sizeof rel, "%s%s", t ? "tracks/" : "", fl[i]);
+            user_path(to, sizeof to, rel);
+            if (!file_exists(to) && SDL_CopyFile(from, to)) moved++;
+        }
+        SDL_free(fl);
+    }
+    FILE *f = fopen(mark, "w");
+    if (f) { data_path(dir, sizeof dir, ""); fprintf(f, "Files from %s copied here (%d). The game reads them from here now.\n", dir, moved); fclose(f); }
+    if (moved) fprintf(stderr, "copied %d saved files from beside the game to %s\n", moved, (user_path(to, sizeof to, ""), to));
+}
+
 /* ---- Hall of Fame: the best lap and the best race time on every track, and who drove them ---- */
 typedef struct { char track[32], lapby[16], raceby[16]; float lap, race; } Hof;
 static Hof hof[MAXTRK + SCR_NTRACKS]; static int nhof;
 static void hof_save(void)
 {
-    char p[1024]; save_path(p, sizeof p, "save/halloffame.txt", 0);
+    char p[1024]; save_path(p, sizeof p, "halloffame.txt", 0);
     FILE *f = fopen(p, "w"); if (!f) return;
     for (int i = 0; i < nhof; i++) fprintf(f, "%s|%s|%.2f|%s|%.2f\n", hof[i].track, hof[i].lapby, hof[i].lap, hof[i].raceby, hof[i].race);
     fclose(f);
@@ -209,7 +302,7 @@ static void hof_load(void)
 {
     nhof = 0;
     for (int t = 0; t < SCR_NTRACKS; t++) hof_get(SCR_TITLE[t]);
-    char p[1024], line[256]; save_path(p, sizeof p, "save/halloffame.txt", 0);
+    char p[1024], line[256]; save_path(p, sizeof p, "halloffame.txt", 0);
     FILE *f = fopen(p, "r"); if (!f) return;
     while (fgets(line, sizeof line, f)) {
         char *fld[5]; int n = 0;

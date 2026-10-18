@@ -22,6 +22,20 @@ make
 Start the game from its own folder; it looks for its shaders, car model and sounds next to the binary.
 Without the `sounds/` folder the game runs silently.
 
+### Your files
+
+Settings, seasons, the Hall of Fame, replays and your own tracks are kept in your user folder, not beside the game:
+
+| System | Folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/SCR Redux/SCR Redux/` |
+| Windows | `%APPDATA%\SCR Redux\SCR Redux\` |
+| Linux | `~/.local/share/SCR Redux/SCR Redux/` |
+
+On its first start the game copies anything an older version left in `save/` and `tracks/` beside it into that folder,
+and leaves the old files where they were (`moved.txt` there notes it was done; you can delete the old ones). To keep
+everything somewhere else, a portable copy for instance, set `SCR_HOME` to a folder.
+
 ## Controls
 
 | Key | Action |
@@ -40,9 +54,9 @@ In the menus: Up/Down or the number keys select, Enter confirms, Esc goes back. 
 ### Options
 
 **Options** in the main menu sets the engine and effects volume, fullscreen and gamepad rumble; they are kept in
-`save/options.txt`. **Driving keys** in there changes the driving keys: two keys each for accelerate, brake, steer
+`options.txt` in your folder. **Driving keys** in there changes the driving keys: two keys each for accelerate, brake, steer
 left, steer right and boost. Enter on a key, then press the new one; Del clears it. A key already in use swaps places
-with the one it replaces. The keys are kept in `save/controls.txt`.
+with the one it replaces. The keys are kept in `controls.txt`.
 
 ### Gamepad and joystick
 
@@ -128,7 +142,7 @@ which pieces fit and which key adds them.
 
 A drop of 3.7 m or more becomes a sheer wall, shown red on the map.
 
-Your tracks are saved in `tracks/` and show up in Practise and the Hall of Fame. The Racing Season always uses the
+Your tracks are saved in `tracks/` in your folder and show up in Practise and the Hall of Fame. The Racing Season always uses the
 eight original tracks.
 
 ## Car viewer

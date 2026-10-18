@@ -12,7 +12,7 @@ static SDL_Scancode ctl[NCT][2];
 static void ctl_defaults(void) { memcpy(ctl, CT_DEF, sizeof ctl); }
 static void ctl_save(void)
 {
-    char p[1024]; save_path(p, sizeof p, "save/controls.txt", 0);
+    char p[1024]; save_path(p, sizeof p, "controls.txt", 0);
     FILE *f = fopen(p, "w"); if (!f) return;
     for (int a = 0; a < NCT; a++) fprintf(f, "%s|%s|%s\n", CT_ID[a], SDL_GetScancodeName(ctl[a][0]), SDL_GetScancodeName(ctl[a][1]));
     fclose(f);
@@ -20,7 +20,7 @@ static void ctl_save(void)
 static void ctl_load(void)
 {
     ctl_defaults();
-    char p[1024], line[128]; save_path(p, sizeof p, "save/controls.txt", 0);
+    char p[1024], line[128]; save_path(p, sizeof p, "controls.txt", 0);
     FILE *f = fopen(p, "r"); if (!f) return;
     while (fgets(line, sizeof line, f)) {
         char *fld[3]; int n = 0;

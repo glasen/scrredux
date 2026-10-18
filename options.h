@@ -6,14 +6,14 @@ static Opt opt = {100, 100, 0, 1};
 static void opt_apply(void) { snd_vol[0] = opt.fx / 100.f; snd_vol[1] = opt.eng / 100.f; }
 static void opt_save(void)
 {
-    char p[1024]; save_path(p, sizeof p, "save/options.txt", 0);
+    char p[1024]; save_path(p, sizeof p, "options.txt", 0);
     FILE *f = fopen(p, "w"); if (!f) return;
     fprintf(f, "engine|%d\neffects|%d\nfullscreen|%d\nrumble|%d\n", opt.eng, opt.fx, opt.full, opt.rumble);
     fclose(f);
 }
 static void opt_load(void)
 {
-    char p[1024], line[128]; save_path(p, sizeof p, "save/options.txt", 0);
+    char p[1024], line[128]; save_path(p, sizeof p, "options.txt", 0);
     FILE *f = fopen(p, "r");
     while (f && fgets(line, sizeof line, f)) {
         char *v = strchr(line, '|'); if (!v) continue;

@@ -54,7 +54,7 @@ static void rec_tick(void)
 }
 static int rp_read_head(int slot, RHead *h)
 {
-    char p[1024]; save_path(p, sizeof p, "save/replay%d.rpl", slot);
+    char p[1024]; save_path(p, sizeof p, "replay%d.rpl", slot);
     FILE *f = fopen(p, "rb"); if (!f) return -1;
     int ok = fread(h, sizeof *h, 1, f) == 1 && h->magic == RP_MAGIC && h->ver == 1;
     fclose(f);
@@ -79,14 +79,14 @@ static void rec_save(const char *title, const char *n0, const char *n1, int resu
     for (int i = 0; i < 2; i++) h.col[i] = cars[i].col;
     h.when = (int64_t)time(NULL);
     h.td = trk[cur_track];
-    char p[1024]; save_path(p, sizeof p, "save/replay%d.rpl", slot);
+    char p[1024]; save_path(p, sizeof p, "replay%d.rpl", slot);
     FILE *f = fopen(p, "wb"); if (!f) return;
     fwrite(&h, sizeof h, 1, f); fwrite(rec, sizeof *rec, (size_t)nrec, f);
     fclose(f);
 }
 static int rp_load(int slot)
 {
-    char p[1024]; save_path(p, sizeof p, "save/replay%d.rpl", slot);
+    char p[1024]; save_path(p, sizeof p, "replay%d.rpl", slot);
     FILE *f = fopen(p, "rb"); if (!f) return -1;
     int ok = fread(&rp_head, sizeof rp_head, 1, f) == 1 && rp_head.magic == RP_MAGIC && rp_head.ver == 1 && rp_head.nt > 0;
     if (ok) {
