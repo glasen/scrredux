@@ -137,30 +137,69 @@ In a replay: C changes camera, Space pauses, hold Left/Right to rewind or fast-f
 
 ## Track Builder
 
-Tracks are laid out from above on a 16 × 16 grid and grow from their open end. The outlines at the open end show
-which pieces fit and which key adds them.
+You build in the stadium itself, in 3D. The original's 16 × 16 grid is marked on the arena floor, and the track is made
+of the original's pieces on it. Fly anywhere over the arena; at the track's open end, light-blue ghosts show the pieces
+that fit there, labelled with their keys. Click a ghost or press its key to add it. The selected pieces are outlined in
+cyan, and yellow poles mark the joints that the height and banking keys move. The panel at the top right shows the
+selection; H shows every key.
+
+**Flying**
+
+| Key | Action |
+| --- | --- |
+| W A S D | Move (faster with Shift, and the higher you fly) |
+| Q / E | Down / up |
+| Hold right mouse button or Space | Look round with the mouse |
+| Mouse wheel | Forward / back |
+| V | Look at the selection, along the way the track goes |
+| G | Fly along the road at a driver's eye height: Up/Down change the speed (below zero it goes backwards), Space stops, Left/Right jump a piece, G or Esc stops |
+
+**Building**
 
 | Key | Action |
 | --- | --- |
 | Up | Add a straight |
 | Left / Right | Add a 45° bend |
 | Shift + Left / Right | Add a 90° bend |
-| Backspace | Remove the last piece |
+| Click a ghost | Add it |
 | C | Close the loop the shortest way |
-| Tab / mouse click | Select a piece |
-| W / S, mouse wheel | Raise / lower the start of the selected piece by 0.5 m (with Shift: 2 m) |
-| Q / E | Bank the piece |
+| Del / Backspace | Remove the selected pieces. On a closed loop this opens a gap there to build anew; on an open track only pieces at its ends come off |
+
+**Selecting**
+
+| Key | Action |
+| --- | --- |
+| Click | Select a piece |
+| Shift + click | Select a run of pieces |
+| Tab / Shift + Tab | Next / previous piece |
+| Page Up / Page Down | Previous / next piece; with Shift the run grows |
+| Esc | Back to a single piece |
+
+**Shaping the selection**
+
+| Key | Action |
+| --- | --- |
+| R / F | Raise / lower by 0.5 m (with Shift: 2 m). One piece: its end, so new pieces carry on at that height. A run: the whole run, the pieces either side become the ramps |
+| `,` / `.` | Bank to the left / right. Select a bend's pieces and bank them for a banked curve |
 | 1 – 6 | Shape: smooth, linear, hump, kicker (jump), step, pit |
-| - / = | Make a hump, kicker or pit smaller / bigger (a negative hump is a dip) |
-| F | Put the start line on the selected straight |
+| - / + | Make a hump, kicker or pit smaller / bigger (a negative hump is a dip) |
+| L | Put the start line on the selected straight |
+
+A drop of 3.7 m or more becomes a sheer wall.
+
+**The whole track**
+
+| Key | Action |
+| --- | --- |
+| Alt + arrows | Move the whole track one square |
+| Alt + R | Turn the whole track a quarter (with Shift: the other way) |
 | T | Test-drive the track |
 | J | Check whether every jump can be made (impossible ones turn red) |
-| F2 | Save |
-| F3 | Open a track (the original tracks open as a copy) |
+| Ctrl + Z / Ctrl + Y | Undo / redo (also Ctrl + Shift + Z; Cmd works as well on a Mac) |
+| Ctrl + S | Save (F2 too) |
+| Ctrl + O | Open a track (F3 too; the original tracks open as a copy) |
 | F4 | Rename |
-| N | Start a new track |
-
-A drop of 3.7 m or more becomes a sheer wall, shown red on the map.
+| N | Start a new track (Ctrl + Z brings the old one back) |
 
 Your tracks are saved in `tracks/` in your folder and show up in Practise and the Hall of Fame. The Racing Season always uses the
 eight original tracks.

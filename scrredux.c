@@ -108,7 +108,8 @@ static const char NAME_CHARS[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/!+<>?,
 /* ------------------------------------------------------- vertex buffers */
 typedef struct { float x, y, z; uint8_t r, g, b, a; } Vtx;
 typedef struct { Vtx *v; int n, cap; } VB;
-static VB sb, db, hb;            /* static world, dynamic world, HUD */
+static VB sb, db, hb, tkb;       /* static world, dynamic world, HUD; the track builder's track (its own buffer, rebuilt as it changes) */
+static int tkb_gen;               /* bumped when tkb is rebuilt */
 static VB *cur = &db;
 static struct { V3 pos, right, up, fwd; } cam;
 
@@ -204,6 +205,10 @@ static Seg seg[MAXSEG]; static int nseg; static float ds;
 static float jump_v[MAXSEG];                           /* AI: speed to hold here for the jump ahead (its run-up and the bend before it), 0 = none */
 static unsigned char jump_b[MAXSEG];                   /* AI: that run-up needs the boost */
 static int cur_track = -1;
+/* the track builder: an open track (its gap left out, trk_endh the open end's heights); the stadium built round the
+ * whole grid without a track (scene_builder) */
+static int trk_open, trk_endh[2], scene_builder;
+static float tr_lift;                                  /* metres the road is raised by (roads at ground level sit on a slab) */
 /* crane drop points, like the original: the car is lowered onto the middle of a section, never onto a bend piece
  * (templates 1, 3, 6, 7) nor onto a section in the track's own list (the tail of each track's road data) */
 static const unsigned char SCR_NOREST[SCR_NTRACKS][16] = {
@@ -240,7 +245,7 @@ static void plan_jumps(void);
 static int planning;                                   /* a scratch car is on the track (plan_jumps): no debug output */
 
 /* the track's cross-sections in driving order from the start line, with the jump edits: x/z in metres, heights in units */
-enum { MAXX = MAXPC * 13, PER = 24 };
+enum { MAXX = MAXPC * 13 + 1, PER = 24 };
 static float tx_ex[MAXX][2], tx_ez[MAXX][2]; static int tx_ey[MAXX][2], tx_sec[MAXX];
 static int track_xsecs(const TrackDef *td)
 {
@@ -265,6 +270,13 @@ static int track_xsecs(const TrackDef *td)
             }
             xsec[nx++] = p;
         }
+    }
+    if (trk_open) {                                             /* the builder's open track: its open end too (start is its last piece) */
+        const TPiece *pc = &td->p[start];
+        int xz[2][2];
+        tpl_cross(pc->at, SCR_TPL_NS[pc->at & 15], pc->cx, pc->cz, xz);
+        for (int e = 0; e < 2; e++) { ex[nx][e] = -(xz[e][0] - 8 * 2048) * SCR_U; ez[nx][e] = (xz[e][1] - 8 * 2048) * SCR_U; ey[nx][e] = trk_endh[e]; }
+        xsec[nx++] = start;
     }
     /* the jump edits, m metres each (a sheer face is a step of 640 units or more between cross-sections) */
     const float U = 0.25f * SCR_U;
@@ -353,16 +365,21 @@ static void build_track_geometry(int idx)
     float ymin = 1e9f;
     for (int i = 0; i < nx; i++) ymin = fminf(ymin, fminf(ey[i][0], ey[i][1]) * 0.25f * SCR_U);
     float lift = fmaxf(0.f, 1.3f - ymin);                  /* roads at ground level sit on their deck slab */
+    tr_lift = lift;
     /* which template edge is on the right */
     V3 d0 = V(ex[1][0] + ex[1][1] - ex[0][0] - ex[0][1], 0, ez[1][0] + ez[1][1] - ez[0][0] - ez[0][1]);
     int re = vdot(vcross(d0, UP), V(ex[0][1] - ex[0][0], 0, ez[0][1] - ez[0][0])) > 0 ? 1 : 0;
 
     /* plan: centripetal Catmull-Rom through the cross-section centres; heights stay linear between cross-sections */
-    static V3 fp[MAXX * PER]; static float fy[MAXX * PER], fb[MAXX * PER], cum[MAXX * PER + 1]; static unsigned char fs[MAXX * PER]; static short fsec[MAXX * PER];
+    static V3 fp[MAXX * PER]; static float fy[MAXX * PER], fb[MAXX * PER], cum[MAXX * PER + 1]; static unsigned char fs[MAXX * PER], fw[MAXX * PER]; static short fsec[MAXX * PER];
     int M = 0;
     for (int i = 0; i < nx; i++) {
         V3 P[4];
-        for (int q = 0; q < 4; q++) { int k = (i - 1 + q + nx) % nx; P[q] = V((ex[k][0] + ex[k][1]) * 0.5f, 0, (ez[k][0] + ez[k][1]) * 0.5f); }
+        for (int q = 0; q < 4; q++) {
+            int k = i - 1 + q;
+            k = trk_open ? (k < 0 ? 0 : k >= nx ? nx - 1 : k) : (k + nx) % nx;   /* an open track's ends: no neighbour round the gap */
+            P[q] = V((ex[k][0] + ex[k][1]) * 0.5f, 0, (ez[k][0] + ez[k][1]) * 0.5f);
+        }
         float t[4] = {0};
         for (int q = 1; q < 4; q++) t[q] = t[q - 1] + sqrtf(fmaxf(vlen(vsub(P[q], P[q - 1])), 1e-3f));
         int j = (i + 1) % nx;
@@ -379,7 +396,7 @@ static void build_track_geometry(int idx)
             float yl = yl0 + (yl1 - yl0) * fh, yr = yr0 + (yr1 - yr0) * fh;
             fy[M] = (yl + yr) * 0.5f * 0.25f * SCR_U + lift;
             fb[M] = (yl - yr) * 0.25f * SCR_U;              /* left edge minus right edge */
-            fs[M] = steep; fsec[M] = (short)xsec[i];
+            fs[M] = steep; fsec[M] = (short)xsec[i]; fw[M] = trk_open && i == nx - 1;   /* the open track's gap */
             M++;
         }
     }
@@ -388,7 +405,7 @@ static void build_track_geometry(int idx)
     float total = cum[M];
     nseg = (int)(total / 1.0f + 0.5f); if (nseg > MAXSEG) nseg = MAXSEG;
     ds = total / nseg;
-    static float bank[MAXSEG]; static unsigned char st[MAXSEG];
+    static float bank[MAXSEG]; static unsigned char st[MAXSEG], gk[MAXSEG];
     int i = 0;
     for (int k = 0; k < nseg; k++) {
         float tg = k * ds;
@@ -399,7 +416,7 @@ static void build_track_geometry(int idx)
         seg[k].c.y = fy[i] + (fy[i2] - fy[i]) * f;
         seg[k].u = tg;
         bank[k] = atan2f(fb[i] + (fb[i2] - fb[i]) * f, 2 * TRACK_HW);
-        st[k] = fs[i]; seg_sec[k] = fsec[i];
+        st[k] = fs[i]; seg_sec[k] = fsec[i]; gk[k] = fw[i];
     }
     for (int k = 0, k0 = 0; k < nseg; k++)
         if (k == nseg - 1 || seg_sec[k + 1] != seg_sec[k]) { sec_mid[seg_sec[k]] = (k0 + k) / 2; k0 = k + 1; }
@@ -422,7 +439,7 @@ static void build_track_geometry(int idx)
     }
     for (int k = 0; k < nseg; k++) {
         int kn = (k + 1) % nseg;
-        seg[k].gap = 0; seg[k].steep = (st[k] || st[kn]) && fabsf(seg[kn].c.y - seg[k].c.y) > 1.5f;
+        seg[k].gap = gk[k]; seg[k].steep = (st[k] || st[kn]) && fabsf(seg[kn].c.y - seg[k].c.y) > 1.5f;
     }
     static float kap[MAXSEG], vk[MAXSEG]; static V3 Th[MAXSEG];
     for (int k = 0; k < nseg; k++) {
@@ -552,7 +569,7 @@ static void build_seg_mesh(int i)
             draw_quad(a0, a1, b1, b0, col); draw_quad(a0, b0, b1, a1, col);
             continue;
         }
-        if (i < 4 && !is_edge(k)) { draw_quad(a0, a1, b1, b0, start_col(i, k)); continue; }
+        if (i < 4 && !trk_open && !is_edge(k)) { draw_quad(a0, a1, b1, b0, start_col(i, k)); continue; }   /* an open track's first segments are not its start */
         if (tj > 0) {
             V3 m0 = vlerp(a0, b0, tj), m1 = vlerp(a1, b1, tj);
             draw_quad(a0, a1, m1, m0, is_edge(k) ? 0x9A9A96 : 0x6C6964);
@@ -697,11 +714,24 @@ static void build_mountains(void)
 
 #include "include/scenery.h"
 
+/* the track builder's floor: the 16 x 16 grid the pieces sit on, as lines on the grass */
+static void build_grid_lines(void)
+{
+    const float C = 2048 * SCR_U, E = 8 * C, w = 0.5f, y = 0.06f;
+    for (int k = 0; k <= 16; k++) {
+        float o = (k - 8) * C;
+        uint32_t col = k == 0 || k == 16 ? 0xE8E8D0 : 0xB8C8A0;
+        draw_quad(V(o - w, y, -E), V(o + w, y, -E), V(o + w, y, E), V(o - w, y, E), col);
+        draw_quad(V(-E, y, o - w), V(E, y, o - w), V(E, y, o + w), V(-E, y, o + w), col);
+    }
+}
+
 static void build_static(void)
 {
     cur = &sb; sb.n = 0;
     plan_arena();
     build_floor();
+    if (scene_builder) build_grid_lines();
     build_stadium();
     /* big tops at the corners, behind the floodlights */
     big_top(ar_x0 - 70, ar_z0 - 70, 34, 9, 30); big_top(ar_x1 + 70, ar_z0 - 70, 30, 8, 26);
@@ -709,8 +739,8 @@ static void build_static(void)
     build_mountains();
     build_outside();
     for (int i = 0; i < nseg; i++) build_seg_mesh(i);
-    for (int i = 10; i < nseg; i += 30) build_tower(i);
-    build_infield();
+    for (int i = 10; i < nseg; i += 30) if (!seg[i].gap) build_tower(i);
+    if (!scene_builder) build_infield();
     cur = &db;
 }
 
@@ -1702,6 +1732,7 @@ static void setup_menu(void)
     state = ST_MENU;
 }
 
+static void ed_tick(float dt);
 static void game_tick(float dt)
 {
     switch (state) {
@@ -1775,6 +1806,7 @@ static void game_tick(float dt)
         rp_step(dt);
         break;
     case ST_EDIT:
+        ed_tick(dt);
         break;
     case ST_PREVIEW:
         orbit_t += dt;
@@ -1789,9 +1821,11 @@ static void game_tick(float dt)
 
 /* ---------------------------------------------------------------- camera */
 static V3 cam_dir, cam_pos_s, cam_f, cam_u;
+static void ed_cam(float dt);
 static void update_camera(const Car *c, float dt, int snap)
 {
     if (state == ST_PREVIEW || state == ST_MENU) return;             /* set by preview_cam */
+    if (state == ST_EDIT) { ed_cam(dt); return; }                      /* the track builder's flying camera */
     if (state == ST_VIEW) {
         V3 tg = view_target;
         cam.pos = vadd(tg, vmul(V(cosf(view_pitch) * sinf(view_yaw), sinf(view_pitch), cosf(view_pitch) * cosf(view_yaw)), view_dist));

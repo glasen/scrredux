@@ -34,24 +34,6 @@ static void hud_vgrad(float x, float y, float w, float h, uint32_t ctop, uint32_
     cur = save;
 }
 
-static void hud_tri(float x0, float y0, float x1, float y1, float x2, float y2, uint32_t col)
-{
-    VB *save = cur; cur = &hb; vb_reserve(&hb, 3);
-    float sx = 2.f / HW, sy = 2.f / VH;
-    emit(V(x0 * sx - 1, 1 - y0 * sy, 0), col, hud_a); emit(V(x1 * sx - 1, 1 - y1 * sy, 0), col, hud_a); emit(V(x2 * sx - 1, 1 - y2 * sy, 0), col, hud_a);
-    cur = save;
-}
-static void hud_quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, uint32_t col)
-{
-    hud_tri(x0, y0, x1, y1, x2, y2, col); hud_tri(x0, y0, x2, y2, x3, y3, col);
-}
-static void hud_line(float x0, float y0, float x1, float y1, float w, uint32_t col)
-{
-    float dx = x1 - x0, dy = y1 - y0, l = sqrtf(dx * dx + dy * dy);
-    if (l < 1e-4f) return;
-    float nx = -dy / l * w * 0.5f, ny = dx / l * w * 0.5f;
-    hud_quad(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, col);
-}
 
 /* text: sc is the old 5x7 font's pixel size, so capitals are 7 * sc tall with their top at y */
 static float text_width(const char *s, float sc) { float w = 0; for (; *s; s++) w += glyph_adv(*s); return w * 7 * sc; }
@@ -395,32 +377,41 @@ static int gpu_init(void)
 }
 
 /* upload the static world mesh (track + stadium) once per track */
-static void upload_static(void)
+/* a mesh that stays on the GPU until it changes: into *buf (released and made again), 0 if empty */
+static int upload_mesh(const VB *b, SDL_GPUBuffer **buf)
 {
-    if (static_gen == track_gen) return;
-    if (vbuf_s) SDL_ReleaseGPUBuffer(dev, vbuf_s);
+    if (*buf) { SDL_ReleaseGPUBuffer(dev, *buf); *buf = NULL; }
+    if (!b->n) return 0;
     SDL_GPUBufferCreateInfo bi; SDL_zero(bi);
-    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (Uint32)((size_t)sb.n * sizeof(Vtx));
-    vbuf_s = SDL_CreateGPUBuffer(dev, &bi);
+    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (Uint32)((size_t)b->n * sizeof(Vtx));
+    *buf = SDL_CreateGPUBuffer(dev, &bi);
     SDL_GPUTransferBufferCreateInfo tb; SDL_zero(tb);
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; tb.size = bi.size;
     SDL_GPUTransferBuffer *t = SDL_CreateGPUTransferBuffer(dev, &tb);
     void *m = SDL_MapGPUTransferBuffer(dev, t, false);
-    memcpy(m, sb.v, bi.size);
+    memcpy(m, b->v, bi.size);
     SDL_UnmapGPUTransferBuffer(dev, t);
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
     SDL_GPUTransferBufferLocation src = {t, 0};
-    SDL_GPUBufferRegion dst = {vbuf_s, 0, bi.size};
+    SDL_GPUBufferRegion dst = {*buf, 0, bi.size};
     SDL_UploadToGPUBuffer(cp, &src, &dst, false);
     SDL_EndGPUCopyPass(cp);
     SDL_GPUFence *f = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
     SDL_WaitForGPUFences(dev, true, &f, 1);
     SDL_ReleaseGPUFence(dev, f);
     SDL_ReleaseGPUTransferBuffer(dev, t);
-    static_gen = track_gen; static_n = sb.n;
+    return b->n;
+}
+static void upload_static(void)
+{
+    if (static_gen == track_gen) return;
+    static_n = upload_mesh(&sb, &vbuf_s); static_gen = track_gen;
     fprintf(stderr, "static mesh: %d triangles\n", sb.n / 3);
 }
+static SDL_GPUBuffer *vbuf_t;                     /* the track builder's track */
+static int tkb_up = -1, tkb_n;
+static void upload_track(void) { if (tkb_up != tkb_gen) { tkb_n = upload_mesh(&tkb, &vbuf_t); tkb_up = tkb_gen; } }
 
 static int dyn_shadow_end, frame_no;
 static void draw_flames(void);
@@ -617,6 +608,7 @@ static void build_frame(void)
     }
     if (state != ST_VIEW && state != ST_EDIT) for (int i = 0; i < 2; i++) draw_crane(&cars[i]);
     dyn_shadow_end = db.n;                        /* everything after this (flames, effects) is unlit and casts no shadow */
+    if (state == ST_EDIT) ed_draw3d();             /* the builder's ghost pieces, selection and handles */
     draw_cockpit();
     draw_flames();
     draw_parts();
@@ -707,6 +699,7 @@ static void gpu_render(const char *shot_path)
     if (win) { int w, h; SDL_GetWindowSizeInPixels(win, &w, &h); if (w < 64) w = 64; if (h < 64) h = 64; if (ensure_targets(w, h)) return; }
     if (state == ST_PREVIEW || state == ST_MENU) preview_cam((float)rtw / rth);
     upload_static();
+    if (state == ST_EDIT) upload_track();
     build_frame();
     int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > HUD_CAP ? HUD_CAP : hb.n;
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
@@ -727,7 +720,7 @@ static void gpu_render(const char *shot_path)
     if (vwm) { En = 6.f; Dn = 24.f; Ef = 24.f; Df = 50.f; }
     make_cascade(vwm ? V(0, 0.6f, 0) : vadd(cam.pos, vmul(cam.fwd, 40.f)), En, Dn, SH_SIZE[0], nrows);
     make_cascade(vwm ? V(0, 0, 0) : V((ar_x0 + ar_x1) / 2, 20.f, (ar_z0 + ar_z1) / 2), Ef, Df, SH_SIZE[1], frows);
-    int sn = vwm ? 0 : static_n;
+    int sn = vwm ? 0 : static_n, tn = state == ST_EDIT ? tkb_n : 0;
     for (int ci = 0; ci < 2; ci++) {
         SDL_GPUDepthStencilTargetInfo sd; SDL_zero(sd);
         sd.texture = sh_tex[ci]; sd.clear_depth = 1.f; sd.load_op = SDL_GPU_LOADOP_CLEAR; sd.store_op = SDL_GPU_STOREOP_STORE;
@@ -740,6 +733,11 @@ static void gpu_render(const char *shot_path)
             SDL_GPUBufferBinding b0 = {vbuf_s, 0};
             SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
             SDL_DrawGPUPrimitives(sp_, sn, 1, 0, 0);
+        }
+        if (tn) {
+            SDL_GPUBufferBinding b0 = {vbuf_t, 0};
+            SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
+            SDL_DrawGPUPrimitives(sp_, tn, 1, 0, 0);
         }
         int she = dyn_shadow_end < nd ? dyn_shadow_end : nd;
         if (she > sky_n) {
@@ -772,7 +770,7 @@ static void gpu_render(const char *shot_path)
     V3 L = vnorm(V(0.42f, 0.78f, 0.46f));
     float fu[56] = { cam.pos.x, cam.pos.y, cam.pos.z, 0,
                      ((fc >> 16) & 255) / 255.f, ((fc >> 8) & 255) / 255.f, (fc & 255) / 255.f, 0,
-                     FOG0, FOG1, 0, 0,  L.x, L.y, L.z, 0 };
+                     state == ST_EDIT ? 3 * FOG0 : FOG0, FOG1, 0, 0,  L.x, L.y, L.z, 0 };   /* the builder: the whole grid clear */
     memcpy(fu + 16, nrows, 64); memcpy(fu + 32, frows, 64);
     fu[48] = 1.f / SH_SIZE[0]; fu[49] = 1.f / SH_SIZE[1]; fu[50] = 0.15f / (2 * Dn); fu[51] = 1.6f / (2 * Df);
     SDL_PushGPUFragmentUniformData(cmd, 0, fu, sizeof fu);
@@ -785,6 +783,11 @@ static void gpu_render(const char *shot_path)
         SDL_GPUBufferBinding vbs = {vbuf_s, 0};
         SDL_BindGPUVertexBuffers(rp_, 0, &vbs, 1);
         SDL_DrawGPUPrimitives(rp_, sn, 1, 0, 0);
+    }
+    if (tn) {
+        SDL_GPUBufferBinding vbt = {vbuf_t, 0};
+        SDL_BindGPUVertexBuffers(rp_, 0, &vbt, 1);
+        SDL_DrawGPUPrimitives(rp_, tn, 1, 0, 0);
     }
     SDL_GPUBufferBinding vbd_ = {vbuf_d, 0};
     SDL_BindGPUVertexBuffers(rp_, 0, &vbd_, 1);
@@ -1022,7 +1025,24 @@ static void ui_shot(const char *path, const char *script)
         }
         if (!strncmp(tok, "text:", 5)) { if (state == ST_MENU) menu_text(tok + 5); else ed_text(tok + 5); continue; }
         SDL_Keymod mod = 0;
-        if (!strncmp(tok, "shift+", 6)) { mod = SDL_KMOD_SHIFT; tok += 6; }
+        for (int more = 1; more; ) {                            /* shift+ ctrl+ alt+, in any order */
+            more = 0;
+            if (!strncmp(tok, "shift+", 6)) { mod |= SDL_KMOD_SHIFT; tok += 6; more = 1; }
+            if (!strncmp(tok, "ctrl+", 5)) { mod |= SDL_KMOD_CTRL; tok += 5; more = 1; }
+            if (!strncmp(tok, "alt+", 4)) { mod |= SDL_KMOD_ALT; tok += 4; more = 1; }
+        }
+        if (!strncmp(tok, "click:", 6)) {                       /* click:X,Y[,B] - a mouse click in the HUD's units (B 1 left, 3 right) */
+            float cx = 0, cy = 0; int cb = 1;
+            sscanf(tok + 6, "%f,%f,%d", &cx, &cy, &cb);
+            if (state == ST_EDIT) { ed_cam(0); SDL_SetModState(mod); ed_button(cx, cy, cb, 1); ed_button(cx, cy, cb, 0); SDL_SetModState(0); }
+            continue;
+        }
+        if (!strncmp(tok, "fly:", 4)) {                         /* fly:X,Y,Z,YAW,PITCH - put the builder's camera there (degrees) */
+            float v[5] = {0};
+            sscanf(tok + 4, "%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4]);
+            if (state == ST_EDIT) ed_fly_to(v);
+            continue;
+        }
         SDL_Keycode k = SDL_GetKeyFromName(tok);
         if (k == SDLK_UNKNOWN) { fprintf(stderr, "ui-shot: unknown key %s\n", tok); continue; }
         if (!handle_key(k, mod)) break;
@@ -1033,6 +1053,7 @@ static void ui_shot(const char *path, const char *script)
         cam.pos = V(mid.x + 40, 150, tr_minz - 170);
         cam.fwd = vnorm(vsub(mid, cam.pos)); cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
     }
+    if (state == ST_EDIT) ed_report();
     if (state == ST_RACE || state == ST_DONE) printf("race: t=%.1f lap %d dmg %.1f falls %d best %.1f\n", racetime, cars[0].lap, cars[0].damage, stat_falls, cars[0].bestlap);
     gpu_render(path); printf("wrote %s\n", path);
     SDL_Quit();
@@ -1095,10 +1116,13 @@ int main(int argc, char **argv)
             else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e.motion.state & SDL_BUTTON_LMASK)) {
                 view_yaw -= e.motion.xrel * 0.008f; view_pitch += e.motion.yrel * 0.006f; view_auto = 0;
             } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) view_dist *= 1.f - 0.1f * e.wheel.y;
-            else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) ed_mouse(0, 0, 0, e.wheel.y);
-            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && state == ST_EDIT) {
+            else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) ed_wheel(e.wheel.y);
+            else if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) && state == ST_EDIT) {
+                int ww, wh; SDL_GetWindowSize(win, &ww, &wh);                  /* the HUD's units */
+                ed_button(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button, e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+            } else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_EDIT) {
                 int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
-                ed_mouse(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button, 0);
+                ed_motion(e.motion.x / (float)ww * HW, e.motion.y / (float)wh * VH, e.motion.xrel, e.motion.yrel);
             } else if (e.type == SDL_EVENT_TEXT_INPUT) { if (state == ST_MENU) menu_text(e.text.text); else if (state == ST_EDIT) ed_text(e.text.text); }
             else if (e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) {
                 int on = e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN;          /* also the window's own button: remember it */

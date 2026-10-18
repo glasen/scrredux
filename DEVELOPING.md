@@ -47,6 +47,11 @@ scale the physics is tuned to: 128 original units = the 2.95 m wheelbase, 8.85 m
   pits, Ski Jump's drop and High Jump's far side as landing hills, High Jump's tower lower. The builder opens the
   originals as copies with these edits baked in.
 - `./scrredux --check-tracks` checks the originals against the builder's joining and overlap rules.
+- The track builder (`editor.h`) works in the stadium: `ed_build_scene()` builds the stadium once round the whole grid
+  (`scene_builder`: no track, the grid drawn on the floor, no infield clutter), and the track goes into its own vertex
+  buffer (`tkb`, uploaded as `vbuf_t`), rebuilt 0.08 s after a change. An open track is built with `trk_open`: its
+  open end added, the stretch back to the start marked as a gap, no start line on the road. Ghosts, the selection and
+  the joint poles are drawn each frame from the pieces' cross-sections (`ed_draw3d()`); clicks pick the deck by ray.
 
 The player's files live in SDL's pref folder (`user_path()` in `trackdef.h`, org and app both "SCR Redux"), or in
 `$SCR_HOME` when that is set: `tracks/NAME.trk`, `options.txt`, `controls.txt`, `halloffame.txt`, `replayN.rpl`, and
@@ -149,8 +154,12 @@ Engine and smash are panned left, the rest right, 30% apart. Without the WAVs th
 | `./scrredux --ui-shot out.png "KEYS"` | Plays SDL key names through the menus and builder headless, renders the last frame |
 | `./scrredux --check-tracks` | Checks the original tracks against the builder's rules |
 
-`--ui-shot` script tokens: SDL key names, `shift+Left`, `wait5` (run five seconds of the game), `text:Name` (type into a
-name field).
+`--ui-shot` script tokens: SDL key names (`.` and `,` for those keys), `shift+`, `ctrl+` and `alt+` prefixes in any
+order (`ctrl+shift+Z`), `wait5` (run five seconds of the game), `text:Name` (type into a name field). In the track
+builder also `click:X,Y` (a left click at HUD coordinates, 480 wide at 16:9 and 270 high; `click:X,Y,3` right) and
+`fly:X,Y,Z,YAW,PITCH` (put the camera there, angles in degrees). Ending in the builder, it prints the track checked by
+the builder's rules (joins, overlaps), the selection, the undo depth, the selected joints, the camera and where on
+screen each ghost is.
 
 | Variable | Effect |
 | --- | --- |
