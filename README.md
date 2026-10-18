@@ -37,6 +37,30 @@ Without the `sounds/` folder the game runs silently.
 
 In the menus: Up/Down or the number keys select, Enter confirms, Esc goes back.
 
+**Controls** in the main menu changes the driving keys: two keys each for accelerate, brake, steer left, steer right
+and boost. Enter on a key, then press the new one; Del clears it. A key already in use swaps places with the one it
+replaces. The keys are kept in `save/controls.txt`.
+
+### Gamepad and joystick
+
+Plug in a gamepad or joystick at any time.
+
+| Gamepad | Action |
+| --- | --- |
+| Left stick, D-pad left/right | Steer (the stick steers part way) |
+| Right trigger, A, D-pad up | Accelerate |
+| Left trigger, X, D-pad down | Brake |
+| Right shoulder, B | Boost |
+| Y | Put the car back on the track |
+| Start | Pause |
+| Back | Leave the race (asks first) |
+
+In the menus the D-pad or stick selects, A or Start confirms, B or Back goes back. In replays A pauses, Y changes the
+camera and left/right winds back or forward.
+
+A joystick SDL has no gamepad mapping for (a classic digital stick, say) steers with its stick or hat; forward
+accelerates, back brakes and the first fire button boosts.
+
 ## Racing
 
 You drive from the cockpit. The gauges on the roll cage beside the steering wheel show your speed and the boost you

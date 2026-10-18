@@ -971,6 +971,33 @@ static int handle_key(SDL_Keycode k, SDL_Keymod mod)
     default: return race_key(k);
     }
 }
+/* pads: a button press becomes the key it stands for where the game is; held directions move through the menus */
+static SDL_Keycode pad_key(int b)
+{
+    int a = b == SDL_GAMEPAD_BUTTON_SOUTH, x = b == SDL_GAMEPAD_BUTTON_EAST, y = b == SDL_GAMEPAD_BUTTON_NORTH;
+    int st = b == SDL_GAMEPAD_BUTTON_START, bk = b == SDL_GAMEPAD_BUTTON_BACK;
+    if (ask_quit) return a ? SDLK_Y : x || bk ? SDLK_N : 0;
+    switch (state) {
+    case ST_MENU: if (ct_wait) return x || bk ? SDLK_ESCAPE : 0; /* fall through */
+    case ST_PREVIEW: return a || st ? SDLK_RETURN : x || bk ? SDLK_ESCAPE : 0;
+    case ST_REPLAY: return a || st ? SDLK_SPACE : y ? SDLK_C : x || bk ? SDLK_ESCAPE : 0;
+    case ST_DONE: return a || st ? SDLK_RETURN : bk ? SDLK_ESCAPE : 0;
+    case ST_COUNT: case ST_RACE: return st ? SDLK_P : y ? SDLK_R : bk ? SDLK_ESCAPE : 0;
+    default: return 0;
+    }
+}
+static SDL_Keycode pad_nav(float dt)
+{
+    static const SDL_Keycode NAV[5] = {0, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT};
+    static int was; static float t;
+    PadIn pi = pad_read();
+    int d = pi.up ? 1 : pi.dn ? 2 : pi.lf ? 3 : pi.rt ? 4 : 0;
+    if (state != ST_MENU || ask_quit || ct_wait) { was = d; return 0; }
+    if (d != was) { was = d; t = 0.4f; return NAV[d]; }
+    if (!d || (t -= dt) > 0) return 0;
+    t = 0.12f;
+    return NAV[d];
+}
 static void frame_timers(float frame)
 {
     if (ms_note_t > 0) ms_note_t -= frame;
@@ -1016,6 +1043,7 @@ int main(int argc, char **argv)
     tracks_scan();
     phys_defaults();
     hof_load();
+    ctl_load();
     if (season_peek(0, &sea) || !sea.on) memset(&sea, 0, sizeof sea);
     if (argc >= 2 && !strcmp(argv[1], "--check-tracks")) { ed_check_originals(); return 0; }
     if (argc >= 4 && !strcmp(argv[1], "--ui-shot")) { ui_shot(argv[2], argv[3]); return 0; }
@@ -1047,7 +1075,7 @@ int main(int argc, char **argv)
         run_headless(1, argv[2], (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0, argc > 5 ? atoi(argv[5]) : 0);
         return 0;
     }
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
     win = SDL_CreateWindow("SCR REDUX", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || gpu_init() != 0) { fprintf(stderr, "init failed: %s\n", SDL_GetError()); return 1; }
     snd_open();
@@ -1069,7 +1097,15 @@ int main(int argc, char **argv)
                 int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
                 ed_mouse(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button, 0);
             } else if (e.type == SDL_EVENT_TEXT_INPUT) { if (state == ST_MENU) menu_text(e.text.text); else if (state == ST_EDIT) ed_text(e.text.text); }
-            else if (e.type == SDL_EVENT_KEY_DOWN && (!e.key.repeat || ((state == ST_EDIT || state == ST_MENU) &&
+            else if (e.type == SDL_EVENT_JOYSTICK_ADDED) pad_added(e.jdevice.which);
+            else if (e.type == SDL_EVENT_JOYSTICK_REMOVED) pad_removed(e.jdevice.which);
+            else if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || (e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && !SDL_IsGamepad(e.jbutton.which))) {
+                static const int JOY[2] = {SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST};  /* a joystick's fire buttons */
+                int b = e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ? e.gbutton.button : e.jbutton.button < 2 ? JOY[e.jbutton.button] : -1;
+                SDL_Keycode pk = b >= 0 ? pad_key(b) : 0;
+                if (pk && !handle_key(pk, 0)) running = 0;
+            }
+            else if (e.type == SDL_EVENT_KEY_DOWN && (!e.key.repeat || ((state == ST_EDIT || (state == ST_MENU && ms != MS_CTL)) &&
                      e.key.key != SDLK_RETURN && e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C && e.key.key != SDLK_T))) {
                 if (!handle_key(e.key.key, e.key.mod)) running = 0;
             }
@@ -1077,6 +1113,8 @@ int main(int argc, char **argv)
         uint64_t now = SDL_GetTicksNS();
         float frame = (float)(now - last) * 1e-9f; last = now;
         if (frame > 0.1f) frame = 0.1f;
+        SDL_Keycode pk = pad_nav(frame);
+        if (pk && !handle_key(pk, 0)) running = 0;
         frame_timers(frame);
         if (!paused) {
             acc += frame;

@@ -1606,6 +1606,7 @@ static void draw_sky(void)
 /* ------------------------------------------------------------ game logic */
 static const bool *keys;
 static int autoplay;
+#include "controls.h"
 
 static const char *player_name(void) { return sea.pname[0] ? sea.pname : "Player"; }
 /* season races: three laps against one opponent; practice and the builder's test drive: alone, laps until ESC */
@@ -1711,13 +1712,15 @@ static void game_tick(float dt)
         racetime += dt;
         Car *p = &cars[0], *o = &cars[1];
         if (keys && !autoplay) {
-            float tg = (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) - (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]);
+            PadIn pi = pad_read();
+            float tg = ctl_down(CT_RIGHT) - ctl_down(CT_LEFT);
+            if (tg == 0) tg = pi.steer;                                       /* a stick steers part way */
             float rate = (tg != 0 && p->str * tg >= 0) ? ph.keyrise : ph.keyret;   /* tap = small correction, hold = more lock */
             float goal = tg != 0 ? tg : 0.f, dstr = goal - p->str, stp = rate * dt;
             p->str += clampf(dstr, -stp, stp);
-            p->thr = (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) ? 1.f : 0.f;
-            p->brk = (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) ? 1.f : 0.f;
-            p->bst = keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_LSHIFT];
+            p->thr = ctl_down(CT_ACCEL) ? 1.f : pi.thr;
+            p->brk = ctl_down(CT_BRAKE) ? 1.f : pi.brk;
+            p->bst = ctl_down(CT_BOOST) || pi.bst;
         } else { static float push = -1; if (push < 0) push = getenv("SCR_PUSH") ? (float)atof(getenv("SCR_PUSH")) : 1.f; static float plane = -9; if (plane < -8) plane = getenv("SCR_PLANE") ? (float)atof(getenv("SCR_PLANE")) : -1.f;
                ai_drive(p, plane, 67 * push, 13.f * push, NULL); if (push > 1.f) p->bst = 1; }   /* autopilot ignores the rival: worst case */
         if (o->active) ai_drive(o, 1.8f, opp_vcap, opp_alat, p);

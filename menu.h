@@ -1,7 +1,7 @@
 /* menu.h - the menus: the logo and a teal panel in the race preview's chequered border, over the stadium. Hall of Fame,
- * Practise, the Racing Season, Load/Save/Replay and the track builder. Included by scr_main.h */
-enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS };
-static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused;
+ * Practise, the Racing Season, Load/Save/Replay, the track builder and the driving keys. Included by scr_main.h */
+enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS, MS_CTL };
+static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused, ct_col, ct_wait;
 static char name_buf[16], ms_note[80];
 static float ms_note_t;
 static int rp_slot[RP_SLOTS], nrp_list; static RHead rp_list[RP_SLOTS];
@@ -108,8 +108,8 @@ static int main_items(const char **it)
 {
     it[0] = "Hall of Fame"; it[1] = "Practise";
     it[2] = sea.on ? "Continue the Racing Season" : "Start the Racing Season";
-    it[3] = "Load/Save/Replay"; it[4] = "Track Builder";
-    return 5;
+    it[3] = "Load/Save/Replay"; it[4] = "Track Builder"; it[5] = "Controls";
+    return 6;
 }
 /* a table row: cell i at column at[i] (in widths of the old 5x7 font's characters), right-aligned there if at[i] < 0 */
 static void hud_row(float x, float y, float sc, uint32_t col, int n, const float *at, const char *const *cell)
@@ -299,6 +299,40 @@ static void draw_replays(void)
     draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS], 0);
     menu_help("ENTER WATCH   ESC BACK");
 }
+/* the driving keys: an action per line, its two keys in cells on the right; then the gamepad's layout */
+#define CT_ROWS (NCT + 2)
+static void key_label(char *b, size_t n, SDL_Scancode sc)
+{
+    const char *s = sc ? SDL_GetKeyName(SDL_GetKeyFromScancode(sc, 0, false)) : "";
+    snprintf(b, n, "%s", s && s[0] ? s : sc ? SDL_GetScancodeName(sc) : "-");
+}
+static void draw_controls(void)
+{
+    hud_text_c(80, "CONTROLS", 1.5f, 0xF0C040);
+    float W = panel_w() - 30, x = (HW - W) / 2, cw = 74, h = 15;
+    static const char *const tail[2] = {"Default keys", "Back"};
+    int sel = msel[MS_CTL];
+    for (int r = 0; r < CT_ROWS; r++) {
+        float y = 94 + r * 18;
+        draw_bar(x, y, W, h, r < NCT ? CT_NAME[r] : tail[r - NCT], r == sel, 1.1f);
+        if (r >= NCT) continue;
+        for (int k = 0; k < 2; k++) {
+            float cx = x + W - (2 - k) * (cw + 3) - 1; int on = r == sel && k == ct_col;
+            char b[48]; key_label(b, sizeof b, ctl[r][k]);
+            if (on && ct_wait) snprintf(b, sizeof b, "%s", (SDL_GetTicks() / 300) & 1 ? "PRESS A KEY" : "");
+            hud_rect(cx - 1, y + 1, cw + 2, h - 2, on ? 0xFFFFFF : 0x0A2426);
+            plate(cx, y + 2, cw, h - 4, 0x2A2C30, 0x060608);
+            float sc = fminf(1.f, (cw - 6) / fmaxf(text_width(b, 1), 1));
+            hud_text_raw(cx + (cw - text_width(b, sc)) / 2, y + (h - 7 * sc) / 2, b, sc, on ? (ct_wait ? 0x60FF60 : 0xFFE060) : 0xE8ECEC);
+        }
+    }
+    const char *pad = pad_name(); char b[96];
+    snprintf(b, sizeof b, "%.60s", pad ? pad : "No gamepad or joystick connected");
+    hud_text_c(224, b, 1, pad ? 0x60FF60 : 0x9C9CA4);
+    const char *pl = "PAD: STICK/D-PAD STEER   RT/A/UP GAS   LT/X/DOWN BRAKE   RB/B BOOST   Y RESCUE   START PAUSE   BACK QUIT";
+    hud_text_c(236, pl, fminf(0.8f, (panel_w() - 12) / text_width(pl, 1)), 0xB0B0B8);
+    menu_help(ct_wait ? "PRESS THE NEW KEY   ESC CANCEL" : "ENTER CHANGE   LEFT/RIGHT KEY 1/2   DEL CLEAR   ESC BACK");
+}
 static void draw_menu(void)
 {
     float x0 = menu_frame();
@@ -316,6 +350,7 @@ static void draw_menu(void)
                  menu_help("ENTER CHOOSE   ESC BACK"); break;
     case MS_SLOTS: draw_slots(); break;
     case MS_REPLAYS: draw_replays(); break;
+    case MS_CTL: draw_controls(); break;
     }
     if (ms_note_t > 0) hud_text_c(VH - 26, ms_note, 1.5f, 0x60FF60);
     if (ask_quit) ask_box(NULL);
@@ -325,7 +360,7 @@ static void draw_menu(void)
 static void ed_open(void);
 static void menu_go(int screen)
 {
-    ms = screen; ms_scroll = 0; ask_quit = 0;
+    ms = screen; ms_scroll = 0; ask_quit = 0; ct_wait = 0;
     if (screen == MS_NAME) { snprintf(name_buf, sizeof name_buf, "%s", sea.pname[0] ? sea.pname : "Player"); if (win) SDL_StartTextInput(win); }
     else if (win) SDL_StopTextInput(win);
     if (screen == MS_REPLAYS) { rp_scan(); msel[MS_REPLAYS] = 0; }
@@ -515,7 +550,8 @@ static int menu_key(SDL_Keycode k)
         else if (*sel == 1) { msel[MS_PRACTICE] = sel_track < ntrk ? sel_track : 0; menu_go(MS_PRACTICE); }
         else if (*sel == 2) menu_go(sea.on ? MS_SEASON : MS_NAME);
         else if (*sel == 3) menu_go(MS_LSR);
-        else ed_open();
+        else if (*sel == 4) ed_open();
+        else { msel[MS_CTL] = ct_col = 0; menu_go(MS_CTL); }
         break; }
     case MS_HOF:
         if (up) ms_scroll = ms_scroll > 0 ? ms_scroll - 1 : 0;
@@ -572,6 +608,22 @@ static int menu_key(SDL_Keycode k)
         if (dn) *sel = (*sel + 1) % n;
         if (back || (ok && *sel == nrp_list)) menu_go(MS_LSR);
         else if (ok) replay_start(*sel);
+        break; }
+    case MS_CTL: {
+        if (ct_wait) {                 /* the next key is the new one; P, R and F11 stay with pause, rescue and fullscreen */
+            SDL_Scancode sc = SDL_GetScancodeFromKey(k, NULL);
+            if (back) ct_wait = 0;
+            else if (k == SDLK_P || k == SDLK_R || !sc) menu_note("P and R are taken");
+            else { ctl_bind(*sel, ct_col, sc); ct_wait = 0; }
+            break;
+        }
+        if (up) *sel = (*sel + CT_ROWS - 1) % CT_ROWS;
+        if (dn) *sel = (*sel + 1) % CT_ROWS;
+        if (k == SDLK_LEFT || k == SDLK_RIGHT) ct_col ^= 1;
+        if (back || (ok && *sel == NCT + 1)) menu_go(MS_MAIN);
+        else if (ok && *sel == NCT) { ctl_defaults(); ctl_save(); menu_note("Default keys restored"); }
+        else if (ok) ct_wait = 1;
+        else if ((k == SDLK_DELETE || k == SDLK_BACKSPACE) && *sel < NCT) { ctl[*sel][ct_col] = SDL_SCANCODE_UNKNOWN; ctl_save(); }
         break; }
     }
     return 1;
@@ -634,6 +686,7 @@ static void replay_key(SDL_Keycode k)
 static void replay_hold(void)          /* held keys: wind back or forward at four times the speed */
 {
     rp_speed = 1;
-    if (keys && keys[SDL_SCANCODE_RIGHT]) rp_speed = 4;
-    if (keys && keys[SDL_SCANCODE_LEFT]) rp_speed = -4;
+    PadIn pi = pad_read();
+    if ((keys && keys[SDL_SCANCODE_RIGHT]) || pi.rt) rp_speed = 4;
+    if ((keys && keys[SDL_SCANCODE_LEFT]) || pi.lf) rp_speed = -4;
 }
