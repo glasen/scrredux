@@ -109,8 +109,8 @@ A single-seat tube-frame buggy: roll cage, exposed V8 with eight chrome zoomie p
 four wheels, steering rig. The game loads `models/stuntcar.scm` (~32k triangles, shared by both cars, paint tinted per
 car) and does not start without it.
 
-`../stunt_car_racer/export_game_model.py` writes `stuntcar.scm` from the low-poly Blender model
-`models/stuntcar.blend` (also exported as `models/stuntcar.glb`). `car_model.h` poses wishbones, uprights, coilovers
+`stuntcar.scm` is exported from the low-poly Blender model `models/stuntcar.blend` (also exported as
+`models/stuntcar.glb`). `car_model.h` poses wishbones, uprights, coilovers
 and links from the physics' wheel travel and steering.
 
 `./scrredux --view` opens the model viewer; Z stops the animation (wheels straight, at ride height).

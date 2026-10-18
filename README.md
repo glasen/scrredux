@@ -3,20 +3,18 @@
 A remake-in-spirit of the Amiga classic *Stunt Car Racer* (SCR): race a V8 buggy round elevated roller-coaster tracks in
 a stadium, take on eleven computer drivers in a four-division league, and build your own tracks.
 
-![From the cockpit, on the run-up to High Jump](screenshots/cockpit.jpg)
-
 ## Screenshots
 
 | | |
 | --- | --- |
-| ![Over the top of High Jump](screenshots/jump.jpg) | ![The chase camera on High Jump](screenshots/chase.jpg) |
-| Over the top of High Jump | The chase camera |
-| ![Roller Coaster from above](screenshots/roller-coaster.jpg) | ![The main menu](screenshots/main-menu.jpg) |
-| Roller Coaster from above | The main menu |
-| ![The Racing Season](screenshots/season.jpg) | ![The track builder](screenshots/builder.jpg) |
-| The Racing Season | The track builder, with High Jump open |
-| ![The model viewer](screenshots/model-viewer.jpg) | |
-| The model viewer | |
+| ![From the cockpit](screenshots/cockpit.jpg) | ![Over the top of High Jump](screenshots/jump.jpg) |
+| From the cockpit, on the run-up to High Jump | Over the top of High Jump |
+| ![The chase camera](screenshots/chase.jpg) | ![Roller Coaster from above](screenshots/roller-coaster.jpg) |
+| The chase camera | Roller Coaster from above |
+| ![The main menu](screenshots/main-menu.jpg) | ![The Racing Season](screenshots/season.jpg) |
+| The main menu | The Racing Season |
+| ![The track builder](screenshots/builder.jpg) | ![The model viewer](screenshots/model-viewer.jpg) |
+| The track builder, with High Jump open | The model viewer |
 
 ## Requirements
 
