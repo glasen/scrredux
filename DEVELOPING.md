@@ -1,4 +1,4 @@
-# Developing Stunt Racer
+# Developing SCR Redux
 
 Single C program on SDL3 + SDL_GPU. Flat-shaded polygons, no textures, SPIR-V shaders only (Vulkan; MoltenVK on macOS).
 
@@ -28,6 +28,8 @@ binary.
 | `editor.h` | Track builder |
 | `audio.h` | Sample mixer; when sounds trigger is decided in `stuntracer.c` |
 | `tools/gen_scr_tracks.py` | Generates `scr_tracks.h` |
+| `font_vec.h` | The text font as triangles (generated, see below) |
+| `tools/gen_font.py` | Generates `font_vec.h` from `fonts/Rajdhani-Bold.ttf` |
 
 ## Tracks
 
@@ -87,6 +89,12 @@ crane picks it up.
   compound (recovery truck, water bowser, ambulance, TV truck, cabins, containers); TV towers, marshal posts, tyre
   stacks and hay bales around.
 - The deck is weathered concrete in precast slabs with rubber laid down in the bends; steel scraping it throws sparks.
+- Text, on the HUD and on signs in the world, is Rajdhani Bold drawn as flat triangles, smoothed by MSAA (no textures).
+  `font_vec.h` holds printable ASCII with the cap height as 1. Regenerate it with
+  `tools/gen_font.py fonts/Rajdhani-Bold.ttf > font_vec.h`, which reads TrueType outlines without fontTools.
+  Text sizes are still given in the old 5x7 font's pixels (`sc`): capitals are `7 * sc` tall with their top at `y`.
+- The HUD pass has its own fragment shader (`shaders/hud.frag`) and blends by vertex alpha (`hud_a`): soft shadows and
+  translucent plates in the menus.
 
 ## Car model
 

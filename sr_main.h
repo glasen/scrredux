@@ -5,13 +5,32 @@
 /* ------------------------------------------------------------- HUD (2D) */
 static int mdl_nv;
 static float HW = 480;           /* HUD virtual width (height is VH) */
+static uint8_t hud_a = 255;      /* opacity of what the HUD draws next */
 static void hud_rect(float x, float y, float w, float h, uint32_t col)
 {
     VB *save = cur; cur = &hb; vb_reserve(&hb, 6);
     float x0 = x / (HW * 0.5f) - 1, x1 = (x + w) / (HW * 0.5f) - 1;
     float y0 = 1 - y / (VH * 0.5f), y1 = 1 - (y + h) / (VH * 0.5f);
-    emit(V(x0, y0, 0), col, 0); emit(V(x1, y0, 0), col, 0); emit(V(x1, y1, 0), col, 0);
-    emit(V(x0, y0, 0), col, 0); emit(V(x1, y1, 0), col, 0); emit(V(x0, y1, 0), col, 0);
+    emit(V(x0, y0, 0), col, hud_a); emit(V(x1, y0, 0), col, hud_a); emit(V(x1, y1, 0), col, hud_a);
+    emit(V(x0, y0, 0), col, hud_a); emit(V(x1, y1, 0), col, hud_a); emit(V(x0, y1, 0), col, hud_a);
+    cur = save;
+}
+/* a triangle with a colour at each corner */
+static void hud_tri3(float x0, float y0, uint32_t c0, float x1, float y1, uint32_t c1, float x2, float y2, uint32_t c2)
+{
+    VB *save = cur; cur = &hb; vb_reserve(&hb, 3);
+    float sx = 2.f / HW, sy = 2.f / VH;
+    emit(V(x0 * sx - 1, 1 - y0 * sy, 0), c0, hud_a); emit(V(x1 * sx - 1, 1 - y1 * sy, 0), c1, hud_a); emit(V(x2 * sx - 1, 1 - y2 * sy, 0), c2, hud_a);
+    cur = save;
+}
+/* a rectangle shading from ctop to cbot */
+static void hud_vgrad(float x, float y, float w, float h, uint32_t ctop, uint32_t cbot)
+{
+    VB *save = cur; cur = &hb; vb_reserve(&hb, 6);
+    float x0 = x / (HW * 0.5f) - 1, x1 = (x + w) / (HW * 0.5f) - 1;
+    float y0 = 1 - y / (VH * 0.5f), y1 = 1 - (y + h) / (VH * 0.5f);
+    emit(V(x0, y0, 0), ctop, hud_a); emit(V(x1, y0, 0), ctop, hud_a); emit(V(x1, y1, 0), cbot, hud_a);
+    emit(V(x0, y0, 0), ctop, hud_a); emit(V(x1, y1, 0), cbot, hud_a); emit(V(x0, y1, 0), cbot, hud_a);
     cur = save;
 }
 
@@ -19,7 +38,7 @@ static void hud_tri(float x0, float y0, float x1, float y1, float x2, float y2, 
 {
     VB *save = cur; cur = &hb; vb_reserve(&hb, 3);
     float sx = 2.f / HW, sy = 2.f / VH;
-    emit(V(x0 * sx - 1, 1 - y0 * sy, 0), col, 0); emit(V(x1 * sx - 1, 1 - y1 * sy, 0), col, 0); emit(V(x2 * sx - 1, 1 - y2 * sy, 0), col, 0);
+    emit(V(x0 * sx - 1, 1 - y0 * sy, 0), col, hud_a); emit(V(x1 * sx - 1, 1 - y1 * sy, 0), col, hud_a); emit(V(x2 * sx - 1, 1 - y2 * sy, 0), col, hud_a);
     cur = save;
 }
 static void hud_quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3, uint32_t col)
@@ -34,25 +53,22 @@ static void hud_line(float x0, float y0, float x1, float y1, float w, uint32_t c
     hud_quad(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, col);
 }
 
-static float text_width(const char *s, float sc) { return (float)strlen(s) * 6 * sc; }
+/* text: sc is the old 5x7 font's pixel size, so capitals are 7 * sc tall with their top at y */
+static float text_width(const char *s, float sc) { float w = 0; for (; *s; s++) w += glyph_adv(*s); return w * 7 * sc; }
+typedef struct { float x, base, cap, shear; uint32_t ctop, cbot; } HudGlyph;
+static void hud_glyph_tri(void *u, const float *t)
+{
+    const HudGlyph *h = u;
+#define GV(k) h->x + (t[2 * k] + t[2 * k + 1] * h->shear) * h->cap, h->base - t[2 * k + 1] * h->cap, \
+              (h->ctop == h->cbot ? h->ctop : mixcol(h->ctop, h->cbot, clampf(1 - t[2 * k + 1], 0, 1)))
+    hud_tri3(GV(0), GV(1), GV(2));
+#undef GV
+}
 /* rows shade from col_top to col_bot; shear > 0 leans the letters forward */
 static void hud_text_ex(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
 {
-    for (; *s; s++, x += 6 * sc) {
-        const char *p = strchr(FONT_CHARS, *s);
-        if (!p || !*s) continue;
-        const uint8_t *g = FONT[p - FONT_CHARS];
-        for (int row = 0; row < 7; row++) {
-            int col0 = -1;
-            uint32_t col = ctop == cbot ? ctop : mixcol(ctop, cbot, row / 6.f);
-            float xo = x + (6 - row) * sc * shear;
-            for (int cx = 0; cx <= 5; cx++) {
-                int on = cx < 5 && (g[row] & (0x10 >> cx));
-                if (on && col0 < 0) col0 = cx;
-                if (!on && col0 >= 0) { hud_rect(xo + col0 * sc, y + row * sc, (cx - col0) * sc, sc, col); col0 = -1; }
-            }
-        }
-    }
+    HudGlyph h = {x, y + 7 * sc, 7 * sc, shear, ctop, cbot};
+    for (; *s; s++) { glyph_tris(*s, hud_glyph_tri, &h); h.x += glyph_adv(*s) * h.cap; }
 }
 static void hud_text_raw(float x, float y, const char *s, float sc, uint32_t col) { hud_text_ex(x, y, s, sc, col, col, 0); }
 static void hud_text(float x, float y, const char *s, float sc, uint32_t col)
@@ -62,7 +78,7 @@ static void hud_text(float x, float y, const char *s, float sc, uint32_t col)
 }
 static void hud_text_c(float y, const char *s, float sc, uint32_t col)
 {
-    hud_text((HW - text_width(s, sc) + sc) / 2, y, s, sc, col);
+    hud_text((HW - text_width(s, sc)) / 2, y, s, sc, col);
 }
 static void fmt_time(char *b, size_t n, float t)
 {
@@ -214,6 +230,7 @@ static int rtw, rth, msaa = 1, static_gen = -1, static_n;
 static size_t dlsize;
 static SDL_GPUTextureFormat dfmt;
 #define DYN_CAP 400000
+#define HUD_CAP 400000
 
 /* ---- the car model, loaded from models/stuntcar.scm (car_model.h) ---- */
 typedef struct { char name[8]; int role, corner, link; uint32_t first, count; } MGroup;
@@ -277,7 +294,8 @@ static int gpu_init(void)
     }
     SDL_GPUShader *vs = load_shader("game.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 2, 0);
     SDL_GPUShader *fs = load_shader("game.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
-    if (!vs || !fs) return -1;
+    SDL_GPUShader *hfs = load_shader("hud.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+    if (!vs || !fs || !hfs) return -1;
     dfmt = SDL_GPUTextureSupportsFormat(dev, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)
            ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT : SDL_GPU_TEXTUREFORMAT_D24_UNORM;
     if (SDL_GPUTextureSupportsSampleCount(dev, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_SAMPLECOUNT_4) &&
@@ -291,16 +309,22 @@ static int gpu_init(void)
     ctd.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     for (int pass = 0; pass < 2; pass++) {
         SDL_GPUGraphicsPipelineCreateInfo pi; SDL_zero(pi);
-        pi.vertex_shader = vs; pi.fragment_shader = fs;
+        pi.vertex_shader = vs; pi.fragment_shader = pass == 0 ? fs : hfs;
         pi.vertex_input_state.vertex_buffer_descriptions = &vbd; pi.vertex_input_state.num_vertex_buffers = 1;
         pi.vertex_input_state.vertex_attributes = at; pi.vertex_input_state.num_vertex_attributes = 2;
         pi.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
         pi.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL; pi.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
         pi.multisample_state.sample_count = msaa > 1 ? SDL_GPU_SAMPLECOUNT_4 : SDL_GPU_SAMPLECOUNT_1;
+        SDL_GPUColorTargetDescription hctd = ctd;                                 /* the HUD blends by vertex alpha */
+        hctd.blend_state.enable_blend = true;
+        hctd.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA; hctd.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        hctd.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        hctd.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO; hctd.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        hctd.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
         pi.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_GREATER_OR_EQUAL;   /* reversed depth: near = 1, far = 0 */
         pi.depth_stencil_state.enable_depth_test = (pass == 0);
         pi.depth_stencil_state.enable_depth_write = (pass == 0);
-        pi.target_info.color_target_descriptions = &ctd; pi.target_info.num_color_targets = 1;
+        pi.target_info.color_target_descriptions = pass == 0 ? &ctd : &hctd; pi.target_info.num_color_targets = 1;
         pi.target_info.depth_stencil_format = dfmt; pi.target_info.has_depth_stencil_target = true;
         SDL_GPUGraphicsPipeline *pl = SDL_CreateGPUGraphicsPipeline(dev, &pi);
         if (!pl) { fprintf(stderr, "pipeline: %s\n", SDL_GetError()); return -1; }
@@ -341,10 +365,10 @@ static int gpu_init(void)
         if (!sh_samp) { fprintf(stderr, "shadow sampler: %s\n", SDL_GetError()); return -1; }
     }
     SDL_GPUBufferCreateInfo bi; SDL_zero(bi);
-    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (DYN_CAP + 100000) * sizeof(Vtx);
+    bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bi.size = (DYN_CAP + HUD_CAP) * sizeof(Vtx);
     vbuf_d = SDL_CreateGPUBuffer(dev, &bi);
     SDL_GPUTransferBufferCreateInfo tb; SDL_zero(tb);
-    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; tb.size = (DYN_CAP + 100000) * sizeof(Vtx);
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; tb.size = (DYN_CAP + HUD_CAP) * sizeof(Vtx);
     tbuf = SDL_CreateGPUTransferBuffer(dev, &tb);
     if (!vbuf_d || !tbuf) { fprintf(stderr, "buffers: %s\n", SDL_GetError()); return -1; }
     {
@@ -685,7 +709,7 @@ static void gpu_render(const char *shot_path)
     if (state == ST_PREVIEW || state == ST_MENU) preview_cam((float)rtw / rth);
     upload_static();
     build_frame();
-    int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > 100000 ? 100000 : hb.n;
+    int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > HUD_CAP ? HUD_CAP : hb.n;
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
     uint8_t *map = SDL_MapGPUTransferBuffer(dev, tbuf, true);
     memcpy(map, db.v, (size_t)nd * sizeof(Vtx));
@@ -1024,7 +1048,7 @@ int main(int argc, char **argv)
         return 0;
     }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
-    win = SDL_CreateWindow("STUNT RACER", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    win = SDL_CreateWindow("SCR REDUX", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || gpu_init() != 0) { fprintf(stderr, "init failed: %s\n", SDL_GetError()); return 1; }
     snd_open();
     keys = SDL_GetKeyboardState(NULL);

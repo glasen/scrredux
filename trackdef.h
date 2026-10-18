@@ -66,7 +66,7 @@ static int track_save(TrackDef *td)
     data_path(path, sizeof path, "tracks/"); snprintf(path + strlen(path), sizeof path - strlen(path), "%s", fn);
     FILE *f = fopen(path, "w");
     if (!f) return -1;
-    fprintf(f, "STUNTRACER-TRACK 1\nNAME %s\nSTART %d\n", td->name, td->start);
+    fprintf(f, "SCRREDUX-TRACK 1\nNAME %s\nSTART %d\n", td->name, td->start);
     for (int p = 0; p < td->np; p++) {
         const TPiece *pc = &td->p[p];
         fprintf(f, "PIECE %d %d %d %d %.2f", pc->cx, pc->cz, pc->at, pc->shape, pc->amp);
@@ -87,7 +87,7 @@ static int track_load(const char *path, TrackDef *td)
     if (!f) return -1;
     char line[2048];
     memset(td, 0, sizeof *td); td->orig = -1;
-    int ok = fgets(line, sizeof line, f) && !strncmp(line, "STUNTRACER-TRACK", 16);
+    int ok = fgets(line, sizeof line, f) && (!strncmp(line, "SCRREDUX-TRACK", 14) || !strncmp(line, "STUNTRACER-TRACK", 16));   /* also the old name */
     while (ok && fgets(line, sizeof line, f)) {
         line[strcspn(line, "\r\n")] = 0;
         if (!strncmp(line, "NAME ", 5)) snprintf(td->name, sizeof td->name, "%s", line + 5);

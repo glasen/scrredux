@@ -1,6 +1,6 @@
-# Stunt Racer
+# SCR Redux
 
-A remake-in-spirit of the Amiga classic *Stunt Car Racer*: race a V8 buggy round elevated roller-coaster tracks in
+A remake-in-spirit of the Amiga classic *Stunt Car Racer* (SCR): race a V8 buggy round elevated roller-coaster tracks in
 a stadium, take on eleven computer drivers in a four-division league, and build your own tracks.
 
 ## Requirements
@@ -116,6 +116,9 @@ the turntable. N changes the paint, R hides the roll cage, E the intake, F toggl
 How the game is built, and the debugging tools, are described in [DEVELOPING.md](DEVELOPING.md).
 
 ## Credits
+
+The text font is [Rajdhani](https://fonts.google.com/specimen/Rajdhani) by the Indian Type Foundry, under the SIL Open
+Font License.
 
 The track layouts and sound effects come from the original *Stunt Car Racer* by Geoff Crammond, via the
 [StuntCarRacer-X](https://github.com/Team-Resurgent/StuntCarRacer-X) remake.

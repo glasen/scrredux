@@ -1,6 +1,5 @@
-/* menu.h - the menus, like the original's: logo, division, SELECT and grey bars (the chosen one orange) between two
- * wooden posts, over the stadium. Hall of Fame, Practise, the Racing Season, Load/Save/Replay and the track builder.
- * Included by sr_main.h */
+/* menu.h - the menus: the logo and a teal panel in the race preview's chequered border, over the stadium. Hall of Fame,
+ * Practise, the Racing Season, Load/Save/Replay and the track builder. Included by sr_main.h */
 enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS };
 static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused;
 static char name_buf[16], ms_note[80];
@@ -15,43 +14,71 @@ static void menu_note(const char *s) { snprintf(ms_note, sizeof ms_note, "%s", s
 static void fmt_time2(char *b, size_t n, float t) { if (t > 0) fmt_time(b, n, t); else snprintf(b, n, "-:--.-"); }
 static void track_title(char *b, size_t n, int t) { snprintf(b, n, "The %s", trk[t].name); }
 
-/* the title logo: italic two-tone lettering with a dark drop shadow */
+/* a soft shadow under a box: translucent layers, each a little larger */
+static void soft_shadow(float x, float y, float w, float h, float r)
+{
+    hud_a = 22;
+    for (int i = 1; i <= 6; i++) { float e = r * i / 6.f; hud_rect(x - e + r * 0.4f, y - e + r * 0.6f, w + 2 * e, h + 2 * e, 0x000000); }
+    hud_a = 255;
+}
+/* a raised plate: vertical gradient, light top edge, dark bottom edge */
+static void plate(float x, float y, float w, float h, uint32_t ctop, uint32_t cbot)
+{
+    hud_vgrad(x, y, w, h, ctop, cbot);
+    hud_a = 70; hud_rect(x, y, w, 1, 0xFFFFFF); hud_rect(x, y + h - 1, w, 1, 0x000000); hud_a = 255;
+}
+/* the preview's chequered border, q wide, with the thin white line inside */
+static void chq_border(float x0, float y0, float x1, float y1, float q)
+{
+    int n = (int)roundf((x1 - x0) / q), m = (int)roundf((y1 - y0) / q);
+    float w = (x1 - x0) / n, h = (y1 - y0) / m;
+    for (int j = 0; j < m; j++) { hud_rect(x0, y0 + j * h, q, h, j & 1 ? 0xD8D8D8 : 0x0C0C0C); hud_rect(x1 - q, y0 + j * h, q, h, (n - 1 + j) & 1 ? 0xD8D8D8 : 0x0C0C0C); }
+    for (int i = 0; i < n; i++) { hud_rect(x0 + i * w, y0, w, q, i & 1 ? 0xD8D8D8 : 0x0C0C0C); hud_rect(x0 + i * w, y1 - q, w, q, (i + m - 1) & 1 ? 0xD8D8D8 : 0x0C0C0C); }
+    hud_rect(x0 + q, y0 + q, x1 - x0 - 2 * q, 1, 0xF4F4F4); hud_rect(x0 + q, y1 - q - 1, x1 - x0 - 2 * q, 1, 0xF4F4F4);
+    hud_rect(x0 + q, y0 + q, 1, y1 - y0 - 2 * q, 0xF4F4F4); hud_rect(x1 - q - 1, y0 + q, 1, y1 - y0 - 2 * q, 0xF4F4F4);
+}
+/* text with a soft shadow */
+static void soft_text(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
+{
+    hud_a = 60; hud_text_ex(x + sc * 0.9f, y + sc * 0.9f, s, sc, 0, 0, shear);
+    hud_a = 110; hud_text_ex(x + sc * 0.45f, y + sc * 0.45f, s, sc, 0, 0, shear);
+    hud_a = 255; hud_text_ex(x, y, s, sc, ctop, cbot, shear);
+}
+/* the title logo: italic lettering, SCR in red and REDUX in white */
 static void draw_logo(float y)
 {
-    const char *s = "STUNT CAR RACER";
-    float sc = fminf(4.2f, (HW - 30) / (15 * 6.f)), x = (HW - text_width(s, sc)) / 2;
-    hud_text_ex(x + sc * 0.7f, y + sc * 0.7f, s, sc, 0x200808, 0x200808, 0.3f);
-    hud_text_ex(x, y, s, sc, 0xFFC890, 0xC81810, 0.3f);
+    const char *s = "SCR REDUX";
+    float sc = fminf(5.f, (HW - 60) / (9 * 6.f)), x = (HW - text_width(s, sc)) / 2;
+    soft_text(x, y, "SCR", sc, 0xFF7A5A, 0xC01C10, 0.3f);
+    soft_text(x + text_width("SCR ", sc), y, "REDUX", sc, 0xFFFFFF, 0xB8C4C8, 0.3f);
 }
-static void wood_post(float x, float y0, float w)
-{
-    hud_rect(x, y0, w, VH - y0, 0x7A4A24);
-    hud_rect(x, y0, w * 0.22f, VH - y0, 0xA8703C);
-    hud_rect(x + w * 0.78f, y0, w * 0.22f, VH - y0, 0x55311A);
-    for (int k = 0; k < 14; k++) {                                  /* grain and knots */
-        uint32_t h = hash2((int)x * 7 + k, 31);
-        float gy = y0 + 6 + (h % 1000) / 1000.f * (VH - y0 - 12), gx = x + w * (0.3f + 0.4f * ((h >> 10) & 255) / 255.f);
-        hud_rect(gx, gy, 1.f, 5.f + (h >> 20) % 9, 0x5A3418);
-    }
-    hud_rect(x - 1, y0 - 3, w + 2, 4, 0x8E5A2C);                    /* sawn top */
-}
-/* the frame every menu screen shares; returns the panel's left edge */
+/* the frame every menu screen shares: a teal panel in a chequered border; returns the panel's left edge */
 static float menu_frame(void)
 {
     float W = panel_w(), x0 = (HW - W) / 2;
-    draw_logo(10);
+    draw_logo(8);
     char b[32]; snprintf(b, sizeof b, "DIVISION %s", ROMAN[sea.on ? player_div() : 3]);
-    hud_text_c(55, b, 2, 0xF08A28);
-    hud_rect(x0 - 4, 76, W + 8, VH - 76, 0x26262A);
-    wood_post(x0 - 26, 70, 20); wood_post(x0 + W + 6, 70, 20);
+    float tw = text_width(b, 1.5f) + 20, tx = (HW - tw) / 2;
+    soft_shadow(tx, 50, tw, 16, 3);
+    hud_rect(tx - 1.5f, 48.5f, tw + 3, 19, 0xB4B4B4); plate(tx, 50, tw, 16, 0x2A2C30, 0x060608);
+    hud_text_c(50 + (16 - 7 * 1.5f) / 2, b, 1.5f, 0xF0A040);
+    soft_shadow(x0 - 8, 71, W + 16, VH - 73, 6);
+    chq_border(x0 - 8, 71, x0 + W + 8, VH - 2, 4);
+    plate(x0 - 3, 76, W + 6, VH - 83, 0x24767A, 0x123E42);
     return x0;
 }
+/* a menu line: dark plate, the chosen one gold with a chequered flag at its start */
 static void draw_bar(float x, float y, float w, float h, const char *s, int on, float sc)
 {
-    uint32_t body = on ? 0xF08C1C : 0xA8A8A2, hi = on ? 0xFFC478 : 0xD8D8D2, lo = on ? 0x9A4A08 : 0x56565A;
-    hud_rect(x, y, w, h, lo); hud_rect(x, y, w - 1, h - 1, hi); hud_rect(x + 1, y + 1, w - 2, h - 2, body);
-    hud_rect(x + w - 9, y + h / 2 - 0.75f, 4, 1.5f, 0x303030);
-    hud_text_raw(x + 7, y + (h - 7 * sc) / 2, s, sc, on ? 0x101010 : 0x1A1A1A);
+    const char *num = NULL;
+    if (s[0] >= '1' && s[0] <= '9' && s[1] == '.') { num = s; s += 3; }
+    soft_shadow(x, y, w, h, 2);
+    hud_rect(x - 1, y - 1, w + 2, h + 2, on ? 0xFFE0A0 : 0x0A2426);
+    if (on) plate(x, y, w, h, 0xFFC860, 0xE07818); else plate(x, y, w, h, 0x1C2224, 0x0A0C0E);
+    float fx = x + 4, q = h / 4.f;
+    if (on) for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) hud_rect(fx + i * q, y + h / 2 - q + j * q, q, q, (i + j) & 1 ? 0xF4F4F4 : 0x101010);
+    hud_text_raw(x + 9 + h * 0.5f + 2, y + (h - 7 * sc) / 2, s, sc, on ? 0x201008 : 0xE8ECEC);
+    if (num) { char n[2] = {num[0], 0}; hud_text_raw(x + w - 6 - text_width(n, sc * 0.8f), y + (h - 7 * sc * 0.8f) / 2, n, sc * 0.8f, on ? 0x804010 : 0x6A8A8C); }
 }
 static void draw_bars_sc(float y, const char *const *it, int n, int sel, int numbered, float sc)
 {
@@ -59,18 +86,20 @@ static void draw_bars_sc(float y, const char *const *it, int n, int sel, int num
     for (int i = 0; i < n; i++) {
         char b[96];
         if (numbered) snprintf(b, sizeof b, "%d. %s", i + 1, it[i]); else snprintf(b, sizeof b, "%s", it[i]);
-        draw_bar(x, y + i * BAR_GAP, W, BAR_H, b, i == sel, fminf(sc, (W - 18) / text_width(b, 1)));
+        draw_bar(x, y + i * BAR_GAP, W, BAR_H, b, i == sel, fminf(sc, (W - 40) / text_width(numbered ? b + 3 : b, 1)));
     }
 }
-static void draw_bars(float y, const char *const *it, int n, int sel, int numbered) { draw_bars_sc(y, it, n, sel, numbered, 1.5f); }
-static void menu_help(const char *s) { hud_text_c(VH - 12, s, 1, 0x9C9CA4); }
+static void draw_bars(float y, const char *const *it, int n, int sel, int numbered) { draw_bars_sc(y, it, n, sel, numbered, 1.3f); }
+static void menu_help(const char *s) { hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC); }
 /* "Really exit?": Y yes, N or ESC no */
 static void ask_box(const char *sub)
 {
-    float w = 236, h = sub ? 46 : 32, x = (HW - w) / 2, y = 96;
-    hud_rect(x - 2, y - 2, w + 4, h + 4, 0xF08C1C); hud_rect(x, y, w, h, 0x18181C);
-    hud_text_c(y + 9, "REALLY EXIT?  Y/N", 2, 0xFFFFFF);
-    if (sub) hud_text_c(y + 31, sub, 1, 0xFF8070);
+    float w = 244, h = sub ? 54 : 40, x = (HW - w) / 2, y = 92;
+    soft_shadow(x, y, w, h, 8);
+    chq_border(x, y, x + w, y + h, 4);
+    plate(x + 5, y + 5, w - 10, h - 10, 0x2A2C30, 0x060608);
+    hud_text_c(y + 13, "REALLY EXIT?  Y/N", 2, 0xFFFFFF);
+    if (sub) hud_text_c(y + 35, sub, 1, 0xFF8070);
 }
 static int ask_answer(SDL_Keycode k) { return k == SDLK_Y ? 1 : k == SDLK_N || k == SDLK_ESCAPE ? 0 : -1; }
 
@@ -82,21 +111,30 @@ static int main_items(const char **it)
     it[3] = "Load/Save/Replay"; it[4] = "Track Builder";
     return 5;
 }
+/* a table row: cell i at column at[i] (in widths of the old 5x7 font's characters), right-aligned there if at[i] < 0 */
+static void hud_row(float x, float y, float sc, uint32_t col, int n, const float *at, const char *const *cell)
+{
+    for (int i = 0; i < n; i++) {
+        float cx = x + fabsf(at[i]) * 6 * sc;
+        hud_text(at[i] < 0 ? cx - text_width(cell[i], sc) : cx, y, cell[i], sc, col);
+    }
+}
 static void draw_hof(float x0)
 {
-    float W = panel_w();
     hud_text_c(80, "HALL of FAME", 1.5f, 0xF0C040);
-    hud_text(x0 + 4, 96, "TRACK            LAP RECORD          RACE RECORD", 1, 0xF08A28);
+    static const float hat[3] = {0, 17, 36}, at[5] = {0, 17, -34, 36, -54};
+    const char *head[3] = {"TRACK", "LAP RECORD", "RACE RECORD"};
+    hud_row(x0 + 4, 96, 1, 0xF08A28, 3, hat, head);
     int n = ntrk, vis = 15, first = clampf(ms_scroll, 0, fmaxf(0, n - vis));
     for (int r = 0; r < vis && first + r < n; r++) {
         const TrackDef *td = &trk[first + r];
         const Hof *h = hof_get(td->name);
-        char b[128], l[16], rr[16];
+        char l[16], rr[16], lb[16], rb[16];
         fmt_time2(l, sizeof l, h ? h->lap : 0); fmt_time2(rr, sizeof rr, h ? h->race : 0);
-        snprintf(b, sizeof b, "%-16.16s %-10.10s %6s  %-10.10s %7s", td->name, h && h->lap > 0 ? h->lapby : "-", l, h && h->race > 0 ? h->raceby : "-", rr);
-        hud_text(x0 + 4, 108 + r * 10, b, 1, first + r < SCR_NTRACKS ? 0xE8E8EC : 0xA0D0FF);
+        snprintf(lb, sizeof lb, "%.12s", h && h->lap > 0 ? h->lapby : "-"); snprintf(rb, sizeof rb, "%.12s", h && h->race > 0 ? h->raceby : "-");
+        const char *cell[5] = {td->name, lb, l, rb, rr};
+        hud_row(x0 + 4, 108 + r * 10, 1, first + r < SCR_NTRACKS ? 0xE8E8EC : 0xA0D0FF, 5, at, cell);
     }
-    (void)W;
     menu_help("UP/DOWN SCROLL   ESC BACK");
 }
 static void draw_practice(void)
@@ -109,7 +147,7 @@ static void draw_practice(void)
     for (int r = 0; r < vis && ms_scroll + r < n; r++) {
         int i = ms_scroll + r; char b[64];
         snprintf(b, sizeof b, "%s%s", trk[i].name, i < SCR_NTRACKS ? "" : "  (own)");
-        draw_bar(x, 96 + r * 17, W, 14, b, i == sel, 1.2f);
+        draw_bar(x, 96 + r * 17, W, 14, b, i == sel, 1.f);
     }
     menu_help("ENTER DRIVE   ESC BACK   (ESC IN THE CAR ENDS PRACTISE)");
 }
@@ -118,9 +156,10 @@ static void draw_name(void)
     hud_text_c(96, "A new Racing Season", 1.5f, 0xF0C040);
     hud_text_c(122, "Enter your name:", 1.5f, 0xE8E8EC);
     float W = 170, x = (HW - W) / 2;
-    hud_rect(x, 140, W, 20, 0x56565A); hud_rect(x + 1, 141, W - 2, 18, 0x101014);
+    soft_shadow(x, 140, W, 20, 3);
+    hud_rect(x - 1.5f, 138.5f, W + 3, 23, 0xB4B4B4); plate(x, 140, W, 20, 0x2A2C30, 0x060608);
     char b[24]; snprintf(b, sizeof b, "%s%s", name_buf, (SDL_GetTicks() / 400) & 1 ? "_" : "");
-    hud_text_raw(x + 6, 146, b, 1.5f, 0xFFE060);
+    hud_text_raw(x + 6, 140 + (20 - 7 * 1.5f) / 2, b, 1.5f, 0xFFE060);
     hud_text_c(176, "You start in DIVISION 4 against", 1, 0xB0B0B8);
     hud_text_c(188, "Jumping Jack and Road Hog.", 1, 0xB0B0B8);
     menu_help("ENTER START   ESC BACK");
@@ -128,13 +167,16 @@ static void draw_name(void)
 static void div_rows(const Season *s, int d, float x, float y, float sc, int hl)
 {
     int tab[3], w = sc < 1 ? 11 : 13; div_table(s, d, tab);
-    char b[96];
-    snprintf(b, sizeof b, "%-*s %5s %3s %3s %3s", w, "DRIVER", sc < 1 ? "RACED" : "RACED", "WIN", "LAP", "PTS");
-    hud_text(x, y, b, sc, 0xF08A28);
+    const float at[5] = {0, -(w + 6.f), -(w + 10.f), -(w + 14.f), -(w + 18.f)};
+    const char *head[5] = {"DRIVER", "RACED", "WIN", "LAP", "PTS"};
+    hud_row(x, y, sc, 0xF08A28, 5, at, head);
     for (int r = 0; r < 3; r++) {
         int i = tab[r];
-        snprintf(b, sizeof b, "%-*.*s %5d %3d %3d %3d", w, w, i == PLAYER ? s->pname : DRV_NAME[i], s->raced[i], s->wins[i], s->lapp[i], s->pts[i]);
-        hud_text(x, y + (r + 1) * 10 * sc, b, sc, hl && i == PLAYER ? 0xFFE060 : 0xE8E8EC);
+        char nm[16], c[4][8];
+        snprintf(nm, sizeof nm, "%.*s", w, i == PLAYER ? s->pname : DRV_NAME[i]);
+        snprintf(c[0], 8, "%d", s->raced[i]); snprintf(c[1], 8, "%d", s->wins[i]); snprintf(c[2], 8, "%d", s->lapp[i]); snprintf(c[3], 8, "%d", s->pts[i]);
+        const char *cell[5] = {nm, c[0], c[1], c[2], c[3]};
+        hud_row(x, y + (r + 1) * 10 * sc, sc, hl && i == PLAYER ? 0xFFE060 : 0xE8E8EC, 5, at, cell);
     }
 }
 static const char *season_items[2] = {"Race", "Main Menu"};
@@ -167,11 +209,13 @@ static void draw_season(float x0)
 }
 static void result_line(float x, float y, int drv, float t, float lap, int pts, const char *why)
 {
-    char b[96], tt[16], ll[16];
+    char nm[16], tt[16], ll[16], p[8];
     if (t > 0) fmt_time(tt, sizeof tt, t); else snprintf(tt, sizeof tt, "%s", why);
     fmt_time2(ll, sizeof ll, lap);
-    snprintf(b, sizeof b, "%-13.13s %9s %9s    +%d", drv_name(drv), tt, ll, pts);
-    hud_text(x, y, b, 1.2f, drv == PLAYER ? 0xFFE060 : 0xE8E8EC);
+    snprintf(nm, sizeof nm, "%.13s", drv_name(drv)); snprintf(p, sizeof p, "+%d", pts);
+    static const float at[4] = {0, -23, -33, 37};
+    const char *cell[4] = {nm, tt, ll, p};
+    hud_row(x, y, 1.2f, drv == PLAYER ? 0xFFE060 : 0xE8E8EC, 4, at, cell);
 }
 static void draw_result(float x0)
 {
@@ -179,7 +223,9 @@ static void draw_result(float x0)
     hud_text_c(80, "RACE RESULT", 1.5f, 0xF0C040);
     char b[128], t[48]; track_title(t, sizeof t, r->track);
     hud_text_c(96, t, 1, 0xB0B0B8);
-    hud_text(x0 + 16, 110, "DRIVER         RACE-TIME  BEST-LAP  POINTS", 1.2f, 0xF08A28);
+    static const float hat[4] = {0, -23, -33, 36};
+    const char *head[4] = {"DRIVER", "RACE-TIME", "BEST-LAP", "POINTS"};
+    hud_row(x0 + 16, 110, 1.2f, 0xF08A28, 4, hat, head);
     for (int k = 0; k < 2; k++) {
         int dv = k ? r->b : r->a;
         float tm = k ? r->tb : r->ta, lp = k ? r->lb : r->la;
@@ -258,7 +304,7 @@ static void draw_menu(void)
     float x0 = menu_frame();
     const char *it[8];
     switch (ms) {
-    case MS_MAIN: hud_text_c(84, "SELECT", 1.5f, 0xFFFFFF); draw_bars(100, it, main_items(it), msel[MS_MAIN], 1);
+    case MS_MAIN: draw_bars(92, it, main_items(it), msel[MS_MAIN], 1);
                   menu_help("UP/DOWN SELECT   ENTER CHOOSE   ESC QUIT"); break;
     case MS_HOF: draw_hof(x0); break;
     case MS_PRACTICE: draw_practice(); break;
@@ -266,7 +312,7 @@ static void draw_menu(void)
     case MS_SEASON: draw_season(x0); break;
     case MS_RESULT: draw_result(x0); break;
     case MS_END: draw_end(x0); break;
-    case MS_LSR: hud_text_c(84, "SELECT", 1.5f, 0xFFFFFF); draw_bars(100, lsr_items, 4, msel[MS_LSR], 1);
+    case MS_LSR: hud_text_c(84, "LOAD / SAVE / REPLAY", 1.5f, 0xF0C040); draw_bars(100, lsr_items, 4, msel[MS_LSR], 1);
                  menu_help("ENTER CHOOSE   ESC BACK"); break;
     case MS_SLOTS: draw_slots(); break;
     case MS_REPLAYS: draw_replays(); break;
@@ -448,7 +494,7 @@ static void menu_text(const char *t)
     if (ms != MS_NAME) return;
     for (; *t; t++) {
         size_t n = strlen(name_buf);
-        if (n + 1 < sizeof name_buf && (strchr(FONT_CHARS, *t) || (*t == ' ' && n))) { name_buf[n] = *t; name_buf[n + 1] = 0; }
+        if (n + 1 < sizeof name_buf && (strchr(NAME_CHARS, *t) || (*t == ' ' && n))) { name_buf[n] = *t; name_buf[n + 1] = 0; }
     }
 }
 /* returns 0 to quit the game */

@@ -423,7 +423,7 @@ static void ed_draw_list(void)
     hud_text(x, y + 14, "Originals open as a copy", 1, 0x9C9CA4);
     int vis = (int)((16 * ed_cs - 50) / 15), first = ed_list - vis + 1 > 0 ? ed_list - vis + 1 : 0;
     for (int r = 0; r < vis && first + r < ntrk; r++)
-        draw_bar(x, y + 28 + r * 15, w, 13, trk[first + r].name, first + r == ed_list, 1.1f);
+        draw_bar(x, y + 28 + r * 15, w, 13, trk[first + r].name, first + r == ed_list, 0.95f);
 }
 static void ed_draw(void)
 {
@@ -506,7 +506,7 @@ static void ed_text(const char *t)
     if (ed_mode != EM_NAME) return;
     for (; *t; t++) {
         size_t n = strlen(ed_name);
-        if (n + 1 < sizeof ed_name && (strchr(FONT_CHARS, toupper((unsigned char)*t)) || (*t == ' ' && n))) { ed_name[n] = (char)toupper((unsigned char)*t); ed_name[n + 1] = 0; }
+        if (n + 1 < sizeof ed_name && (strchr(NAME_CHARS, toupper((unsigned char)*t)) || (*t == ' ' && n))) { ed_name[n] = (char)toupper((unsigned char)*t); ed_name[n + 1] = 0; }
     }
 }
 static void ed_name_begin(void)
