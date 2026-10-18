@@ -73,9 +73,8 @@ static float menu_frame(void)
 /* a menu line: dark plate, the chosen one gold with a chequered flag at its start */
 static void draw_bar(float x, float y, float w, const char *s, int on)
 {
-    const char *num = NULL; const float h = BAR_H, sc = BAR_SC;
-    if (s[0] >= '1' && s[0] <= '9' && s[1] == '.') { num = s; s += 3; }
-    char b[96]; float tx = x + 9 + h * 0.5f + 2, room = x + w - (num ? 18 : 6) - tx;
+    const float h = BAR_H, sc = BAR_SC;
+    char b[96]; float tx = x + 9 + h * 0.5f + 2, room = x + w - 6 - tx;
     snprintf(b, sizeof b, "%s", s);
     if (text_width(b, sc) > room) {                                     /* too long: cut short, never smaller */
         for (size_t n = strlen(b); n > 0 && text_width(b, sc) > room; ) { b[--n] = 0; if (n >= 3) memcpy(b + n - 3, "...", 3); }
@@ -86,16 +85,11 @@ static void draw_bar(float x, float y, float w, const char *s, int on)
     float fx = x + 4, q = h / 4.f;
     if (on) for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) hud_rect(fx + i * q, y + h / 2 - q + j * q, q, q, (i + j) & 1 ? 0xF4F4F4 : 0x101010);
     hud_text_raw(tx, y + (h - 7 * sc) / 2, b, sc, on ? 0x201008 : 0xE8ECEC);
-    if (num) { char n[2] = {num[0], 0}; hud_text_raw(x + w - 6 - text_width(n, sc * 0.8f), y + (h - 7 * sc * 0.8f) / 2, n, sc * 0.8f, on ? 0x804010 : 0x6A8A8C); }
 }
-static void draw_bars(float y, const char *const *it, int n, int sel, int numbered)
+static void draw_bars(float y, const char *const *it, int n, int sel)
 {
     float W = panel_w() - 30, x = (HW - W) / 2;
-    for (int i = 0; i < n; i++) {
-        char b[96];
-        if (numbered) snprintf(b, sizeof b, "%d. %s", i + 1, it[i]); else snprintf(b, sizeof b, "%s", it[i]);
-        draw_bar(x, y + i * BAR_GAP, W, b, i == sel);
-    }
+    for (int i = 0; i < n; i++) draw_bar(x, y + i * BAR_GAP, W, it[i], i == sel);
 }
 /* the help line at the bottom; a note (Season saved, ...) takes its place while it shows */
 static void menu_help(const char *s) { if (ms_note_t <= 0) hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC); }
@@ -208,10 +202,10 @@ static void draw_season(float x0)
         char l[16]; fmt_time2(l, sizeof l, h ? h->lap : 0);
         snprintf(b, sizeof b, "%s - lap record %s, %s", t0, l, h && h->lap > 0 ? h->lapby : "-");
         hud_text_c(178, b, 1, 0xB0B0B8);
-        draw_bars(196, season_items, 2, msel[MS_SEASON], 0);
+        draw_bars(196, season_items, 2, msel[MS_SEASON]);
     } else {
         hud_text_c(170, "The season is over", 1.5f, 0xFFFFFF);
-        draw_bars(196, season_items + 1, 1, 0, 0);
+        draw_bars(196, season_items + 1, 1, 0);
     }
     menu_help("ENTER CHOOSE   ESC MAIN MENU");
 }
@@ -287,7 +281,7 @@ static void draw_slots(void)
     char lab[4][80]; const char *it[5];
     for (int k = 0; k < 4; k++) { slot_label(k + 1, lab[k], sizeof lab[k]); it[k] = lab[k]; }
     it[4] = "Cancel";
-    draw_bars(98, it, 5, msel[MS_SLOTS], 0);
+    draw_bars(98, it, 5, msel[MS_SLOTS]);
     menu_help("ENTER CHOOSE   ESC BACK");
 }
 static void rp_scan(void)
@@ -304,7 +298,7 @@ static void draw_replays(void)
     char lab[RP_SLOTS][96]; const char *it[RP_SLOTS + 1];
     for (int i = 0; i < nrp_list; i++) { snprintf(lab[i], sizeof lab[i], "%s", rp_list[i].title); it[i] = lab[i]; }
     it[nrp_list] = "Cancel";
-    draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS], 0);
+    draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS]);
     menu_help("ENTER WATCH   ESC BACK");
 }
 /* the driving keys: an action per line, its two keys in cells on the right; then the gamepad's layout */
@@ -372,7 +366,7 @@ static void draw_menu(void)
     float x0 = menu_frame();
     const char *it[8];
     switch (ms) {
-    case MS_MAIN: draw_bars(96, it, main_items(it), msel[MS_MAIN], 0);
+    case MS_MAIN: draw_bars(96, it, main_items(it), msel[MS_MAIN]);
                   menu_help("UP/DOWN SELECT   ENTER CHOOSE   ESC QUIT"); break;
     case MS_HOF: draw_hof(x0); break;
     case MS_PRACTICE: draw_practice(); break;
@@ -380,7 +374,7 @@ static void draw_menu(void)
     case MS_SEASON: draw_season(x0); break;
     case MS_RESULT: draw_result(x0); break;
     case MS_END: draw_end(x0); break;
-    case MS_LSR: hud_text_c(84, "LOAD / SAVE / REPLAY", 1.5f, 0xF0C040); draw_bars(100, lsr_items, 4, msel[MS_LSR], 1);
+    case MS_LSR: hud_text_c(84, "LOAD / SAVE / REPLAY", 1.5f, 0xF0C040); draw_bars(100, lsr_items, 4, msel[MS_LSR]);
                  menu_help("ENTER CHOOSE   ESC BACK"); break;
     case MS_SLOTS: draw_slots(); break;
     case MS_REPLAYS: draw_replays(); break;
