@@ -13,7 +13,7 @@ a stadium, take on eleven computer drivers in a four-division league, and build 
 | Over the top of High Jump | The chase camera |
 | ![Roller Coaster from above](screenshots/roller-coaster.jpg) | ![The main menu](screenshots/main-menu.jpg) |
 | Roller Coaster from above | The main menu |
-| ![The Racing Season](screenshots/season.jpg) | ![The track builder](screenshots/track-builder.jpg) |
+| ![The Racing Season](screenshots/season.jpg) | ![The track builder](screenshots/builder.jpg) |
 | The Racing Season | The track builder, with High Jump open |
 | ![The model viewer](screenshots/model-viewer.jpg) | |
 | The model viewer | |
