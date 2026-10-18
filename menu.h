@@ -8,8 +8,10 @@ static float ms_note_t;
 static int rp_slot[RP_SLOTS], nrp_list; static RHead rp_list[RP_SLOTS];
 static int last_lap_rec, last_race_rec;
 
-#define BAR_H 17.f
-#define BAR_GAP 21.f
+#define BAR_H 15.f                      /* every menu line is this tall, its text BAR_SC: the same in every menu */
+#define BAR_SC 1.1f
+#define BAR_GAP 18.f                    /* line spacing in a menu, */
+#define LIST_GAP 17.f                   /* and in the long track lists */
 static float panel_w(void) { return fminf(HW - 70.f, 330.f); }
 static void menu_note(const char *s) { snprintf(ms_note, sizeof ms_note, "%s", s); ms_note_t = 2.5f; }
 static void fmt_time2(char *b, size_t n, float t) { if (t > 0) fmt_time(b, n, t); else snprintf(b, n, "-:--.-"); }
@@ -69,28 +71,32 @@ static float menu_frame(void)
     return x0;
 }
 /* a menu line: dark plate, the chosen one gold with a chequered flag at its start */
-static void draw_bar(float x, float y, float w, float h, const char *s, int on, float sc)
+static void draw_bar(float x, float y, float w, const char *s, int on)
 {
-    const char *num = NULL;
+    const char *num = NULL; const float h = BAR_H, sc = BAR_SC;
     if (s[0] >= '1' && s[0] <= '9' && s[1] == '.') { num = s; s += 3; }
+    char b[96]; float tx = x + 9 + h * 0.5f + 2, room = x + w - (num ? 18 : 6) - tx;
+    snprintf(b, sizeof b, "%s", s);
+    if (text_width(b, sc) > room) {                                     /* too long: cut short, never smaller */
+        for (size_t n = strlen(b); n > 0 && text_width(b, sc) > room; ) { b[--n] = 0; if (n >= 3) memcpy(b + n - 3, "...", 3); }
+    }
     soft_shadow(x, y, w, h, 2);
     hud_rect(x - 1, y - 1, w + 2, h + 2, on ? 0xFFE0A0 : 0x0A2426);
     if (on) plate(x, y, w, h, 0xFFC860, 0xE07818); else plate(x, y, w, h, 0x1C2224, 0x0A0C0E);
     float fx = x + 4, q = h / 4.f;
     if (on) for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) hud_rect(fx + i * q, y + h / 2 - q + j * q, q, q, (i + j) & 1 ? 0xF4F4F4 : 0x101010);
-    hud_text_raw(x + 9 + h * 0.5f + 2, y + (h - 7 * sc) / 2, s, sc, on ? 0x201008 : 0xE8ECEC);
+    hud_text_raw(tx, y + (h - 7 * sc) / 2, b, sc, on ? 0x201008 : 0xE8ECEC);
     if (num) { char n[2] = {num[0], 0}; hud_text_raw(x + w - 6 - text_width(n, sc * 0.8f), y + (h - 7 * sc * 0.8f) / 2, n, sc * 0.8f, on ? 0x804010 : 0x6A8A8C); }
 }
-static void draw_bars_sc(float y, const char *const *it, int n, int sel, int numbered, float sc)
+static void draw_bars(float y, const char *const *it, int n, int sel, int numbered)
 {
     float W = panel_w() - 30, x = (HW - W) / 2;
     for (int i = 0; i < n; i++) {
         char b[96];
         if (numbered) snprintf(b, sizeof b, "%d. %s", i + 1, it[i]); else snprintf(b, sizeof b, "%s", it[i]);
-        draw_bar(x, y + i * BAR_GAP, W, BAR_H, b, i == sel, fminf(sc, (W - 40) / text_width(numbered ? b + 3 : b, 1)));
+        draw_bar(x, y + i * BAR_GAP, W, b, i == sel);
     }
 }
-static void draw_bars(float y, const char *const *it, int n, int sel, int numbered) { draw_bars_sc(y, it, n, sel, numbered, 1.3f); }
 /* the help line at the bottom; a note (Season saved, ...) takes its place while it shows */
 static void menu_help(const char *s) { if (ms_note_t <= 0) hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC); }
 /* "Really exit?": Y yes, N or ESC no */
@@ -149,7 +155,7 @@ static void draw_practice(void)
     for (int r = 0; r < vis && ms_scroll + r < n; r++) {
         int i = ms_scroll + r; char b[64];
         snprintf(b, sizeof b, "%s%s", trk[i].name, i < SCR_NTRACKS ? "" : "  (own)");
-        draw_bar(x, 96 + r * 17, W, 14, b, i == sel, 1.f);
+        draw_bar(x, 96 + r * LIST_GAP, W, b, i == sel);
     }
     menu_help("ENTER DRIVE   ESC BACK   (ESC IN THE CAR ENDS PRACTISE)");
 }
@@ -311,12 +317,12 @@ static void key_label(char *b, size_t n, SDL_Scancode sc)
 static void draw_controls(void)
 {
     hud_text_c(80, "CONTROLS", 1.5f, 0xF0C040);
-    float W = panel_w() - 30, x = (HW - W) / 2, cw = 74, h = 15;
+    float W = panel_w() - 30, x = (HW - W) / 2, cw = 74, h = BAR_H;
     static const char *const tail[2] = {"Default keys", "Back"};
     int sel = msel[MS_CTL];
     for (int r = 0; r < CT_ROWS; r++) {
-        float y = 94 + r * 18;
-        draw_bar(x, y, W, h, r < NCT ? CT_NAME[r] : tail[r - NCT], r == sel, 1.1f);
+        float y = 94 + r * BAR_GAP;
+        draw_bar(x, y, W, r < NCT ? CT_NAME[r] : tail[r - NCT], r == sel);
         if (r >= NCT) continue;
         for (int k = 0; k < 2; k++) {
             float cx = x + W - (2 - k) * (cw + 3) - 1; int on = r == sel && k == ct_col;
@@ -341,11 +347,11 @@ static const char *const OP_NAME[NOP] = {"Engine volume", "Effects volume", "Ful
 static void draw_options(void)
 {
     hud_text_c(80, "OPTIONS", 1.5f, 0xF0C040);
-    float W = panel_w() - 30, x = (HW - W) / 2, cw = 96, h = 15;
+    float W = panel_w() - 30, x = (HW - W) / 2, cw = 96, h = BAR_H;
     int sel = msel[MS_OPT];
     for (int r = 0; r < NOP; r++) {
-        float y = 96 + r * 20;
-        draw_bar(x, y, W, h, OP_NAME[r], r == sel, 1.1f);
+        float y = 96 + r * BAR_GAP;
+        draw_bar(x, y, W, OP_NAME[r], r == sel);
         if (r > OP_RUMBLE) continue;
         char b[32], v[16];
         if (r <= OP_FX) snprintf(v, sizeof v, "%d%%", r == OP_ENG ? opt.eng : opt.fx);
@@ -366,7 +372,7 @@ static void draw_menu(void)
     float x0 = menu_frame();
     const char *it[8];
     switch (ms) {
-    case MS_MAIN: draw_bars(92, it, main_items(it), msel[MS_MAIN], 1);
+    case MS_MAIN: draw_bars(96, it, main_items(it), msel[MS_MAIN], 0);
                   menu_help("UP/DOWN SELECT   ENTER CHOOSE   ESC QUIT"); break;
     case MS_HOF: draw_hof(x0); break;
     case MS_PRACTICE: draw_practice(); break;
@@ -690,7 +696,7 @@ static void draw_pause(void)
     chq_border(x, y, x + w, y + h, 4);
     plate(x + 5, y + 5, w - 10, h - 10, 0x24767A, 0x123E42);
     hud_text_c(y + 12, "PAUSED", 2, 0xF0C040);
-    for (int i = 0; i < n; i++) draw_bar(x + 16, y + 36 + i * BAR_GAP, w - 32, BAR_H, it[i], i == pause_sel, 1.2f);
+    for (int i = 0; i < n; i++) draw_bar(x + 16, y + 36 + i * BAR_GAP, w - 32, it[i], i == pause_sel);
     hud_text_c(y + h + 8, "UP/DOWN SELECT   ENTER CHOOSE   ESC/P CONTINUE", 1, 0xE0E0E0);
 }
 static void race_hud_extra(void)

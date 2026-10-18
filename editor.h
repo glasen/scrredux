@@ -421,9 +421,9 @@ static void ed_draw_list(void)
     hud_rect(x - 4, y - 4, w + 8, 16 * ed_cs - 8, 0x202024);
     hud_text(x, y, "OPEN A TRACK", 1.5f, 0xF0C040);
     hud_text(x, y + 14, "Originals open as a copy", 1, 0x9C9CA4);
-    int vis = (int)((16 * ed_cs - 50) / 15), first = ed_list - vis + 1 > 0 ? ed_list - vis + 1 : 0;
+    int vis = (int)((16 * ed_cs - 50) / LIST_GAP), first = ed_list - vis + 1 > 0 ? ed_list - vis + 1 : 0;
     for (int r = 0; r < vis && first + r < ntrk; r++)
-        draw_bar(x, y + 28 + r * 15, w, 13, trk[first + r].name, first + r == ed_list, 0.95f);
+        draw_bar(x, y + 28 + r * LIST_GAP, w, trk[first + r].name, first + r == ed_list);
 }
 static void ed_draw(void)
 {
