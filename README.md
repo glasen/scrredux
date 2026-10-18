@@ -1,3 +1,12 @@
+# Warning
+
+This game was completely vibe-coded with Claude Code. It is an experiment for me what a modern LLM can do and not do. If
+someone has problems with that, i can understand it. But don't write any issues regarding this. The current code works 
+but is basically unreadable by any programming standards and needs heavy restructuring to be at least readable.
+
+The game can be played and that's what i wanted to achieve. The target audience is basically me and my son but if anybody 
+enjoys so, feel free to download and play it.
+
 # SCR Redux
 
 A remake-in-spirit of the Amiga classic *Stunt Car Racer* (SCR): race a V8 buggy round elevated roller-coaster tracks in
