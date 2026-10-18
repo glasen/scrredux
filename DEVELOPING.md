@@ -17,7 +17,7 @@ binary.
 | File | Contents |
 | --- | --- |
 | `scrredux.c` | Main loop, race logic, track edits (`TRACK_EDIT`, `TRACK_HILL`), debug modes |
-| `sr_main.h` | GPU setup, shared types, vehicle physics constants in `phys_defaults()` |
+| `scr_main.h` | GPU setup, shared types, vehicle physics constants in `phys_defaults()` |
 | `car_model.h` | Loads `models/stuntcar.scm`, poses suspension and steering from the physics |
 | `scenery.h` | Stadium and surroundings |
 | `trackdef.h` | Tracks as pieces on the 16 × 16 grid: the originals (decoded from `scr_tracks.h`) and `tracks/*.trk` |
@@ -53,7 +53,7 @@ User tracks are saved as `tracks/NAME.trk`; the season is saved in `save/season0
 The car is a rigid body: four spring/damper suspensions with progressive hydraulic bump stops, tyre friction (traction
 circle), weight transfer, full 3D rotation, solid deck collisions and car-to-car contact. The engine cuts out at
 200 km/h, 250 km/h on boost (boost adds pull up to there, like the original's cut-off). Constants are in
-`phys_defaults()` (`sr_main.h`).
+`phys_defaults()` (`scr_main.h`).
 
 Damage: a crack grows along the cage's top tube; at 100 the car is wrecked. Big hits punch holes at the original's
 ten fixed spots (`hole_at()` in `scrredux.c`: 12 of the crack's 240 pixels wide, every 24, filled from the right end).
@@ -131,11 +131,11 @@ name field).
 
 | Variable | Effect |
 | --- | --- |
-| `SR_DEBUG=1`, `SR_TRACE=1` | Extra logging |
-| `SR_PLANE=x` | Autopilot lane (outside ±4.4 it drives off the track) |
-| `SR_WHEELS=1` | Reports the gap between the drawn tyres and the road |
-| `SR_CAM=px,py,pz,tx,ty,tz` | Free camera position/target for `--shot` |
-| `SR_SND=1` | Logs every sound as it starts |
-| `SR_NOHUD=1` | Hides the HUD (`--menu-frames`) |
-| `SR_AUTO=1` | Autopilot drives (`--ui-shot`) |
-| `SR_OVERVIEW=1` | Looks at the whole track from above (`--ui-shot`) |
+| `SCR_DEBUG=1`, `SCR_TRACE=1` | Extra logging |
+| `SCR_PLANE=x` | Autopilot lane (outside ±4.4 it drives off the track) |
+| `SCR_WHEELS=1` | Reports the gap between the drawn tyres and the road |
+| `SCR_CAM=px,py,pz,tx,ty,tz` | Free camera position/target for `--shot` |
+| `SCR_SND=1` | Logs every sound as it starts |
+| `SCR_NOHUD=1` | Hides the HUD (`--menu-frames`) |
+| `SCR_AUTO=1` | Autopilot drives (`--ui-shot`) |
+| `SCR_OVERVIEW=1` | Looks at the whole track from above (`--ui-shot`) |

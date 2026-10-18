@@ -1,4 +1,4 @@
-/* sr_main.h - HUD, PNG writer, SDL_GPU layer and main(). Included by scrredux.c */
+/* scr_main.h - HUD, PNG writer, SDL_GPU layer and main(). Included by scrredux.c */
 
 #define PHYS_DT (1.0f / 240.0f)
 
@@ -623,7 +623,7 @@ static void build_frame(void)
     draw_parts();
     frame_no++;
     HW = VH * (float)rtw / (float)rth;
-    if (!getenv("SR_NOHUD")) draw_hud();
+    if (!getenv("SCR_NOHUD")) draw_hud();
     cur = &db;
 }
 
@@ -851,7 +851,7 @@ static void wheel_gap_sample(const Car *c)
         if (c->wl[i] >= WLF[i] - 1e-3f || car_out(c)) continue;           /* wheel in the air */
         float gap = drawn_tyre_gap(c, g);
         if (gap > 1e8f) continue;
-        if (gap < -0.05f && getenv("SR_WHEELS")[0] == '2') {
+        if (gap < -0.05f && getenv("SCR_WHEELS")[0] == '2') {
             float body[12]; car_body_rows(c, body);
             V3 lm = m34_apply(body, WMOUNT[i]), pm = body_pt(c, WMOUNT[i]);
             printf("SINK %d gap %+.3f  wl-lmin %+.3f  lean %+.3f  dz %+.3f bump %.3f  lr %.3f lp %.3f\n", i, gap, c->wl[i] - WLMIN[i],
@@ -873,34 +873,34 @@ static void wheel_gap_report(void)
 static void run_headless(int shot, const char *path, float secs, int track, int camsel)
 {
     sel_track = track; build_track(track); cockpit = camsel;
-    if (getenv("SR_PROFILE")) { for (int k = 0; k < nseg; k += 25) printf("%d x=%.0f y=%.1f z=%.0f gap=%d\n", k, seg[k].c.x, seg[k].c.y, seg[k].c.z, seg[k].gap); }
+    if (getenv("SCR_PROFILE")) { for (int k = 0; k < nseg; k += 25) printf("%d x=%.0f y=%.1f z=%.0f gap=%d\n", k, seg[k].c.x, seg[k].c.y, seg[k].c.z, seg[k].gap); }
     autoplay = 1; start_race();
-    if (getenv("SR_LAUNCH")) { int lk = 0; float lv = 0; sscanf(getenv("SR_LAUNCH"), "%d,%f", &lk, &lv);
+    if (getenv("SCR_LAUNCH")) { int lk = 0; float lv = 0; sscanf(getenv("SCR_LAUNCH"), "%d,%f", &lk, &lv);
         car_place(&cars[0], lk, 0, lv); car_place(&cars[1], (lk + 300) % nseg, 2.0f, 0); state = ST_RACE;
         cars[0].crane = cars[1].crane = 0; }                    /* else the start crane puts them back on the grid */
     if (camsel == 4) { start_view(); view_auto = 0; view_yaw = secs * PI_F / 180.f; secs = 0;
-        if (getenv("SR_VIEW")) sscanf(getenv("SR_VIEW"), "%f,%f", &view_pitch, &view_dist);
-        if (getenv("SR_TARGET")) sscanf(getenv("SR_TARGET"), "%f,%f,%f", &view_target.x, &view_target.y, &view_target.z);
-        if (getenv("SR_FLAME")) view_flame = 1;
-        if (getenv("SR_FREEZE")) view_anim = 0;
-        if (getenv("SR_POSE")) {                     /* debug: SR_POSE="travel,steer", travel -1 = full droop .. +1 = full bump */
-            float f = 0, st = 0; sscanf(getenv("SR_POSE"), "%f,%f", &f, &st); view_anim = 0; cars[0].delta = st;
+        if (getenv("SCR_VIEW")) sscanf(getenv("SCR_VIEW"), "%f,%f", &view_pitch, &view_dist);
+        if (getenv("SCR_TARGET")) sscanf(getenv("SCR_TARGET"), "%f,%f,%f", &view_target.x, &view_target.y, &view_target.z);
+        if (getenv("SCR_FLAME")) view_flame = 1;
+        if (getenv("SCR_FREEZE")) view_anim = 0;
+        if (getenv("SCR_POSE")) {                     /* debug: SCR_POSE="travel,steer", travel -1 = full droop .. +1 = full bump */
+            float f = 0, st = 0; sscanf(getenv("SCR_POSE"), "%f,%f", &f, &st); view_anim = 0; cars[0].delta = st;
             for (int i = 0; i < 4; i++) cars[0].wl[i] = WREST[i] - f * (f > 0 ? WREST[i] - WLMIN[i] : WLF[i] - WREST[i]);
         } }
     int ticks = (int)(secs * 240);
     for (int i = 0; i < ticks; i++) {
         game_tick(PHYS_DT);
         if (state == ST_DONE) break;
-        if (getenv("SR_TRACE") && i % 24 == 0) { Q q; track_query(cars[0].x, cars[0].seg, 30, &q); fprintf(stderr, "t=%5.2f seg %4d lat %5.2f h %5.2f v %5.1f str %5.2f delta %5.2f thr %.2f brk %.2f nwc %d yaw %5.2f roll %5.2f lean %5.3f %5.3f\n", i*PHYS_DT, cars[0].seg, q.lat, q.h, vdot(cars[0].v,cars[0].F), cars[0].str, cars[0].delta, cars[0].thr, cars[0].brk, cars[0].nwc, cars[0].w.y, vdot(cars[0].w, cars[0].F), cars[0].lr, cars[0].lp); }
+        if (getenv("SCR_TRACE") && i % 24 == 0) { Q q; track_query(cars[0].x, cars[0].seg, 30, &q); fprintf(stderr, "t=%5.2f seg %4d lat %5.2f h %5.2f v %5.1f str %5.2f delta %5.2f thr %.2f brk %.2f nwc %d yaw %5.2f roll %5.2f lean %5.3f %5.3f\n", i*PHYS_DT, cars[0].seg, q.lat, q.h, vdot(cars[0].v,cars[0].F), cars[0].str, cars[0].delta, cars[0].thr, cars[0].brk, cars[0].nwc, cars[0].w.y, vdot(cars[0].w, cars[0].F), cars[0].lr, cars[0].lp); }
         if (i % 1200 == 0)
             printf("t=%5.1f p: seg %4d/%d lap %d v=%5.1f dmg=%4.1f | ai: lap %d v=%5.1f dmg=%4.1f falls=%d\n",
                    i * PHYS_DT, cars[0].seg, nseg, cars[0].lap, vlen(cars[0].v), cars[0].damage,
                    cars[1].lap, vlen(cars[1].v), cars[1].damage, stat_falls);
         if (i % 4 == 0) update_camera(&cars[0], 1.f / 60.f, i == 0);
-        if (getenv("SR_WHEELS") && i % 24 == 0 && state == ST_RACE) wheel_gap_sample(&cars[0]);
+        if (getenv("SCR_WHEELS") && i % 24 == 0 && state == ST_RACE) wheel_gap_sample(&cars[0]);
     }
-    if (getenv("SR_WHEELS")) wheel_gap_report();
-    if (getenv("SR_WHEELS")) {                       /* debug: how far each drawn tyre's lowest point sits above the road */
+    if (getenv("SCR_WHEELS")) wheel_gap_report();
+    if (getenv("SCR_WHEELS")) {                       /* debug: how far each drawn tyre's lowest point sits above the road */
         const Car *c = &cars[0];
         for (int g = 0; g < mdl_ng; g++) {
             if (mdl_g[g].role != R_WHEEL) continue;
@@ -940,9 +940,9 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
                 cam.fwd = vnorm(vsub(vadd(c->x, vmul(c->U, 0.0f)), cam.pos));
                 cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
             }
-            if (getenv("SR_CAM")) {                  /* debug: free camera "px,py,pz,tx,ty,tz" */
+            if (getenv("SCR_CAM")) {                  /* debug: free camera "px,py,pz,tx,ty,tz" */
                 V3 p = cam.pos, t = vadd(cam.pos, cam.fwd);
-                sscanf(getenv("SR_CAM"), "%f,%f,%f,%f,%f,%f", &p.x, &p.y, &p.z, &t.x, &t.y, &t.z);
+                sscanf(getenv("SCR_CAM"), "%f,%f,%f,%f,%f,%f", &p.x, &p.y, &p.z, &t.x, &t.y, &t.z);
                 cam.pos = p; cam.fwd = vnorm(vsub(t, p)); cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);
             }
             if (camsel == 2) {                       /* debug: front three-quarter view of the car */
@@ -984,7 +984,7 @@ static void ui_shot(const char *path, const char *script)
 {
     if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) return;
     setup_menu(); update_camera(&cars[0], 1.f / 60.f, 1);
-    autoplay = getenv("SR_AUTO") != NULL;                 /* the autopilot drives the player's races */
+    autoplay = getenv("SCR_AUTO") != NULL;                 /* the autopilot drives the player's races */
     char buf[2048]; snprintf(buf, sizeof buf, "%s", script);
     for (char *tok = strtok(buf, " "); tok; tok = strtok(NULL, " ")) {
         if (!strncmp(tok, "wait", 4)) {
@@ -1000,7 +1000,7 @@ static void ui_shot(const char *path, const char *script)
         if (!handle_key(k, mod)) break;
         update_camera(&cars[cam_car()], 1.f / 60.f, 1);
     }
-    if (getenv("SR_OVERVIEW")) {                             /* the whole track from high up, like --shot's CAM 5 */
+    if (getenv("SCR_OVERVIEW")) {                             /* the whole track from high up, like --shot's CAM 5 */
         V3 mid = V((tr_minx + tr_maxx) * 0.5f, 6, (tr_minz + tr_maxz) * 0.5f);
         cam.pos = V(mid.x + 40, 150, tr_minz - 170);
         cam.fwd = vnorm(vsub(mid, cam.pos)); cam.right = vnorm(vcross(cam.fwd, UP)); cam.up = vcross(cam.right, cam.fwd);

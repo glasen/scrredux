@@ -64,7 +64,7 @@ static void snd_play(int id, int period, int vol)
     snd_unlock();
     if (start) {
         snd_count[id]++;
-        if (snd_log < 0) snd_log = getenv("SR_SND") != NULL;
+        if (snd_log < 0) snd_log = getenv("SCR_SND") != NULL;
         if (snd_log) fprintf(stderr, "snd %-8s period %3d vol %2d\n", snd_file[id], period, vol);
     }
 }
@@ -81,7 +81,7 @@ static void snd_engine(int k, int period)
     }
     if (!o->on) o->pos = 0;
     if (!snd_eng_run) { snd_eng_run = 1; snd_count[S_ENGINE]++; }
-    if (snd_log < 0) snd_log = getenv("SR_SND") != NULL;
+    if (snd_log < 0) snd_log = getenv("SCR_SND") != NULL;
     if (snd_log && o->s != s) fprintf(stderr, "snd engine   %s period %3d (TickOver at %.0f Hz)\n", snd_file[S_ENGINE + k], period, PAULA_HZ / period * (1 << k));
     snd_start(S_ENGINE, S_ENGINE + k, period, 48, 1);
     o->on = s->n > 0;

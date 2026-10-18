@@ -1,7 +1,7 @@
 /* editor.h - the track builder: the original's 16x16 grid seen from above. The track grows from its open end with the
  * original's pieces (only those that join on and keep clear of the other pieces' cubes are offered), C closes the loop
  * the shortest way round. Heights are set where two pieces meet; each piece has a shape between its two ends.
- * Saves to tracks/NAME.trk, T test-drives. Included by sr_main.h */
+ * Saves to tracks/NAME.trk, T test-drives. Included by scr_main.h */
 enum { EM_EDIT, EM_LIST, EM_NAME, EM_NEW, EM_QUIT };
 static TrackDef ed;
 static int ed_sel, ed_dirty, ed_mode, ed_list, ed_endh[2];

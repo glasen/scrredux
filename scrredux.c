@@ -15,7 +15,7 @@
  *         scenery.h = stadium, arena floor and props, service vehicles.
  *         trackdef.h = tracks as grid pieces (originals and the builder's), league.h = season, Hall of Fame,
  *         saves and replays, menu.h = the menus, editor.h = the track builder.
- *         sr_main.h = HUD, PNG writer, SDL_GPU layer and main().
+ *         scr_main.h = HUD, PNG writer, SDL_GPU layer and main().
  */
 #include <SDL3/SDL.h>
 #include <math.h>
@@ -871,7 +871,7 @@ static void car_hurt(Car *c, float amt, float loud)
         if (!in) { float st = fminf(left, next - x); x += st; left -= st; }
     }
     c->damage = x;
-    if (getenv("SR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
+    if (getenv("SCR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
     int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0 && c->nholes < NHOLE;   /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
     if (smash) { c->smash_t = 6.9f; c->nholes++; }
@@ -1243,7 +1243,7 @@ static void car_step(Car *c, float dt)
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
         dust_burst(c->x, 36, 3.f + 0.3f * impact);
         if (c == &cars[0]) set_msg("CRASHED!", 2.0f);
-        if (getenv("SR_DEBUG") && !planning) fprintf(stderr, "crash car%d seg %d impact %.1f t=%.2f\n", (int)(c - cars), c->seg, impact, racetime);
+        if (getenv("SCR_DEBUG") && !planning) fprintf(stderr, "crash car%d seg %d impact %.1f t=%.2f\n", (int)(c - cars), c->seg, impact, racetime);
     }
 
     float sp2 = vlen(c->v);
@@ -1302,7 +1302,7 @@ static void car_step(Car *c, float dt)
     c->stuck_t = (state == ST_RACE && vlen(c->v) < 1.0f && c->thr > 0.15f) ? c->stuck_t + dt : 0;
     if (c->flip_t > 2.5f || c->stuck_t > 2.5f || c->x.y < ground_h(c->x.x, c->x.z) - 4.f) {
         stat_falls++; car_hurt(c, 4.f, 1.f);
-        if (getenv("SR_DEBUG") && !planning) fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flip_t, c->stuck_t);
+        if (getenv("SCR_DEBUG") && !planning) fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flip_t, c->stuck_t);
         if (c == &cars[0]) set_msg("RESET", 1.5f);
         start_crane(c, restart_seg(c), 0, 2.6f);
     }
@@ -1528,7 +1528,7 @@ static void plan_jumps(void)
             }
         cv[nc] = (float)bv; cb[nc] = bv > vr[0] - 1.5f; cn[nc] = n;
         if (nbadj < NJ && best >= 500.f) badj[nbadj++] = L;          /* no take-off speed gets over it: the builder says so */
-        if (getenv("SR_DEBUG")) printf("jump seg %d..%d (%d): %.1f m/s (reach %.1f, %.1f on boost; risk %.1f)\n", L, E, n, cv[nc], vr[0], vr[1], best);
+        if (getenv("SCR_DEBUG")) printf("jump seg %d..%d (%d): %.1f m/s (reach %.1f, %.1f on boost; risk %.1f)\n", L, E, n, cv[nc], vr[0], vr[1], best);
         nc++;
     }
     memset(jump_v, 0, sizeof(float) * nseg); memset(jump_b, 0, nseg);
@@ -1718,7 +1718,7 @@ static void game_tick(float dt)
             p->thr = (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) ? 1.f : 0.f;
             p->brk = (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) ? 1.f : 0.f;
             p->bst = keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_LSHIFT];
-        } else { static float push = -1; if (push < 0) push = getenv("SR_PUSH") ? (float)atof(getenv("SR_PUSH")) : 1.f; static float plane = -9; if (plane < -8) plane = getenv("SR_PLANE") ? (float)atof(getenv("SR_PLANE")) : -1.f;
+        } else { static float push = -1; if (push < 0) push = getenv("SCR_PUSH") ? (float)atof(getenv("SCR_PUSH")) : 1.f; static float plane = -9; if (plane < -8) plane = getenv("SCR_PLANE") ? (float)atof(getenv("SCR_PLANE")) : -1.f;
                ai_drive(p, plane, 67 * push, 13.f * push, NULL); if (push > 1.f) p->bst = 1; }   /* autopilot ignores the rival: worst case */
         if (o->active) ai_drive(o, 1.8f, opp_vcap, opp_alat, p);
         car_step(p, dt); car_step(o, dt);
@@ -1827,4 +1827,4 @@ static void update_camera(const Car *c, float dt, int snap)
     cam.up = vcross(cam.right, cam.fwd);
 }
 
-#include "sr_main.h"
+#include "scr_main.h"

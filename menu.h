@@ -1,5 +1,5 @@
 /* menu.h - the menus: the logo and a teal panel in the race preview's chequered border, over the stadium. Hall of Fame,
- * Practise, the Racing Season, Load/Save/Replay and the track builder. Included by sr_main.h */
+ * Practise, the Racing Season, Load/Save/Replay and the track builder. Included by scr_main.h */
 enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS };
 static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused;
 static char name_buf[16], ms_note[80];

@@ -436,7 +436,7 @@ static void plan_arena(void)
         }
     gate_z = clampf(svc_z, ar_z0 + 60, ar_z1 - 60);
     nspots = 0;
-    if (getenv("SR_DEBUG")) printf("arena x %.0f..%.0f z %.0f..%.0f, service %.0f,%.0f, gate z %.0f\n", ar_x0, ar_x1, ar_z0, ar_z1, svc_x, svc_z, gate_z);
+    if (getenv("SCR_DEBUG")) printf("arena x %.0f..%.0f z %.0f..%.0f, service %.0f,%.0f, gate z %.0f\n", ar_x0, ar_x1, ar_z0, ar_z1, svc_x, svc_z, gate_z);
 }
 
 static void build_infield(void)

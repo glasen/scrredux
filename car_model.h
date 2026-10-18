@@ -1,6 +1,6 @@
 /* car_model.h - the stunt buggy, loaded from models/stuntcar.scm (written by export_game_model.py in
  * ../stunt_car_racer from the Blender model), and the posing of its independent suspension.
- * Included by sr_main.h. The game does not start without the file.
+ * Included by scr_main.h. The game does not start without the file.
  *
  * File (little endian): "SCRCAR1\0", u32 version (1 or 2), f32 rest_h, place_h, eye[3], cpts[16][3], flames[8][3],
  * (version 2: flame directions[8][3]),
