@@ -794,7 +794,7 @@ static void engine_revs(int touch, int input, int zs)
 {
     int c = touch ? (zs & ~0xf) : (input ? 0x9000 : 0);
     c = (c + 0x580) >> 3;
-    c = eng_revs < 192 ? 2 : (c - eng_revs) >> 3;      /* slow climb from a standstill */
+    c = eng_revs < 192 && c < 256 ? 2 : (c - eng_revs) >> 3;   /* slow climb from a standstill, until the car pulls away (after the crane) */
     if (c >= 0x100) c = 0x100;
     else if (c < (touch ? -0x100 : -0x20)) c = touch ? -0x100 : -0x20;
     eng_chg = c; eng_fluct = snd_rand() & 0xf;
