@@ -16,7 +16,7 @@ make
 ```
 
 ```bash
-./stuntracer
+./scrredux
 ```
 
 Start the game from its own folder; it looks for its shaders, car model and sounds next to the binary.
@@ -105,7 +105,7 @@ eight original tracks.
 ## Car viewer
 
 ```bash
-./stuntracer --view
+./scrredux --view
 ```
 
 Drag the mouse or use the arrow keys to orbit, mouse wheel or +/- to zoom, Home to reset the view, Space to toggle

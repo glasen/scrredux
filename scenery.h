@@ -1,5 +1,5 @@
 /* scenery.h - static scenery: the arena floor and its props, service vehicles, the stadium and its surroundings.
- * Included by stuntracer.c; build_static() emits all of it into the static vertex buffer. */
+ * Included by scrredux.c; build_static() emits all of it into the static vertex buffer. */
 
 /* ---- local frames: o = origin on the ground, F forward, U up, R across ---- */
 typedef struct { V3 o, R, U, F; } Frm;

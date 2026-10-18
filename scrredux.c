@@ -8,8 +8,8 @@
  * Controls: arrows/WASD drive, SPACE boost, R reset to track,
  *           P pause, F11 fullscreen, ESC menu/quit.
  *
- * Debug:  stuntracer --sim SECONDS [TRACK]
- *         stuntracer --shot FILE.png SECONDS [TRACK] [CAM]
+ * Debug:  scrredux --sim SECONDS [TRACK]
+ *         scrredux --shot FILE.png SECONDS [TRACK] [CAM]
  *
  * Layout: this file = maths, world geometry, physics, AI, car model, game logic.
  *         scenery.h = stadium, arena floor and props, service vehicles.

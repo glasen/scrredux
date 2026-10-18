@@ -1,5 +1,5 @@
 /* trackdef.h - tracks as pieces on the original's 16x16 grid: the eight originals (decoded from scr_tracks.h) and the
- * player's own from the track builder (tracks/NAME.trk). Included by stuntracer.c */
+ * player's own from the track builder (tracks/NAME.trk). Included by scrredux.c */
 #define MAXPC 100                                      /* pieces per track, like the original's road tables */
 #define MAXTRK 48
 #define ED_SLOT (MAXTRK - 1)                           /* the track builder's test drive */

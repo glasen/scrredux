@@ -1,5 +1,5 @@
 /* replay.h - the last five season races, recorded at 60 Hz (both cars' pose, suspension, damage and the crane) into
- * save/replayN.rpl and played back with cockpit, chase and trackside cameras. Included by stuntracer.c */
+ * save/replayN.rpl and played back with cockpit, chase and trackside cameras. Included by scrredux.c */
 typedef struct {
     float x[3], F[3], U[3], v[3], cx[3], wl[4], wph[4];
     float delta, lr, lp, flame, damage, boost, crash, crane, hook, thr;

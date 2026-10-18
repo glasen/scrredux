@@ -8,7 +8,7 @@ Single C program on SDL3 + SDL_GPU. Flat-shaded polygons, no textures, SPIR-V sh
 make
 ```
 
-Builds `./stuntracer` from `stuntracer.c` (everything else is included headers) and compiles `shaders/*` to
+Builds `./scrredux` from `scrredux.c` (everything else is included headers) and compiles `shaders/*` to
 `*.spv` with `glslangValidator`. Run from the project directory: shaders, model and sounds are loaded from next to the
 binary.
 
@@ -16,7 +16,7 @@ binary.
 
 | File | Contents |
 | --- | --- |
-| `stuntracer.c` | Main loop, race logic, track edits (`TRACK_EDIT`, `TRACK_HILL`), debug modes |
+| `scrredux.c` | Main loop, race logic, track edits (`TRACK_EDIT`, `TRACK_HILL`), debug modes |
 | `sr_main.h` | GPU setup, shared types, vehicle physics constants in `phys_defaults()` |
 | `car_model.h` | Loads `models/stuntcar.scm`, poses suspension and steering from the physics |
 | `scenery.h` | Stadium and surroundings |
@@ -26,7 +26,7 @@ binary.
 | `replay.h` | Replays of the last five season races (`save/replayN.rpl`, 60 Hz) |
 | `menu.h` | Menus |
 | `editor.h` | Track builder |
-| `audio.h` | Sample mixer; when sounds trigger is decided in `stuntracer.c` |
+| `audio.h` | Sample mixer; when sounds trigger is decided in `scrredux.c` |
 | `tools/gen_scr_tracks.py` | Generates `scr_tracks.h` |
 | `font_vec.h` | The text font as triangles (generated, see below) |
 | `tools/gen_font.py` | Generates `font_vec.h` from `fonts/Rajdhani-Bold.ttf` |
@@ -41,10 +41,10 @@ scale the physics is tuned to: 128 original units = the 2.95 m wheelbase, 8.85 m
 - No barriers on the track edges. Past the edge the wheels find an invisible sloping shoulder for a moment, like the
   original.
 - Draw Bridge's bridge does not move.
-- The jumps are reshaped for the 250 km/h limit (`TRACK_EDIT`, `TRACK_HILL` in `stuntracer.c`): steeper lips, shorter
+- The jumps are reshaped for the 250 km/h limit (`TRACK_EDIT`, `TRACK_HILL` in `scrredux.c`): steeper lips, shorter
   pits, Ski Jump's drop and High Jump's far side as landing hills, High Jump's tower lower. The builder opens the
   originals as copies with these edits baked in.
-- `./stuntracer --check-tracks` checks the originals against the builder's joining and overlap rules.
+- `./scrredux --check-tracks` checks the originals against the builder's joining and overlap rules.
 
 User tracks are saved as `tracks/NAME.trk`; the season is saved in `save/season0.sav`.
 
@@ -56,7 +56,7 @@ circle), weight transfer, full 3D rotation, solid deck collisions and car-to-car
 `phys_defaults()` (`sr_main.h`).
 
 Damage: a crack grows along the cage's top tube; at 100 the car is wrecked. Big hits punch holes at the original's
-ten fixed spots (`hole_at()` in `stuntracer.c`: 12 of the crack's 240 pixels wide, every 24, filled from the right end).
+ten fixed spots (`hole_at()` in `scrredux.c`: 12 of the crack's 240 pixels wide, every 24, filled from the right end).
 The crack crosses a hole for free, so each hole brings the wreck 5% closer. In a season the holes carry over from race
 to race (`Season.nholes`) and are cleared when a new season starts; once all ten are made, big hits only creak.
 
@@ -106,7 +106,7 @@ car) and does not start without it.
 `models/stuntcar.blend` (also exported as `models/stuntcar.glb`). `car_model.h` poses wishbones, uprights, coilovers
 and links from the physics' wheel travel and steering.
 
-`./stuntracer --view` opens the model viewer; Z stops the animation (wheels straight, at ride height).
+`./scrredux --view` opens the model viewer; Z stops the animation (wheels straight, at ride height).
 
 ## Sound
 
@@ -119,12 +119,12 @@ Engine and smash are panned left, the rest right, 30% apart. Without the WAVs th
 
 | Command | Purpose |
 | --- | --- |
-| `./stuntracer --sim SECS [TRACK]` | Autopilot run, prints lap/damage/contact stats |
-| `./stuntracer --shot out.png SECS [TRACK] [CAM]` | Offscreen 1080p render. CAM: 0 chase, 1 cockpit, 2 front, 3 side, 4 model viewer, 5 track overview |
-| `./stuntracer --audio-dump out.wav SECS [TRACK]` | Mixes the autopilot's race into a WAV |
-| `./stuntracer --menu-frames DIR SECS` | Records the menu scene at 60 fps as PNGs |
-| `./stuntracer --ui-shot out.png "KEYS"` | Plays SDL key names through the menus and builder headless, renders the last frame |
-| `./stuntracer --check-tracks` | Checks the original tracks against the builder's rules |
+| `./scrredux --sim SECS [TRACK]` | Autopilot run, prints lap/damage/contact stats |
+| `./scrredux --shot out.png SECS [TRACK] [CAM]` | Offscreen 1080p render. CAM: 0 chase, 1 cockpit, 2 front, 3 side, 4 model viewer, 5 track overview |
+| `./scrredux --audio-dump out.wav SECS [TRACK]` | Mixes the autopilot's race into a WAV |
+| `./scrredux --menu-frames DIR SECS` | Records the menu scene at 60 fps as PNGs |
+| `./scrredux --ui-shot out.png "KEYS"` | Plays SDL key names through the menus and builder headless, renders the last frame |
+| `./scrredux --check-tracks` | Checks the original tracks against the builder's rules |
 
 `--ui-shot` script tokens: SDL key names, `shift+Left`, `wait5` (run five seconds of the game), `text:Name` (type into a
 name field).

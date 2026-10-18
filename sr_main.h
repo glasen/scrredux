@@ -1,4 +1,4 @@
-/* sr_main.h - HUD, PNG writer, SDL_GPU layer and main(). Included by stuntracer.c */
+/* sr_main.h - HUD, PNG writer, SDL_GPU layer and main(). Included by scrredux.c */
 
 #define PHYS_DT (1.0f / 240.0f)
 

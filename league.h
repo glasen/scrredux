@@ -1,6 +1,6 @@
 /* league.h - the racing season (the original's single player league: four divisions of three drivers, two tracks
  * each, every driver races the other two on both, 2 points a win and 1 for the fastest lap, the top driver goes up and
- * the bottom one down), the Hall of Fame, season saves and race replays. Included by stuntracer.c */
+ * the bottom one down), the Hall of Fame, season saves and race replays. Included by scrredux.c */
 #define NDRV 12
 #define PLAYER 11
 static const char *const DRV_NAME[11] = {"Hot Rod", "Whizz Kid", "Bad Guy", "The Dodger", "Big Ed", "Max Boost",

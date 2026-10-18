@@ -2,7 +2,7 @@
  * One voice per sample, like the 1998 PC port: a sound that is still playing is not restarted, only its pitch and
  * volume follow. Pitch is given as an Amiga period (rate = 3546895 / period), volume as 0..64, both straight from
  * the original's tables. The Amiga panned engine and Smash hard left and the rest hard right; here only 30% apart.
- * When the triggers fire is decided in stuntracer.c (sound section). */
+ * When the triggers fire is decided in scrredux.c (sound section). */
 
 enum { S_CHIME, S_WRECK, S_HITCAR, S_GROUNDED, S_CREAK, S_SMASH, S_OFFROAD, S_ENGINE, NSND = S_ENGINE + 7 };   /* S_ENGINE+k: TickOver decimated by 2^k */
 static const char *snd_file[NSND] = {"Chime", "Wreck", "HitCar", "Grounded", "Creak", "Smash", "OffRoad",
