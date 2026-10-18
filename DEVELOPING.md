@@ -8,7 +8,7 @@ Single C program on SDL3 + SDL_GPU. Flat-shaded polygons, no textures, SPIR-V sh
 make
 ```
 
-Builds `./scrredux` from `scrredux.c` (everything else is included headers) and compiles `shaders/*` to
+Builds `./scrredux` from `scrredux.c` (everything else is headers in `include/`, pulled into that one file) and compiles `shaders/*` to
 `*.spv` with `glslangValidator`. Run from the project directory: shaders, model and sounds are loaded from next to the
 binary.
 
@@ -17,21 +17,21 @@ binary.
 | File | Contents |
 | --- | --- |
 | `scrredux.c` | Main loop, race logic, track edits (`TRACK_EDIT`, `TRACK_HILL`), debug modes |
-| `scr_main.h` | GPU setup, shared types, vehicle physics constants in `phys_defaults()` |
-| `car_model.h` | Loads `models/stuntcar.scm`, poses suspension and steering from the physics |
-| `scenery.h` | Stadium and surroundings |
-| `trackdef.h` | Tracks as pieces on the 16 × 16 grid: the originals (decoded from `scr_tracks.h`) and `tracks/*.trk` |
-| `scr_tracks.h` | The eight original tracks (generated, see below) |
-| `league.h` | Racing season, Hall of Fame, season saves |
-| `replay.h` | Replays of the last five season races (`replayN.rpl`, 60 Hz) |
-| `options.h` | Volume, fullscreen and rumble settings (`options.txt`) |
-| `controls.h` | Driving key bindings (`controls.txt`), gamepads, joysticks and rumble |
-| `menu.h` | Menus, the pause menu |
-| `editor.h` | Track builder |
-| `audio.h` | Sample mixer; when sounds trigger is decided in `scrredux.c` |
-| `tools/gen_scr_tracks.py` | Generates `scr_tracks.h` |
-| `font_vec.h` | The text font as triangles (generated, see below) |
-| `tools/gen_font.py` | Generates `font_vec.h` from `fonts/Rajdhani-Bold.ttf` |
+| `include/scr_main.h` | GPU setup, shared types, vehicle physics constants in `phys_defaults()` |
+| `include/car_model.h` | Loads `models/stuntcar.scm`, poses suspension and steering from the physics |
+| `include/scenery.h` | Stadium and surroundings |
+| `include/trackdef.h` | Tracks as pieces on the 16 × 16 grid: the originals (decoded from `scr_tracks.h`) and `tracks/*.trk` |
+| `include/scr_tracks.h` | The eight original tracks (generated, see below) |
+| `include/league.h` | Racing season, Hall of Fame, season saves |
+| `include/replay.h` | Replays of the last five season races (`replayN.rpl`, 60 Hz) |
+| `include/options.h` | Volume, fullscreen and rumble settings (`options.txt`) |
+| `include/controls.h` | Driving key bindings (`controls.txt`), gamepads, joysticks and rumble |
+| `include/menu.h` | Menus, the pause menu |
+| `include/editor.h` | Track builder |
+| `include/audio.h` | Sample mixer; when sounds trigger is decided in `scrredux.c` |
+| `tools/gen_scr_tracks.py` | Generates `include/scr_tracks.h` |
+| `include/font_vec.h` | The text font as triangles (generated, see below) |
+| `tools/gen_font.py` | Generates `include/font_vec.h` from `fonts/Rajdhani-Bold.ttf` |
 
 ## Tracks
 
@@ -98,7 +98,7 @@ crane picks it up.
 - The deck is weathered concrete in precast slabs with rubber laid down in the bends; steel scraping it throws sparks.
 - Text, on the HUD and on signs in the world, is Rajdhani Bold drawn as flat triangles, smoothed by MSAA (no textures).
   `font_vec.h` holds printable ASCII with the cap height as 1. Regenerate it with
-  `tools/gen_font.py fonts/Rajdhani-Bold.ttf > font_vec.h`, which reads TrueType outlines without fontTools.
+  `tools/gen_font.py fonts/Rajdhani-Bold.ttf > include/font_vec.h`, which reads TrueType outlines without fontTools.
   Text sizes are still given in the old 5x7 font's pixels (`sc`): capitals are `7 * sc` tall with their top at `y`.
 - The HUD pass has its own fragment shader (`shaders/hud.frag`) and blends by vertex alpha (`hud_a`): soft shadows and
   translucent plates in the menus.

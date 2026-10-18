@@ -94,7 +94,7 @@ static float vnoise(float x, float y, int seed)
 }
 
 /* the text font: Rajdhani Bold as triangles (font_vec.h, made by tools/gen_font.py); cap height 1, y up */
-#include "font_vec.h"
+#include "include/font_vec.h"
 /* calls tri() for each of ch's triangles (x0, y0, x1, y1, x2, y2) */
 static void glyph_tris(char ch, void (*tri)(void *u, const float *t), void *u)
 {
@@ -189,16 +189,16 @@ static void cyl(V3 a, V3 b, float r0, float r1, int n, uint32_t col, int caps)
 }
 
 /* ----------------------------------------------------------------- audio */
-#include "audio.h"
+#include "include/audio.h"
 
 /* ----------------------------------------------------------------- track */
 typedef struct { V3 c, T, R, N; float u, curv, vcurv, bin; unsigned char gap, steep; } Seg;   /* bin: sin of the bank into the bend */   /* steep: sheer face, height measured vertically */
 /* The eight tracks of the original (scr_tracks.h): each piece fills one cube of a 16x16 grid and is a shape template
  * (straight, diagonal or 45 degree curve) rotated in its cube, with a height profile per edge on top of a base height. */
-#include "scr_tracks.h"
+#include "include/scr_tracks.h"
 #define NTRACKS SCR_NTRACKS
 #define SCR_U (2.95f / 128.f)                          /* metres per x/z unit: the car's 2.95 m wheelbase is 128 units */
-#include "trackdef.h"
+#include "include/trackdef.h"
 
 static Seg seg[MAXSEG]; static int nseg; static float ds;
 static float jump_v[MAXSEG];                           /* AI: speed to hold here for the jump ahead (its run-up and the bend before it), 0 = none */
@@ -695,7 +695,7 @@ static void build_mountains(void)
     }
 }
 
-#include "scenery.h"
+#include "include/scenery.h"
 
 static void build_static(void)
 {
@@ -773,10 +773,10 @@ static int stat_falls, stat_contacts; static float stat_push;
 static const float skill_vcap[3] = {56, 62, 69}, skill_alat[3] = {11.0f, 13.5f, 16.0f};
 
 static void set_msg(const char *s, float t) { snprintf(msg, sizeof msg, "%s", s); msg_t = t; }
-#include "league.h"
-#include "replay.h"
-#include "options.h"
-#include "controls.h"
+#include "include/league.h"
+#include "include/replay.h"
+#include "include/options.h"
+#include "include/controls.h"
 
 /* ---- sound: when the original's samples play (StuntCarRacer.s, Car_Behaviour.cpp), periods and volumes from its tables ---- */
 #define AMI_V (30720.f / 72.f)               /* original speed units per m/s: its top speed 0x7800 = our unboosted ~72 m/s */
@@ -1837,4 +1837,4 @@ static void update_camera(const Car *c, float dt, int snap)
     cam.up = vcross(cam.right, cam.fwd);
 }
 
-#include "scr_main.h"
+#include "include/scr_main.h"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate font_vec.h from a TrueType font: printable ASCII as triangles, for flat-shaded text with MSAA.
 
-usage: tools/gen_font.py fonts/Rajdhani-Bold.ttf > font_vec.h
+usage: tools/gen_font.py fonts/Rajdhani-Bold.ttf > include/font_vec.h
 
 Units: the cap height is 1, y runs up from the baseline. Curves are flattened by length, holes bridged into their
 outer contour and the result ear-clipped. Only quadratic (glyf) outlines without overlapping contours are handled.
