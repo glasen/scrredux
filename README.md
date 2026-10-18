@@ -32,9 +32,7 @@ Settings, seasons, the Hall of Fame, replays and your own tracks are kept in you
 | Windows | `%APPDATA%\SCR Redux\SCR Redux\` |
 | Linux | `~/.local/share/SCR Redux/SCR Redux/` |
 
-On its first start the game copies anything an older version left in `save/` and `tracks/` beside it into that folder,
-and leaves the old files where they were (`moved.txt` there notes it was done; you can delete the old ones). To keep
-everything somewhere else, a portable copy for instance, set `SCR_HOME` to a folder.
+To keep everything somewhere else, a portable copy for instance, set `SCR_HOME` to a folder.
 
 ## Controls
 

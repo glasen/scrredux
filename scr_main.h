@@ -1041,7 +1041,6 @@ static void ui_shot(const char *path, const char *script)
 int main(int argc, char **argv)
 {
     if (!car_model_load()) return 1;
-    user_migrate();
     tracks_scan();
     phys_defaults();
     hof_load();

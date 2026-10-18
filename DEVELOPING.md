@@ -53,9 +53,7 @@ The player's files live in SDL's pref folder (`user_path()` in `trackdef.h`, org
 the season as `season0.txt` (slots 1-4 for Load/Save). Seasons are text, a keyed line per item (`season_write()` /
 `season_peek()` in `league.h`): unknown lines are skipped, so a later version can add fields and still read old saves,
 and a save missing a driver or a fixture is refused. Writes go to a `.tmp` file renamed over the old one.
-`user_migrate()` copies an older version's `save/` and `tracks/` from beside the binary on the first start, converting
-the binary `seasonN.sav` files, and writes `moved.txt`. Point `SCR_HOME` at a scratch folder when testing, so test runs
-leave the real saves alone.
+Point `SCR_HOME` at a scratch folder when testing, so test runs leave the real saves alone.
 
 ## Physics
 
