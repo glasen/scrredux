@@ -496,7 +496,10 @@ static void ed_draw(void)
         hud_text_raw(x, yy + 38, "ENTER SAVE   ESC CANCEL", 1, 0x9C9CA4);
     }
     if (ed_mode == EM_NEW) hud_text_c(VH / 2, "N AGAIN: START A NEW TRACK (UNSAVED CHANGES ARE LOST)", 1.5f, 0xFF8070);
-    if (ed_mode == EM_QUIT) hud_text_c(VH / 2, "UNSAVED CHANGES - ESC AGAIN TO LEAVE, F2 TO SAVE", 1.5f, 0xFF8070);
+    if (ed_mode == EM_QUIT) {                                         /* on a dark strip: it crosses the help text */
+        hud_a = 225; hud_rect(0, VH / 2 - 6, HW, 7 * 1.5f + 12, 0x08080A); hud_a = 255;
+        hud_text_c(VH / 2, "UNSAVED CHANGES - ESC/B AGAIN TO LEAVE, F2 TO SAVE", 1.5f, 0xFF8070);
+    }
     if (ed_msg_t > 0) hud_text(ed_mx, VH - 13, ed_msg, 1, 0x60FF60);
 }
 

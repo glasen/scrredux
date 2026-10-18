@@ -59,7 +59,8 @@ Plug in a gamepad or joystick at any time.
 
 The pad shakes on crashes, hits and hard landings (Options: gamepad rumble).
 
-In the menus and the pause menu the D-pad or stick selects, A or Start confirms, B or Back goes back. In replays A pauses, Y changes the
+In the menus and the pause menu the D-pad or stick selects, A or Start confirms, B or Back goes back. The track
+builder needs the keyboard and mouse; B or Back leaves it (twice with unsaved changes). In replays A pauses, Y changes the
 camera and left/right winds back or forward.
 
 A joystick SDL has no gamepad mapping for (a classic digital stick, say) steers with its stick or hat; forward

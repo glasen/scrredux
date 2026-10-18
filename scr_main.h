@@ -980,6 +980,7 @@ static SDL_Keycode pad_key(int b)
     case ST_PREVIEW: return a || st ? SDLK_RETURN : x || bk ? SDLK_ESCAPE : 0;
     case ST_REPLAY: return a || st ? SDLK_SPACE : y ? SDLK_C : x || bk ? SDLK_ESCAPE : 0;
     case ST_DONE: return a || st ? SDLK_RETURN : bk ? SDLK_ESCAPE : 0;
+    case ST_EDIT: return x || bk ? SDLK_ESCAPE : 0;           /* the builder wants keys and mouse; B/Back at least gets out */
     case ST_COUNT: case ST_RACE:
         if (pause_on) return a ? SDLK_RETURN : x || bk || st ? SDLK_ESCAPE : 0;
         return st ? SDLK_P : y ? SDLK_R : bk ? SDLK_ESCAPE : 0;
