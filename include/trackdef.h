@@ -109,7 +109,7 @@ static int track_load(const char *path, TrackDef *td)
     int ok = fgets(line, sizeof line, f) && (!strncmp(line, "SCRREDUX-TRACK", 14) || !strncmp(line, "STUNTRACER-TRACK", 16));   /* also the old name */
     while (ok && fgets(line, sizeof line, f)) {
         line[strcspn(line, "\r\n")] = 0;
-        if (!strncmp(line, "NAME ", 5)) snprintf(td->name, sizeof td->name, "%s", line + 5);
+        if (!strncmp(line, "NAME ", 5)) SDL_strlcpy(td->name, line + 5, sizeof td->name);
         else if (!strncmp(line, "START ", 6)) td->start = atoi(line + 6);
         else if (!strncmp(line, "PIECE ", 6) && td->np < MAXPC) {
             TPiece *pc = &td->p[td->np];
@@ -139,7 +139,8 @@ static void tracks_scan(void)
     user_path(dir, sizeof dir, "tracks");
     char **files = SDL_GlobDirectory(dir, "*.trk", 0, &n);
     for (int i = 0; files && i < n && ntrk < ED_SLOT; i++) {
-        char path[1024]; snprintf(path, sizeof path, "%s/%s", dir, files[i]);
+        char path[1024];
+        if (snprintf(path, sizeof path, "%s/%s", dir, files[i]) >= (int)sizeof path) { fprintf(stderr, "track %s: path too long\n", files[i]); continue; }
         if (track_load(path, &trk[ntrk]) == 0) { snprintf(trk[ntrk].file, sizeof trk[ntrk].file, "%s", files[i]); ntrk++; }
         else fprintf(stderr, "track %s: cannot read\n", files[i]);
     }

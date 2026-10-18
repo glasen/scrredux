@@ -325,7 +325,7 @@ static void ed_import(int i)
             TPiece *pc = &ed.p[(ed.start + 1 + q) % ed.np];
             for (int r = 0; r < pc_ns(pc); r++, n++) for (int e = 0; e < 2; e++) pc->h[e][r] = tx_ey[n][e];
         }
-        char nm[32]; snprintf(nm, sizeof nm, "MY %s", ed.name); snprintf(ed.name, sizeof ed.name, "%s", nm);
+        char nm[40]; snprintf(nm, sizeof nm, "MY %s", ed.name); SDL_strlcpy(ed.name, nm, sizeof ed.name);
         ed.orig = -1; ed.file[0] = 0;
     }
     ed_endh[0] = ed.p[0].h[0][0]; ed_endh[1] = ed.p[0].h[1][0];

@@ -819,7 +819,7 @@ static void snd_tick(float dt)
     const Car *p = &cars[0];
     grounded_cd -= dt; hitcar_cd -= dt;
     if (state == ST_MENU || state == ST_VIEW || state == ST_EDIT || state == ST_PREVIEW || (state == ST_REPLAY && (rp_paused || rp_speed != 1))) {
-        if (!quiet) snd_stop_all(); quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
+        if (!quiet) { snd_stop_all(); } quiet = 1; eng_on = eng_revs = eng_chg = 0; return; }
     quiet = 0;
     if (p->crane > 0) {                      /* on the crane all is quiet, the engine starts again from a standstill */
         if (eng_on) snd_engine_stop();

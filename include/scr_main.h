@@ -158,8 +158,8 @@ static void draw_hud_base(void)
     snprintf(b, sizeof b, "BEST %s", bl);
     hud_text(HW - 8 - text_width(b, 1.5f), 33, b, 1.5f, 0xFFFFFF);
     if (p->lapshow > 0 && state == ST_RACE) {
-        char b2[96]; fmt_time(b, sizeof b, p->lastlap);
-        snprintf(b2, sizeof b2, "LAP TIME %s", b);
+        char b2[96]; fmt_time(bl, sizeof bl, p->lastlap);
+        snprintf(b2, sizeof b2, "LAP TIME %s", bl);
         hud_text_c(44, b2, 2, 0xFFFFFF);
     }
     if (state == ST_COUNT) { snprintf(b, sizeof b, "%d", (int)ceilf(state_t)); hud_text_c(100, b, 8, 0xFFE040); }
@@ -168,7 +168,7 @@ static void draw_hud_base(void)
         const char *t = result == 1 ? "YOU WIN!" : result == 2 ? "OPPONENT WRECKED - YOU WIN!" :
                         result == -2 ? "YOU ARE WRECKED!" : "YOU LOSE!";
         hud_text_c(80, t, result == 2 || result == -2 ? 2 : 4, result > 0 ? 0x60FF60 : 0xFF6050);
-        if (p->bestlap > 0) { char b2[96]; fmt_time(b, sizeof b, p->bestlap); snprintf(b2, sizeof b2, "BEST LAP %s", b); hud_text_c(130, b2, 2, 0xFFFFFF); }
+        if (p->bestlap > 0) { char b2[96]; fmt_time(bl, sizeof bl, p->bestlap); snprintf(b2, sizeof b2, "BEST LAP %s", bl); hud_text_c(130, b2, 2, 0xFFFFFF); }
         if (state_t > 1.5f) hud_text_c(160, "PRESS ENTER", 2, 0xFFE040);
     }
     race_hud_extra();

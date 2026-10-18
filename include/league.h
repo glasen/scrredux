@@ -183,7 +183,7 @@ static int season_peek(int slot, Season *s)
     while (ok && fgets(line, sizeof line, f)) {
         line[strcspn(line, "\r\n")] = 0;
         int i, d, k, v[6]; Race r;
-        if (!strncmp(line, "name ", 5)) snprintf(s->pname, sizeof s->pname, "%s", line + 5);
+        if (!strncmp(line, "name ", 5)) SDL_strlcpy(s->pname, line + 5, sizeof s->pname);
         else if (sscanf(line, "season %d", &v[0]) == 1) s->season = v[0];
         else if (sscanf(line, "race %d", &v[0]) == 1) s->race = v[0];
         else if (sscanf(line, "holes %d", &v[0]) == 1) s->nholes = v[0];
