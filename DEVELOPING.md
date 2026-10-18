@@ -113,6 +113,22 @@ car) and does not start without it.
 `models/stuntcar.glb`). `car_model.h` poses wishbones, uprights, coilovers
 and links from the physics' wheel travel and steering.
 
+The model is built by a script, so it can be rebuilt with Blender 5.x (from the repository root):
+
+```bash
+LOWPOLY=1 blender -b --factory-startup -P models/scripts/build_car.py -- models
+blender -b models/stuntcar.blend -P models/scripts/export_game_model.py -- models/stuntcar.scm
+```
+
+| Script | Does |
+| --- | --- |
+| `models/scripts/build_car.py` | Builds the car procedurally and writes `stuntcar.blend` and `stuntcar.glb`; `LOWPOLY=1` gives the faceted game version, without it the detailed one for renders |
+| `models/scripts/export_game_model.py` | Writes `stuntcar.scm`: flat-coloured triangles in groups, the suspension rig (swept from the wishbone geometry to the bump stops and full shock extension), contact points, exhaust flames, the cockpit camera |
+| `models/scripts/render_views.py` | Cycles stills from the model's cameras |
+| `models/scripts/anim_suspension.py` | A video of one axle working through its travel (`--steer`, `--stills`, `--check` for contact tests) |
+
+A rebuild gives the same rig and physics data and the same triangles, in a slightly different order.
+
 `./scrredux --view` opens the model viewer; Z stops the animation (wheels straight, at ride height).
 
 ## Sound
