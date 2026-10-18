@@ -1,5 +1,6 @@
 /* controls.h - the driving keys, two per action, changed in the Controls menu and kept in save/controls.txt; and gamepads and
- * joysticks: held sticks, D-pads, triggers and buttons drive the car. Included by scrredux.c */
+ * joysticks: held sticks, D-pads, triggers and buttons drive the car, and they shake on hits. Included by scrredux.c */
+static const bool *keys;                               /* the keyboard, held keys; NULL when headless */
 enum { CT_ACCEL, CT_BRAKE, CT_LEFT, CT_RIGHT, CT_BOOST, NCT };
 static const char *const CT_NAME[NCT] = {"Accelerate", "Brake", "Steer left", "Steer right", "Boost"};
 static const char *const CT_ID[NCT] = {"accelerate", "brake", "left", "right", "boost"};
@@ -103,4 +104,14 @@ static PadIn pad_read(void)
         r.up |= u || sy < -0.5f; r.dn |= d || sy > 0.5f; r.lf |= l || sx < -0.5f; r.rt |= rr || sx > 0.5f;
     }
     return r;
+}
+/* a shake on every pad (Options: gamepad rumble): strength 0..1, for ms milliseconds */
+static void pad_rumble(float strength, int ms)
+{
+    if (!opt.rumble || strength <= 0) return;
+    Uint16 lo = (Uint16)(clampf(strength, 0, 1) * 0xFFFF), hi = (Uint16)(lo * 0.6f);
+    for (int i = 0; i < NPAD; i++) {
+        if (gpad[i]) SDL_RumbleGamepad(gpad[i], lo, hi, (Uint32)ms);
+        else if (gjoy[i]) SDL_RumbleJoystick(gjoy[i], lo, hi, (Uint32)ms);
+    }
 }

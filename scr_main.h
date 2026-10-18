@@ -171,7 +171,6 @@ static void draw_hud_base(void)
         if (p->bestlap > 0) { char b2[96]; fmt_time(b, sizeof b, p->bestlap); snprintf(b2, sizeof b2, "BEST LAP %s", b); hud_text_c(130, b2, 2, 0xFFFFFF); }
         if (state_t > 1.5f) hud_text_c(160, "PRESS ENTER", 2, 0xFFE040);
     }
-    if (paused && !ask_quit) hud_text_c(110, "PAUSED", 4, 0xFFFFFF);
     race_hud_extra();
 }
 static void draw_hud(void) { draw_hud_base(); }
@@ -958,10 +957,9 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
 }
 
 /* one key press, wherever the game is; 0 = quit */
-static int full;
 static int handle_key(SDL_Keycode k, SDL_Keymod mod)
 {
-    if (k == SDLK_F11 && win) { full = !full; SDL_SetWindowFullscreen(win, full); return 1; }
+    if (k == SDLK_F11 && win) { set_fullscreen(!opt.full); return 1; }
     switch (state) {
     case ST_VIEW: if (k == SDLK_ESCAPE) return 0; view_key(k); return 1;
     case ST_MENU: return menu_key(k);
@@ -982,7 +980,9 @@ static SDL_Keycode pad_key(int b)
     case ST_PREVIEW: return a || st ? SDLK_RETURN : x || bk ? SDLK_ESCAPE : 0;
     case ST_REPLAY: return a || st ? SDLK_SPACE : y ? SDLK_C : x || bk ? SDLK_ESCAPE : 0;
     case ST_DONE: return a || st ? SDLK_RETURN : bk ? SDLK_ESCAPE : 0;
-    case ST_COUNT: case ST_RACE: return st ? SDLK_P : y ? SDLK_R : bk ? SDLK_ESCAPE : 0;
+    case ST_COUNT: case ST_RACE:
+        if (pause_on) return a ? SDLK_RETURN : x || bk || st ? SDLK_ESCAPE : 0;
+        return st ? SDLK_P : y ? SDLK_R : bk ? SDLK_ESCAPE : 0;
     default: return 0;
     }
 }
@@ -992,7 +992,7 @@ static SDL_Keycode pad_nav(float dt)
     static int was; static float t;
     PadIn pi = pad_read();
     int d = pi.up ? 1 : pi.dn ? 2 : pi.lf ? 3 : pi.rt ? 4 : 0;
-    if (state != ST_MENU || ask_quit || ct_wait) { was = d; return 0; }
+    if ((state != ST_MENU && !pause_on) || ask_quit || ct_wait) { was = d; return 0; }
     if (d != was) { was = d; t = 0.4f; return NAV[d]; }
     if (!d || (t -= dt) > 0) return 0;
     t = 0.12f;
@@ -1044,6 +1044,7 @@ int main(int argc, char **argv)
     phys_defaults();
     hof_load();
     ctl_load();
+    opt_load();
     if (season_peek(0, &sea) || !sea.on) memset(&sea, 0, sizeof sea);
     if (argc >= 2 && !strcmp(argv[1], "--check-tracks")) { ed_check_originals(); return 0; }
     if (argc >= 4 && !strcmp(argv[1], "--ui-shot")) { ui_shot(argv[2], argv[3]); return 0; }
@@ -1078,6 +1079,7 @@ int main(int argc, char **argv)
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1; }
     win = SDL_CreateWindow("SCR REDUX", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || gpu_init() != 0) { fprintf(stderr, "init failed: %s\n", SDL_GetError()); return 1; }
+    if (opt.full) SDL_SetWindowFullscreen(win, true);
     snd_open();
     keys = SDL_GetKeyboardState(NULL);
 
@@ -1097,6 +1099,10 @@ int main(int argc, char **argv)
                 int ww, wh; SDL_GetWindowSize(win, &ww, &wh);
                 ed_mouse(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button, 0);
             } else if (e.type == SDL_EVENT_TEXT_INPUT) { if (state == ST_MENU) menu_text(e.text.text); else if (state == ST_EDIT) ed_text(e.text.text); }
+            else if (e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) {
+                int on = e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN;          /* also the window's own button: remember it */
+                if (on != opt.full) { opt.full = on; opt_save(); }
+            }
             else if (e.type == SDL_EVENT_JOYSTICK_ADDED) pad_added(e.jdevice.which);
             else if (e.type == SDL_EVENT_JOYSTICK_REMOVED) pad_removed(e.jdevice.which);
             else if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || (e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && !SDL_IsGamepad(e.jbutton.which))) {

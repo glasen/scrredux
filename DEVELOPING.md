@@ -24,8 +24,9 @@ binary.
 | `scr_tracks.h` | The eight original tracks (generated, see below) |
 | `league.h` | Racing season, Hall of Fame, season saves |
 | `replay.h` | Replays of the last five season races (`save/replayN.rpl`, 60 Hz) |
-| `controls.h` | Driving key bindings (`save/controls.txt`), gamepads and joysticks |
-| `menu.h` | Menus |
+| `options.h` | Volume, fullscreen and rumble settings (`save/options.txt`) |
+| `controls.h` | Driving key bindings (`save/controls.txt`), gamepads, joysticks and rumble |
+| `menu.h` | Menus, the pause menu |
 | `editor.h` | Track builder |
 | `audio.h` | Sample mixer; when sounds trigger is decided in `scrredux.c` |
 | `tools/gen_scr_tracks.py` | Generates `scr_tracks.h` |

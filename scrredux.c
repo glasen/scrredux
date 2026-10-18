@@ -6,7 +6,7 @@
  * weight transfer, full 3D rotation, solid track deck / barrier collisions.
  *
  * Controls: arrows/WASD drive, SPACE boost, R reset to track,
- *           P pause, F11 fullscreen, ESC menu/quit.
+ *           P/ESC pause menu, F11 fullscreen; keys and options in the Options menu.
  *
  * Debug:  scrredux --sim SECONDS [TRACK]
  *         scrredux --shot FILE.png SECONDS [TRACK] [CAM]
@@ -775,6 +775,8 @@ static const float skill_vcap[3] = {56, 62, 69}, skill_alat[3] = {11.0f, 13.5f, 
 static void set_msg(const char *s, float t) { snprintf(msg, sizeof msg, "%s", s); msg_t = t; }
 #include "league.h"
 #include "replay.h"
+#include "options.h"
+#include "controls.h"
 
 /* ---- sound: when the original's samples play (StuntCarRacer.s, Car_Behaviour.cpp), periods and volumes from its tables ---- */
 #define AMI_V (30720.f / 72.f)               /* original speed units per m/s: its top speed 0x7800 = our unboosted ~72 m/s */
@@ -788,6 +790,7 @@ static void snd_grounded(const Car *c, float rate)
 {
     if (!snd_live(c) || grounded_cd > 0) return;
     snd_play(S_GROUNDED, 400, (int)clampf(28 + (rate - 3.f) * 8, 28, 64)); grounded_cd = 0.5f;
+    pad_rumble(clampf((rate - 3.f) * 0.06f, 0.1f, 0.5f), 90);
 }
 /* UpdateEngineRevs, at the original's ~10 Hz frame rate */
 static void engine_revs(int touch, int input, int zs)
@@ -871,6 +874,7 @@ static void car_hurt(Car *c, float amt, float loud)
         if (!in) { float st = fminf(left, next - x); x += st; left -= st; }
     }
     c->damage = x;
+    if (snd_live(c)) pad_rumble(0.3f + amt * 0.06f, (int)fminf(120 + amt * 25, 600));   /* hits, crashes, the net: the pad shakes */
     if (getenv("SCR_DEBUG") && amt > 1.5f && c == &cars[0]) fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v), c->nwc, c->v.y);
     if (c->damage >= 100) { c->damage = 100; c->wrecked = 1; }
     int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0 && c->nholes < NHOLE;   /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
@@ -1604,9 +1608,7 @@ static void draw_sky(void)
 }
 
 /* ------------------------------------------------------------ game logic */
-static const bool *keys;
 static int autoplay;
-#include "controls.h"
 
 static const char *player_name(void) { return sea.pname[0] ? sea.pname : "Player"; }
 /* season races: three laps against one opponent; practice and the builder's test drive: alone, laps until ESC */

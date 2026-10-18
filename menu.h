@@ -1,7 +1,8 @@
 /* menu.h - the menus: the logo and a teal panel in the race preview's chequered border, over the stadium. Hall of Fame,
- * Practise, the Racing Season, Load/Save/Replay, the track builder and the driving keys. Included by scr_main.h */
-enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS, MS_CTL };
-static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ask_paused, ct_col, ct_wait;
+ * Practise, the Racing Season, Load/Save/Replay, the track builder, Options and the driving keys; and the pause menu.
+ * Included by scr_main.h */
+enum { MS_MAIN, MS_HOF, MS_PRACTICE, MS_NAME, MS_SEASON, MS_RESULT, MS_END, MS_LSR, MS_SLOTS, MS_REPLAYS, MS_CTL, MS_OPT };
+static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ct_col, ct_wait, pause_on, pause_sel;
 static char name_buf[16], ms_note[80];
 static float ms_note_t;
 static int rp_slot[RP_SLOTS], nrp_list; static RHead rp_list[RP_SLOTS];
@@ -90,7 +91,8 @@ static void draw_bars_sc(float y, const char *const *it, int n, int sel, int num
     }
 }
 static void draw_bars(float y, const char *const *it, int n, int sel, int numbered) { draw_bars_sc(y, it, n, sel, numbered, 1.3f); }
-static void menu_help(const char *s) { hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC); }
+/* the help line at the bottom; a note (Season saved, ...) takes its place while it shows */
+static void menu_help(const char *s) { if (ms_note_t <= 0) hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC); }
 /* "Really exit?": Y yes, N or ESC no */
 static void ask_box(const char *sub)
 {
@@ -108,7 +110,7 @@ static int main_items(const char **it)
 {
     it[0] = "Hall of Fame"; it[1] = "Practise";
     it[2] = sea.on ? "Continue the Racing Season" : "Start the Racing Season";
-    it[3] = "Load/Save/Replay"; it[4] = "Track Builder"; it[5] = "Controls";
+    it[3] = "Load/Save/Replay"; it[4] = "Track Builder"; it[5] = "Options";
     return 6;
 }
 /* a table row: cell i at column at[i] (in widths of the old 5x7 font's characters), right-aligned there if at[i] < 0 */
@@ -329,10 +331,36 @@ static void draw_controls(void)
     const char *pad = pad_name(); char b[96];
     snprintf(b, sizeof b, "%.60s", pad ? pad : "No gamepad or joystick connected");
     hud_text_c(224, b, 1, pad ? 0x60FF60 : 0x9C9CA4);
-    const char *pl = "PAD: STICK/D-PAD STEER   RT/A/UP GAS   LT/X/DOWN BRAKE   RB/B BOOST   Y RESCUE   START PAUSE   BACK QUIT";
+    const char *pl = "PAD: STICK/D-PAD STEER   RT/A/UP GAS   LT/X/DOWN BRAKE   RB/B BOOST   Y RESCUE   START/BACK PAUSE";
     hud_text_c(236, pl, fminf(0.8f, (panel_w() - 12) / text_width(pl, 1)), 0xB0B0B8);
     menu_help(ct_wait ? "PRESS THE NEW KEY   ESC CANCEL" : "ENTER CHANGE   LEFT/RIGHT KEY 1/2   DEL CLEAR   ESC BACK");
 }
+/* Options: a setting per line, its value in a cell on the right */
+enum { OP_ENG, OP_FX, OP_FULL, OP_RUMBLE, OP_KEYS, OP_BACK, NOP };
+static const char *const OP_NAME[NOP] = {"Engine volume", "Effects volume", "Fullscreen", "Gamepad rumble", "Driving keys", "Back"};
+static void draw_options(void)
+{
+    hud_text_c(80, "OPTIONS", 1.5f, 0xF0C040);
+    float W = panel_w() - 30, x = (HW - W) / 2, cw = 96, h = 15;
+    int sel = msel[MS_OPT];
+    for (int r = 0; r < NOP; r++) {
+        float y = 96 + r * 20;
+        draw_bar(x, y, W, h, OP_NAME[r], r == sel, 1.1f);
+        if (r > OP_RUMBLE) continue;
+        char b[32], v[16];
+        if (r <= OP_FX) snprintf(v, sizeof v, "%d%%", r == OP_ENG ? opt.eng : opt.fx);
+        else snprintf(v, sizeof v, "%s", (r == OP_FULL ? opt.full : opt.rumble) ? "ON" : "OFF");
+        snprintf(b, sizeof b, r == sel ? "<  %s  >" : "%s", v);
+        float cx = x + W - cw - 4;
+        hud_rect(cx - 1, y + 1, cw + 2, h - 2, r == sel ? 0xFFFFFF : 0x0A2426);
+        plate(cx, y + 2, cw, h - 4, 0x2A2C30, 0x060608);
+        if (r <= OP_FX) { float f = (r == OP_ENG ? opt.eng : opt.fx) / 100.f; if (f > 0) plate(cx + 1, y + 3, (cw - 2) * f, h - 6, 0x3AA4A8, 0x1A6468); }   /* the panel's teal */
+        const float sc = 0.8f;                                    /* a little smaller than the labels: it sits inside the slider */
+        hud_text_raw(cx + (cw - text_width(b, sc)) / 2, y + (h - 7 * sc) / 2, b, sc, r == sel ? 0xFFE060 : 0xE8ECEC);
+    }
+    menu_help("LEFT/RIGHT CHANGE   ENTER CHOOSE   ESC BACK");
+}
+static void set_fullscreen(int on) { opt.full = on; if (win) SDL_SetWindowFullscreen(win, on); opt_save(); }
 static void draw_menu(void)
 {
     float x0 = menu_frame();
@@ -351,8 +379,9 @@ static void draw_menu(void)
     case MS_SLOTS: draw_slots(); break;
     case MS_REPLAYS: draw_replays(); break;
     case MS_CTL: draw_controls(); break;
+    case MS_OPT: draw_options(); break;
     }
-    if (ms_note_t > 0) hud_text_c(VH - 26, ms_note, 1.5f, 0x60FF60);
+    if (ms_note_t > 0) hud_text_c(VH - 19.5f, ms_note, fminf(1.3f, (panel_w() - 24) / text_width(ms_note, 1)), 0x60FF60);
     if (ask_quit) ask_box(NULL);
 }
 
@@ -551,7 +580,7 @@ static int menu_key(SDL_Keycode k)
         else if (*sel == 2) menu_go(sea.on ? MS_SEASON : MS_NAME);
         else if (*sel == 3) menu_go(MS_LSR);
         else if (*sel == 4) ed_open();
-        else { msel[MS_CTL] = ct_col = 0; menu_go(MS_CTL); }
+        else { msel[MS_OPT] = 0; menu_go(MS_OPT); }
         break; }
     case MS_HOF:
         if (up) ms_scroll = ms_scroll > 0 ? ms_scroll - 1 : 0;
@@ -620,16 +649,50 @@ static int menu_key(SDL_Keycode k)
         if (up) *sel = (*sel + CT_ROWS - 1) % CT_ROWS;
         if (dn) *sel = (*sel + 1) % CT_ROWS;
         if (k == SDLK_LEFT || k == SDLK_RIGHT) ct_col ^= 1;
-        if (back || (ok && *sel == NCT + 1)) menu_go(MS_MAIN);
+        if (back || (ok && *sel == NCT + 1)) menu_go(MS_OPT);
         else if (ok && *sel == NCT) { ctl_defaults(); ctl_save(); menu_note("Default keys restored"); }
         else if (ok) ct_wait = 1;
         else if ((k == SDLK_DELETE || k == SDLK_BACKSPACE) && *sel < NCT) { ctl[*sel][ct_col] = SDL_SCANCODE_UNKNOWN; ctl_save(); }
+        break; }
+    case MS_OPT: {
+        int d = (k == SDLK_RIGHT) - (k == SDLK_LEFT);
+        if (up) *sel = (*sel + NOP - 1) % NOP;
+        if (dn) *sel = (*sel + 1) % NOP;
+        if (back || (ok && *sel == OP_BACK)) { menu_go(MS_MAIN); break; }
+        if (ok && *sel == OP_KEYS) { msel[MS_CTL] = ct_col = 0; menu_go(MS_CTL); break; }
+        if (*sel <= OP_FX && d) {
+            int *v = *sel == OP_ENG ? &opt.eng : &opt.fx;
+            *v = (int)clampf(*v + d * 10, 0, 100); opt_apply(); opt_save();
+            if (*sel == OP_FX) snd_play(S_CHIME, 150, 40);        /* hear the new level */
+        }
+        if (*sel == OP_FULL && (d || ok)) set_fullscreen(!opt.full);
+        if (*sel == OP_RUMBLE && (d || ok)) { opt.rumble = !opt.rumble; opt_save(); pad_rumble(0.5f, 250); }
         break; }
     }
     return 1;
 }
 
-/* ---- in the car: race HUD extras, and keys ---- */
+/* ---- in the car: race HUD extras, the pause menu, and keys ---- */
+static int pause_items(const char **it)
+{
+    int n = 0;
+    it[n++] = "Continue";
+    if (race_mode != RM_SEASON) it[n++] = "Restart";                  /* a season race counts: no second go */
+    it[n++] = race_mode == RM_SEASON ? "Retire" : race_mode == RM_TEST ? "Back to the builder" : "Leave practice";
+    return n;
+}
+static void draw_pause(void)
+{
+    const char *it[3]; int n = pause_items(it);
+    float w = 220, h = 46 + n * BAR_GAP, x = (HW - w) / 2, y = 64;
+    hud_a = 110; hud_rect(0, 0, HW, VH, 0x000000); hud_a = 255;
+    soft_shadow(x, y, w, h, 8);
+    chq_border(x, y, x + w, y + h, 4);
+    plate(x + 5, y + 5, w - 10, h - 10, 0x24767A, 0x123E42);
+    hud_text_c(y + 12, "PAUSED", 2, 0xF0C040);
+    for (int i = 0; i < n; i++) draw_bar(x + 16, y + 36 + i * BAR_GAP, w - 32, BAR_H, it[i], i == pause_sel, 1.2f);
+    hud_text_c(y + h + 8, "UP/DOWN SELECT   ENTER CHOOSE   ESC/P CONTINUE", 1, 0xE0E0E0);
+}
 static void race_hud_extra(void)
 {
     char b[96];
@@ -638,25 +701,38 @@ static void race_hud_extra(void)
         hud_text_c(70, b, 2, 0xFFFFFF);
     }
     if (race_mode == RM_PRACTICE) hud_text_c(36, "PRACTISE", 1.5f, 0xFFE060);
-    if (race_mode == RM_TEST) hud_text_c(36, "TEST DRIVE - ESC: BUILDER", 1.5f, 0xFFE060);
-    if (ask_quit) ask_box(race_mode == RM_SEASON ? "YOU RETIRE AND LOSE THE RACE" : NULL);
+    if (race_mode == RM_TEST) hud_text_c(36, "TEST DRIVE - ESC: MENU", 1.5f, 0xFFE060);
+    if (pause_on && !ask_quit) draw_pause();
+    if (ask_quit) ask_box("YOU RETIRE AND LOSE THE RACE");
+}
+static void pause_set(int on) { pause_on = paused = on; pause_sel = 0; }
+static void pause_key(SDL_Keycode k)
+{
+    const char *it[3]; int n = pause_items(it), *sel = &pause_sel;
+    if (k == SDLK_UP) *sel = (*sel + n - 1) % n;
+    if (k == SDLK_DOWN) *sel = (*sel + 1) % n;
+    if (k == SDLK_ESCAPE || k == SDLK_P) { pause_set(0); return; }
+    if (k != SDLK_RETURN && k != SDLK_KP_ENTER) return;
+    if (*sel == 0) pause_set(0);
+    else if (*sel < n - 1) { pause_set(0); start_race(); }               /* Restart */
+    else if (race_mode == RM_SEASON) ask_quit = 1;                         /* Retire: asks first */
+    else { pause_set(0); race_leave(1); }
 }
 static int race_key(SDL_Keycode k)
 {
-    if (ask_quit) {
+    if (ask_quit) {                                                        /* "Really exit?" over the pause menu */
         int a = ask_answer(k);
-        if (a >= 0) { ask_quit = 0; paused = ask_paused; }
-        if (a == 1) { paused = 0; if (race_mode == RM_SEASON) result = -1; race_leave(1); }
+        if (a >= 0) ask_quit = 0;
+        if (a == 1) { pause_set(0); result = -1; race_leave(1); }
         return 1;
     }
-    if (k == SDLK_ESCAPE) {
-        if (state == ST_DONE) race_leave(0);
-        else { ask_quit = 1; ask_paused = paused; paused = 1; }
+    if (pause_on) { pause_key(k); return 1; }
+    if (state == ST_DONE) {
+        if (k == SDLK_ESCAPE || ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && state_t > 1.5f)) race_leave(0);
         return 1;
     }
-    if (k == SDLK_P && state == ST_RACE) paused = !paused;
+    if (k == SDLK_ESCAPE || k == SDLK_P) pause_set(1);
     else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) { car_hurt(&cars[0], 8, 0); start_crane(&cars[0], restart_seg(&cars[0]), 0, 2.6f); }
-    else if (state == ST_DONE && (k == SDLK_RETURN || k == SDLK_KP_ENTER) && state_t > 1.5f) race_leave(0);
     return 1;
 }
 

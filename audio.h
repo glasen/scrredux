@@ -19,6 +19,7 @@ static Smp smp[NSND];
 static Voice voice[S_ENGINE + 1];                 /* one per effect, the last one is the engine */
 static SDL_AudioStream *snd_as;
 static int snd_count[S_ENGINE + 1], snd_log = -1, snd_eng_run;
+static float snd_vol[2] = {1, 1};                 /* effects and engine, from the Options menu */
 static float *snd_dump; static int snd_dump_n, snd_dump_cap;   /* --audio-dump: the mix, rendered without a device */
 
 static void snd_lock(void) { if (snd_as) SDL_LockAudioStream(snd_as); }
@@ -110,6 +111,7 @@ static void snd_mix(float *out, int frames)
             int i = (int)o->pos, n = o->s->n; float t = (float)(o->pos - i);
             int j = i + 1 < n ? i + 1 : (o->loop ? 0 : i);
             float x = o->s->d[i] + (o->s->d[j] - o->s->d[i]) * t;
+            x *= snd_vol[v == S_ENGINE];
             l += x * o->gl; r += x * o->gr;
             o->pos += o->step;
             if (o->pos >= n) { if (o->loop) o->pos = fmod(o->pos, n); else o->on = 0; }

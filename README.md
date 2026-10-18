@@ -31,15 +31,18 @@ Without the `sounds/` folder the game runs silently.
 | Left, Right / A, D | Steer |
 | Space / Left Shift | Boost |
 | R | Put the car back on the track |
-| P | Pause |
+| P / Esc | Pause menu: continue, restart (practice) or leave the race |
 | F11 | Fullscreen |
-| Esc | Leave the race or quit the game (asks first) |
 
-In the menus: Up/Down or the number keys select, Enter confirms, Esc goes back.
+In the menus: Up/Down or the number keys select, Enter confirms, Esc goes back. Esc in the main menu quits the game
+(asks first). Retiring from a season race also asks first: you lose the race.
 
-**Controls** in the main menu changes the driving keys: two keys each for accelerate, brake, steer left, steer right
-and boost. Enter on a key, then press the new one; Del clears it. A key already in use swaps places with the one it
-replaces. The keys are kept in `save/controls.txt`.
+### Options
+
+**Options** in the main menu sets the engine and effects volume, fullscreen and gamepad rumble; they are kept in
+`save/options.txt`. **Driving keys** in there changes the driving keys: two keys each for accelerate, brake, steer
+left, steer right and boost. Enter on a key, then press the new one; Del clears it. A key already in use swaps places
+with the one it replaces. The keys are kept in `save/controls.txt`.
 
 ### Gamepad and joystick
 
@@ -52,10 +55,11 @@ Plug in a gamepad or joystick at any time.
 | Left trigger, X, D-pad down | Brake |
 | Right shoulder, B | Boost |
 | Y | Put the car back on the track |
-| Start | Pause |
-| Back | Leave the race (asks first) |
+| Start, Back | Pause menu |
 
-In the menus the D-pad or stick selects, A or Start confirms, B or Back goes back. In replays A pauses, Y changes the
+The pad shakes on crashes, hits and hard landings (Options: gamepad rumble).
+
+In the menus and the pause menu the D-pad or stick selects, A or Start confirms, B or Back goes back. In replays A pauses, Y changes the
 camera and left/right winds back or forward.
 
 A joystick SDL has no gamepad mapping for (a classic digital stick, say) steers with its stick or hat; forward
