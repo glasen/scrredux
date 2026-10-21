@@ -110,12 +110,11 @@ static float try_jumps(const int *l, int n, float v, int b, int s, float v0, int
 static int badj[NJ], nbadj; /* lips of jumps nothing gets over cleanly */
 static int plan_gen = -1;   /* the track_gen the plan is for */
 
-static void plan_jumps(void)
+/* finds the jumps: for each, the segment of its lip, where it ends, and how many segments of ordinary road lead up to
+ * it (its run-up); returns how many there are */
+static int find_jumps(int *lip, int *end, int *back)
 {
-    int lip[NJ], end[NJ], back[NJ], nj = 0;
-    nbadj = 0;
-    memset(jump_v, 0, sizeof(float) * nseg);
-    memset(jump_b, 0, nseg);
+    int nj = 0;
 
     for (int k = 0; k < nseg && nj < NJ; k++) {
         int l = (k + nseg - 1) % nseg;
@@ -168,6 +167,60 @@ static void plan_jumps(void)
         nj++;
     }
 
+    return nj;
+}
+
+/* the take-off speed (m/s) for a chain of n jumps taken from segment ts towards goal: what each speed does with the
+ * scratch car, preferring a clean landing, then the fastest; the best few are tried again from either side of the
+ * deck. vr[b] is the speed the run-up reaches without (0) and with (1) boost. *best gets the cost, 1000 and up: no speed
+ * gets over it */
+static int best_takeoff_speed(const int *l, int n, int ts, int goal, const float vr[2], float *best)
+{
+    enum { V0 = 20, NV = 92 };
+
+    float score[NV], lowest = 1e9f;
+    int chosen = 0;
+    int vtop = (int)fminf(vr[1] + 3, V0 + NV - 1);
+
+    for (int v = V0; v < V0 + NV; v++) {
+        score[v - V0] = v <= vtop ? try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 0, NULL) : 1000;
+    }
+
+    for (int pass = 0; pass < 2; pass++) { /* pass 1: the best few again from either side of the deck */
+        for (int v = V0 + 1; v < V0 + NV - 1; v++) {
+            float r = fmaxf(score[v - V0], fmaxf(score[v - V0 - 1], score[v - V0 + 1]));
+            float cost = r + (v > vr[0] - 1.5f ? 3.f : 0.f) + 20.f * fmaxf(v - (vr[1] - 1.5f), 0.f) -
+                         0.05f * v; /* clean, then fast */
+
+            if (pass == 1 && cost < lowest + 5.f) {
+                for (int side = -1; side <= 1; side += 2) {
+                    cost += fmaxf(0.f, try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 2.f * side, NULL) - r);
+                }
+
+                if (cost < lowest) {
+                    lowest = cost;
+                    chosen = v;
+                }
+            } else if (pass == 0 && cost < lowest) {
+                lowest = cost;
+                chosen = v;
+            }
+        }
+    }
+
+    *best = lowest;
+    return chosen;
+}
+
+static void plan_jumps(void)
+{
+    int lip[NJ], end[NJ], back[NJ], nj = 0;
+    nbadj = 0;
+    memset(jump_v, 0, sizeof(float) * nseg);
+    memset(jump_b, 0, nseg);
+
+    nj = find_jumps(lip, end, back);
+
     const int CHAIN = (int)(150 / ds);
     int h0 = 0;
 
@@ -217,38 +270,9 @@ static void plan_jumps(void)
             try_jumps(l, 1, 200.f, b, rs, 55.f, L, 0, &vr[b]);
         }
 
-        /* what each take-off speed does */
-        enum { V0 = 20, NV = 92 };
-
-        float sc[NV], best = 1e9f;
-        int bv = 0;
-        int vtop = (int)fminf(vr[1] + 3, V0 + NV - 1);
+        float best;
         int ts = (L - (bk < CHAIN ? bk - (int)(5 / ds) : CHAIN) + nseg) % nseg;
-
-        for (int v = V0; v < V0 + NV; v++) {
-            sc[v - V0] = v <= vtop ? try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 0, NULL) : 1000;
-        }
-
-        for (int pass = 0; pass < 2; pass++) { /* pass 1: the best few again from either side of the deck */
-            for (int v = V0 + 1; v < V0 + NV - 1; v++) {
-                float r = fmaxf(sc[v - V0], fmaxf(sc[v - V0 - 1], sc[v - V0 + 1]));
-                float cost = r + (v > vr[0] - 1.5f ? 3.f : 0.f) + 20.f * fmaxf(v - (vr[1] - 1.5f), 0.f) -
-                             0.05f * v; /* clean, then fast */
-                if (pass == 1 && cost < best + 5.f) {
-                    for (int sd = -1; sd <= 1; sd += 2) {
-                        cost += fmaxf(0.f, try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 2.f * sd, NULL) - r);
-                    }
-
-                    if (cost < best) {
-                        best = cost;
-                        bv = v;
-                    }
-                } else if (pass == 0 && cost < best) {
-                    best = cost;
-                    bv = v;
-                }
-            }
-        }
+        int bv = best_takeoff_speed(l, n, ts, goal, vr, &best);
         cv[nc] = (float)bv;
         cb[nc] = bv > vr[0] - 1.5f;
         cn[nc] = n;
