@@ -90,277 +90,323 @@ static void ed_fly_key(SDL_Keycode k)
     }
 }
 
-static void ed_key(SDL_Keycode k, SDL_Keymod mod)
+static void ed_key_track_list(SDL_Keycode k)
 {
-    int sh = (mod & SDL_KMOD_SHIFT) != 0, cmd = (mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0,
-        alt = (mod & SDL_KMOD_ALT) != 0;
+    if (k == SDLK_UP) {
+        editor.list_cursor = (editor.list_cursor + ntrk - 1) % ntrk;
+    } else if (k == SDLK_DOWN) {
+        editor.list_cursor = (editor.list_cursor + 1) % ntrk;
+    } else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+        ed_import(editor.list_cursor);
+        editor.mode = EM_EDIT;
+        ed_view_sel();
+    } else if (k == SDLK_ESCAPE) {
+        editor.mode = EM_EDIT;
+    }
+}
 
-    if (editor.mode == EM_LIST) {
-        if (k == SDLK_UP) {
-            editor.list_cursor = (editor.list_cursor + ntrk - 1) % ntrk;
-        } else if (k == SDLK_DOWN) {
-            editor.list_cursor = (editor.list_cursor + 1) % ntrk;
-        } else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-            ed_import(editor.list_cursor);
-            editor.mode = EM_EDIT;
-            ed_view_sel();
-        } else if (k == SDLK_ESCAPE) {
-            editor.mode = EM_EDIT;
+/* typing the name to save the track under */
+static void ed_key_name_entry(SDL_Keycode k)
+{
+    if (k == SDLK_BACKSPACE && editor.name_input[0]) {
+        editor.name_input[strlen(editor.name_input) - 1] = 0;
+    } else if (k == SDLK_ESCAPE) {
+        editor.mode = EM_EDIT;
+
+        if (win) {
+            SDL_StopTextInput(win);
         }
-        return;
+    } else if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && editor.name_input[0]) {
+        int other = track_find(editor.name_input);
+
+        if (other >= 0 && other < SCR_NTRACKS) {
+            ed_note("That name belongs to an original track");
+            return;
+        }
+
+        snprintf(editor.track.name, sizeof editor.track.name, "%s", editor.name_input);
+        editor.mode = EM_EDIT;
+
+        if (win) {
+            SDL_StopTextInput(win);
+        }
+
+        ed_save();
+    }
+}
+
+/* Ctrl (or Cmd): undo, save, open, new */
+static void ed_key_command(SDL_Keycode k, int shift)
+{
+    switch (k) {
+        case SDLK_Z:
+            ed_undo(shift);
+            break;
+        case SDLK_Y:
+            ed_undo(1);
+            break;
+        case SDLK_S:
+            ed_save_key();
+            break;
+        case SDLK_O:
+            editor.list_cursor = 0;
+            editor.mode = EM_LIST;
+            break;
+        case SDLK_N:
+            editor.mode = EM_NEW;
+            break;
+        default:
+            break;
+    }
+}
+
+/* Alt: move the selected piece on the grid, or turn it */
+static void ed_key_move_piece(SDL_Keycode k, int shift)
+{
+    switch (k) {
+        case SDLK_UP:
+            ed_move(0, 1, 0); /* along the grid as seen from the south, like the map was */
+            break;
+        case SDLK_DOWN:
+            ed_move(0, -1, 0);
+            break;
+        case SDLK_LEFT:
+            ed_move(-1, 0, 0);
+            break;
+        case SDLK_RIGHT:
+            ed_move(1, 0, 0);
+            break;
+        case SDLK_R:
+            ed_move(0, 0, shift ? 3 : 1);
+            break;
+        default:
+            break;
+    }
+}
+
+/* keys 1-6: the height profile of the selected run */
+static void ed_set_shape(SDL_Keycode k)
+{
+    ed_push(0);
+
+    for (int p = ed_lo(); p <= ed_hi(); p++) {
+        TPiece *piece = &editor.track.p[p];
+        piece->shape = (unsigned char)(SH_SMOOTH + (k - SDLK_1));
+
+        if (piece->amp == 0) {
+            piece->amp = piece->shape == SH_HUMP     ? 2.f
+                         : piece->shape == SH_KICKER ? 3.f
+                         : piece->shape == SH_PIT    ? 6.f
+                                                     : 0.f;
+        }
+
+        regen(p);
+    }
+}
+
+/* + and -: the size of the profile of the selected run */
+static void ed_resize_shape(SDL_Keycode k)
+{
+    ed_push(TW_SIZE);
+
+    for (int p = ed_lo(); p <= ed_hi(); p++) {
+        TPiece *piece = &editor.track.p[p];
+        piece->amp = k == SDLK_MINUS || k == SDLK_KP_MINUS ? piece->amp - 0.5f : fminf(piece->amp + 0.5f, 30.f);
+
+        if (piece->shape != SH_HUMP && piece->amp < 0) {
+            piece->amp = 0;
+        }
+
+        regen(p);
+    }
+}
+
+/* Escape steps back out: help, a run of pieces, unsaved changes, the builder */
+static void ed_key_escape(void)
+{
+    if (editor.show_help) {
+        editor.show_help = 0;
+    } else if (ed_lo() != ed_hi()) {
+        ed_select(editor.sel, 0); /* first the run goes back to one piece */
+    } else if (editor.dirty) {
+        editor.mode = EM_QUIT;
+    } else {
+        ed_leave();
+    }
+}
+
+/* the plain keys: build, select, tweak heights. Returns 1 for a key that tweaks (a run of them is one undo step) */
+static int ed_key_build(SDL_Keycode k, int shift)
+{
+    TPiece *selected = &editor.track.p[editor.sel];
+    int tweak = 0;
+
+    switch (k) {
+        case SDLK_UP:
+            ed_extend(0);
+            break;
+        case SDLK_LEFT:
+            ed_extend(shift ? 90 : 45);
+            break;
+        case SDLK_RIGHT:
+            ed_extend(shift ? -90 : -45);
+            break;
+        case SDLK_BACKSPACE:
+        case SDLK_DELETE:
+            ed_remove();
+            break;
+        case SDLK_C:
+            ed_autoclose();
+            break;
+        case SDLK_TAB:
+            ed_select((editor.sel + (shift ? editor.track.np - 1 : 1)) % editor.track.np, 0);
+            break;
+        case SDLK_PAGEUP:
+        case SDLK_PAGEDOWN: { /* a run stops at the ends */
+            int d = k == SDLK_PAGEUP ? -1 : 1;
+
+            if (!shift || (editor.sel + d >= 0 && editor.sel + d < editor.track.np)) {
+                ed_select((editor.sel + d + editor.track.np) % editor.track.np, shift);
+            }
+
+            break;
+        }
+        case SDLK_HOME:
+            ed_select(0, shift);
+            break;
+        case SDLK_END:
+            ed_select(editor.track.np - 1, shift);
+            break;
+        case SDLK_R:
+            ed_tweak_joints(TW_HEIGHT, shift ? 2.f : 0.5f, 0);
+            tweak = 1;
+            break;
+        case SDLK_F:
+            ed_tweak_joints(TW_HEIGHT, shift ? -2.f : -0.5f, 0);
+            tweak = 1;
+            break;
+        case SDLK_COMMA:
+            ed_tweak_joints(TW_BANK, 0, -0.25f);
+            tweak = 1;
+            break;
+        case SDLK_PERIOD:
+            ed_tweak_joints(TW_BANK, 0, 0.25f);
+            tweak = 1;
+            break;
+        case SDLK_1:
+        case SDLK_2:
+        case SDLK_3:
+        case SDLK_4:
+        case SDLK_5:
+        case SDLK_6:
+            ed_set_shape(k);
+            break;
+        case SDLK_MINUS:
+        case SDLK_KP_MINUS:
+        case SDLK_EQUALS:
+        case SDLK_PLUS:
+        case SDLK_KP_PLUS:
+            ed_resize_shape(k);
+            tweak = 1;
+            break;
+        case SDLK_L:
+            if ((selected->at & 15) != 0) {
+                ed_note("The start line goes on a straight piece");
+            } else if (editor.track.start != editor.sel) {
+                ed_push(0);
+                editor.track.start = editor.sel;
+            }
+            break;
+        case SDLK_V:
+            ed_view_sel();
+            break;
+        case SDLK_G:
+            ed_fly(1);
+            break;
+        case SDLK_H:
+            editor.show_help = !editor.show_help;
+            break;
+        case SDLK_T:
+            fc_set_look(0);
+            ed_test();
+            break;
+        case SDLK_J:
+            ed_check_jumps();
+            break;
+        case SDLK_F2:
+            ed_save_key();
+            break;
+        case SDLK_F3:
+            editor.list_cursor = 0;
+            editor.mode = EM_LIST;
+            break;
+        case SDLK_F4:
+            ed_name_begin();
+            break;
+        case SDLK_N:
+            if (editor.dirty) {
+                editor.mode = EM_NEW;
+            } else {
+                ed_push(0);
+                ed_new();
+            }
+            break;
+        case SDLK_ESCAPE:
+            ed_key_escape();
+            break;
+        default:
+            break; /* W A S D Q E Space: the camera (ed_tick) */
     }
 
-    if (editor.mode == EM_NAME) {
-        if (k == SDLK_BACKSPACE && editor.name_input[0]) {
-            editor.name_input[strlen(editor.name_input) - 1] = 0;
-        } else if (k == SDLK_ESCAPE) {
+    return tweak;
+}
+
+static void ed_key(SDL_Keycode k, SDL_Keymod mod)
+{
+    int shift = (mod & SDL_KMOD_SHIFT) != 0, command = (mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0,
+        alt = (mod & SDL_KMOD_ALT) != 0;
+
+    switch (editor.mode) {
+        case EM_LIST:
+            ed_key_track_list(k);
+            return;
+        case EM_NAME:
+            ed_key_name_entry(k);
+            return;
+        case EM_FLY:
+            ed_fly_key(k);
+            return;
+        case EM_NEW: /* "new track?" asked while there are unsaved changes: N confirms, anything else cancels */
             editor.mode = EM_EDIT;
 
-            if (win) {
-                SDL_StopTextInput(win);
+            if (k == SDLK_N) {
+                ed_push(0);
+                ed_new();
+                ed_note("New track - CTRL+Z brings the old one back");
             }
-        } else if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && editor.name_input[0]) {
-            int other = track_find(editor.name_input);
 
-            if (other >= 0 && other < SCR_NTRACKS) {
-                ed_note("That name belongs to an original track");
+            return;
+        case EM_QUIT: /* "really leave?": Escape again confirms, anything else carries on with that key */
+            editor.mode = EM_EDIT;
+
+            if (k == SDLK_ESCAPE) {
+                ed_leave();
                 return;
             }
 
-            snprintf(editor.track.name, sizeof editor.track.name, "%s", editor.name_input);
-            editor.mode = EM_EDIT;
-
-            if (win) {
-                SDL_StopTextInput(win);
-            }
-
-            ed_save();
-        }
-        return;
+            break;
+        default:
+            break;
     }
 
-    if (editor.mode == EM_FLY) {
-        ed_fly_key(k);
-        return;
-    }
-
-    if (editor.mode == EM_NEW) {
-        editor.mode = EM_EDIT;
-
-        if (k == SDLK_N) {
-            ed_push(0);
-            ed_new();
-            ed_note("New track - CTRL+Z brings the old one back");
-        }
-
-        return;
-    }
-
-    if (editor.mode == EM_QUIT) {
-        editor.mode = EM_EDIT;
-
-        if (k == SDLK_ESCAPE) {
-            ed_leave();
-            return;
-        }
-    }
-
-    TPiece *pc = &editor.track.p[editor.sel];
     int tweak = 0;
 
-    if (cmd) {
-        switch (k) {
-            case SDLK_Z:
-                ed_undo(sh);
-                break;
-            case SDLK_Y:
-                ed_undo(1);
-                break;
-            case SDLK_S:
-                ed_save_key();
-                break;
-            case SDLK_O:
-                editor.list_cursor = 0;
-                editor.mode = EM_LIST;
-                break;
-            case SDLK_N:
-                editor.mode = EM_NEW;
-                break;
-            default:
-                break;
-        }
+    if (command) {
+        ed_key_command(k, shift);
     } else if (alt) {
-        switch (k) {
-            case SDLK_UP:
-                ed_move(0, 1, 0);
-                break; /* along the grid as seen from the south, like the map was */
-            case SDLK_DOWN:
-                ed_move(0, -1, 0);
-                break;
-            case SDLK_LEFT:
-                ed_move(-1, 0, 0);
-                break;
-            case SDLK_RIGHT:
-                ed_move(1, 0, 0);
-                break;
-            case SDLK_R:
-                ed_move(0, 0, sh ? 3 : 1);
-                break;
-            default:
-                break;
-        }
+        ed_key_move_piece(k, shift);
     } else {
-        switch (k) {
-            case SDLK_UP:
-                ed_extend(0);
-                break;
-            case SDLK_LEFT:
-                ed_extend(sh ? 90 : 45);
-                break;
-            case SDLK_RIGHT:
-                ed_extend(sh ? -90 : -45);
-                break;
-            case SDLK_BACKSPACE:
-            case SDLK_DELETE:
-                ed_remove();
-                break;
-            case SDLK_C:
-                ed_autoclose();
-                break;
-            case SDLK_TAB:
-                ed_select((editor.sel + (sh ? editor.track.np - 1 : 1)) % editor.track.np, 0);
-                break;
-            case SDLK_PAGEUP:
-            case SDLK_PAGEDOWN: { /* a run stops at the ends */
-                int d = k == SDLK_PAGEUP ? -1 : 1;
-
-                if (!sh || (editor.sel + d >= 0 && editor.sel + d < editor.track.np)) {
-                    ed_select((editor.sel + d + editor.track.np) % editor.track.np, sh);
-                }
-
-                break;
-            }
-            case SDLK_HOME:
-                ed_select(0, sh);
-                break;
-            case SDLK_END:
-                ed_select(editor.track.np - 1, sh);
-                break;
-            case SDLK_R:
-                ed_tweak_joints(TW_HEIGHT, sh ? 2.f : 0.5f, 0);
-                tweak = 1;
-                break;
-            case SDLK_F:
-                ed_tweak_joints(TW_HEIGHT, sh ? -2.f : -0.5f, 0);
-                tweak = 1;
-                break;
-            case SDLK_COMMA:
-                ed_tweak_joints(TW_BANK, 0, -0.25f);
-                tweak = 1;
-                break;
-            case SDLK_PERIOD:
-                ed_tweak_joints(TW_BANK, 0, 0.25f);
-                tweak = 1;
-                break;
-            case SDLK_1:
-            case SDLK_2:
-            case SDLK_3:
-            case SDLK_4:
-            case SDLK_5:
-            case SDLK_6:
-                ed_push(0);
-
-                for (int p = ed_lo(); p <= ed_hi(); p++) {
-                    TPiece *q = &editor.track.p[p];
-                    q->shape = (unsigned char)(SH_SMOOTH + (k - SDLK_1));
-
-                    if (q->amp == 0) {
-                        q->amp = q->shape == SH_HUMP     ? 2.f
-                                 : q->shape == SH_KICKER ? 3.f
-                                 : q->shape == SH_PIT    ? 6.f
-                                                         : 0.f;
-                    }
-
-                    regen(p);
-                }
-
-                break;
-            case SDLK_MINUS:
-            case SDLK_KP_MINUS:
-            case SDLK_EQUALS:
-            case SDLK_PLUS:
-            case SDLK_KP_PLUS:
-                ed_push(TW_SIZE);
-                tweak = 1;
-
-                for (int p = ed_lo(); p <= ed_hi(); p++) {
-                    TPiece *q = &editor.track.p[p];
-                    q->amp = k == SDLK_MINUS || k == SDLK_KP_MINUS ? q->amp - 0.5f : fminf(q->amp + 0.5f, 30.f);
-
-                    if (q->shape != SH_HUMP && q->amp < 0) {
-                        q->amp = 0;
-                    }
-
-                    regen(p);
-                }
-
-                break;
-            case SDLK_L:
-                if ((pc->at & 15) != 0) {
-                    ed_note("The start line goes on a straight piece");
-                } else if (editor.track.start != editor.sel) {
-                    ed_push(0);
-                    editor.track.start = editor.sel;
-                }
-                break;
-            case SDLK_V:
-                ed_view_sel();
-                break;
-            case SDLK_G:
-                ed_fly(1);
-                break;
-            case SDLK_H:
-                editor.show_help = !editor.show_help;
-                break;
-            case SDLK_T:
-                fc_set_look(0);
-                ed_test();
-                break;
-            case SDLK_J:
-                ed_check_jumps();
-                break;
-            case SDLK_F2:
-                ed_save_key();
-                break;
-            case SDLK_F3:
-                editor.list_cursor = 0;
-                editor.mode = EM_LIST;
-                break;
-            case SDLK_F4:
-                ed_name_begin();
-                break;
-            case SDLK_N:
-                if (editor.dirty) {
-                    editor.mode = EM_NEW;
-                } else {
-                    ed_push(0);
-                    ed_new();
-                }
-                break;
-            case SDLK_ESCAPE:
-                if (editor.show_help) {
-                    editor.show_help = 0;
-                } else if (ed_lo() != ed_hi()) {
-                    ed_select(editor.sel, 0); /* first the run goes back to one piece */
-                } else if (editor.dirty) {
-                    editor.mode = EM_QUIT;
-                } else {
-                    ed_leave();
-                }
-                break;
-            default:
-                break; /* W A S D Q E Space: the camera (ed_tick) */
-        }
+        tweak = ed_key_build(k, shift);
     }
 
     if (!tweak) {
