@@ -105,7 +105,7 @@ static void gpu_render(const char *shot_path)
             SDL_DrawGPUPrimitives(sp_, tn, 1, 0, 0);
         }
 
-        int she = dyn_shadow_end < nd ? dyn_shadow_end : nd;
+        int she = SDL_min(dyn_shadow_end, nd);
 
         if (she > sky_n) {
             SDL_GPUBufferBinding b1 = {vbuf_d, (Uint32)((size_t)sky_n * sizeof(Vtx))};

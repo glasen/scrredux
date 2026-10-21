@@ -38,7 +38,7 @@ static void draw_hud_base(void)
     }
 
     const Car *p = &cars[0]; /* speed, boost and damage are in the cockpit (draw_cockpit) */
-    int lp = p->lap < 1 ? 1 : (laps > 0 && p->lap > laps ? laps : p->lap);
+    int lp = laps > 0 ? SDL_clamp(p->lap, 1, laps) : SDL_max(p->lap, 1);
 
     if (laps > 0) {
         snprintf(b, sizeof b, "LAP %d/%d", lp, laps);

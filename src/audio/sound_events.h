@@ -37,11 +37,8 @@ static void engine_revs(int touch, int input, int zs)
     c = eng_revs < 192 && c < 256
             ? 2
             : (c - eng_revs) >> 3; /* slow climb from a standstill, until the car pulls away (after the crane) */
-    if (c >= 0x100) {
-        c = 0x100;
-    } else if (c < (touch ? -0x100 : -0x20)) {
-        c = touch ? -0x100 : -0x20;
-    }
+    c = SDL_min(c, 0x100);
+    c = SDL_max(c, touch ? -0x100 : -0x20);
     eng_chg = c;
     eng_fluct = snd_rand() & 0xf;
 }

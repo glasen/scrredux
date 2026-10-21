@@ -20,6 +20,7 @@ typedef struct {
     int bad;
 } Rd;
 
+/* the next 4 bytes of the file; a read past the end sets r->bad and gives 0 */
 static uint32_t rd_u32(Rd *r)
 {
     uint32_t v = 0;
@@ -36,15 +37,9 @@ static uint32_t rd_u32(Rd *r)
 
 static float rd_f(Rd *r)
 {
-    float v = 0;
-
-    if (r->p + 4 > r->end) {
-        r->bad = 1;
-        return 0;
-    }
-
-    memcpy(&v, r->p, 4);
-    r->p += 4;
+    uint32_t u = rd_u32(r);
+    float v;
+    memcpy(&v, &u, 4);
     return v;
 }
 

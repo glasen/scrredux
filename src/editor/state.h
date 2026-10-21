@@ -34,12 +34,12 @@ static void ed_note(const char *s)
 
 static int ed_lo(void)
 {
-    return ed_sel < ed_anchor ? ed_sel : ed_anchor;
+    return SDL_min(ed_sel, ed_anchor);
 }
 
 static int ed_hi(void)
 {
-    return ed_sel > ed_anchor ? ed_sel : ed_anchor;
+    return SDL_max(ed_sel, ed_anchor);
 }
 
 static void ed_select(int p, int extend)

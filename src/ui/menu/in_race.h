@@ -150,7 +150,7 @@ static void draw_replay_hud(void)
     hud_text(8, 8, "REPLAY", 2, 0xFF5050);
     hud_text(8, 26, rp_head.title, 1, 0xE8E8EC);
     fmt_time(t, sizeof t, racetime);
-    int lp = cars[0].lap < 1 ? 1 : cars[0].lap > rp_head.laps ? rp_head.laps : cars[0].lap;
+    int lp = cars[0].lap < 1 ? 1 : SDL_min(cars[0].lap, rp_head.laps);
     snprintf(b, sizeof b, "LAP %d/%d  %s", lp, rp_head.laps, t);
     hud_text(HW - 8 - text_width(b, 1.5f), 8, b, 1.5f, 0xFFE060);
     snprintf(b, sizeof b, "CAMERA: %s%s", RC_NAME[rp_cam],
