@@ -37,16 +37,16 @@ static void lattice(V3 a, V3 b, V3 side, float wdt, uint32_t col) /* two-chord l
 
 static void draw_crane(const Car *c)
 {
-    if (!c->active || (c->crane <= 0 && c->hook <= 0)) {
+    if (!c->active || (c->crane_time <= 0 && c->hook_time <= 0)) {
         return;
     }
 
-    const Seg *s = &seg[c->crane_seg];
+    const Seg *s = &seg[c->crane_segment];
     V3 Rh = vnorm(V(s->R.x, 0, s->R.z)), Th = vnorm(V(s->T.x, 0, s->T.z));
-    V3 base = vadd(c->crane_x, vmul(Rh, TRACK_HW + 11.f));
+    V3 base = vadd(c->crane_target, vmul(Rh, TRACK_HW + 11.f));
     base.y = ground_h(base.x, base.z);
-    float topy = c->crane_x.y + 12.f;
-    V3 top = V(base.x, topy, base.z), tip = V(c->crane_x.x, topy + 0.8f, c->crane_x.z);
+    float topy = c->crane_target.y + 12.f;
+    V3 top = V(base.x, topy, base.z), tip = V(c->crane_target.x, topy + 0.8f, c->crane_target.z);
     {
         Frm cf = frm_at(V(base.x + Th.x * 1.5f, base.y, base.z + Th.z * 1.5f), Th);
         crane_carrier(&cf);
@@ -79,15 +79,15 @@ static void draw_crane(const Car *c)
 
     V3 above = body_pt(c, V(0, sy + 2.4f, 0.32f));
 
-    if (c->crane > 0) {
+    if (c->crane_time > 0) {
         hook = above;
     } else {
-        hook = vlerp(tip, above, smooth01(c->hook / 2.0f)); /* released: hook winds up */
+        hook = vlerp(tip, above, smooth01(c->hook_time / 2.0f)); /* released: hook winds up */
     }
     cyl(tip, hook, 0.04f, 0.04f, 4, 0x1A1A1E, 0);
     obox(hook, V(1, 0, 0), UP, V(0, 0, 1), 0.22f, 0.3f, 0.12f, 0xE8C020);
 
-    if (c->crane > 0) {
+    if (c->crane_time > 0) {
         for (int k = 0; k < 4; k++) {
             cyl(spr[k],
                 spr[(k == 0)   ? 1

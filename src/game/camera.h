@@ -39,8 +39,8 @@ static void update_camera(const Car *c, float dt, int snap)
     cam_u = vnorm(vlerp(cam_u, Uv, ks));
     cam_u = vnorm(vsub(cam_u, vmul(cam_f, vdot(cam_u, cam_f))));
 
-    if (c->crash > 0 && state != ST_MENU) { /* crash: look at the wreck from outside */
-        float a = atan2f(c->F.z, c->F.x) + 2.2f + 0.25f * c->crash;
+    if (c->crash_time > 0 && state != ST_MENU) { /* crash: look at the wreck from outside */
+        float a = atan2f(c->F.z, c->F.x) + 2.2f + 0.25f * c->crash_time;
         cam.pos = vadd(c->x, V(cosf(a) * 14.f, 6.f, sinf(a) * 14.f));
         cam.pos.y = fmaxf(cam.pos.y, ground_h(cam.pos.x, cam.pos.z) + 3.f);
         cam.fwd = vnorm(vsub(c->x, cam.pos));

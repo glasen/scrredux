@@ -22,7 +22,8 @@ static int season_write(int slot)
         return -1;
     }
 
-    fprintf(f, "%s\nname %s\nseason %d\nrace %d\nholes %d\n", SEA_HEAD, sea.pname, sea.season, sea.race, sea.nholes);
+    fprintf(f, "%s\nname %s\nseason %d\nrace %d\nholes %d\n", SEA_HEAD, sea.pname, sea.season, sea.race,
+            sea.hole_count);
 
     for (int i = 0; i < NDRV; i++) {
         fprintf(f, "driver %d %d %d %d %d %d\n", i, sea.div[i], sea.pts[i], sea.raced[i], sea.wins[i], sea.lapp[i]);
@@ -75,7 +76,7 @@ static int season_peek(int slot, Season *s)
         } else if (sscanf(line, "race %d", &v[0]) == 1) {
             s->race = v[0];
         } else if (sscanf(line, "holes %d", &v[0]) == 1) {
-            s->nholes = v[0];
+            s->hole_count = v[0];
         } else if (sscanf(line, "driver %d %d %d %d %d %d", &i, &v[0], &v[1], &v[2], &v[3], &v[4]) == 6) {
             if (!in_rng(i, 0, NDRV - 1) || !in_rng(v[0], 0, 3)) {
                 ok = 0;
@@ -110,7 +111,7 @@ static int season_peek(int slot, Season *s)
         snprintf(s->pname, sizeof s->pname, "Player");
     }
 
-    s->nholes = s->nholes < 0 ? 0 : s->nholes > NHOLE ? NHOLE : s->nholes;
+    s->hole_count = s->hole_count < 0 ? 0 : s->hole_count > NHOLE ? NHOLE : s->hole_count;
     s->on = 1;
     return 0;
 }

@@ -15,7 +15,7 @@ typedef struct {
     int on, season, race; /* race: the next of each division's six, raced in step */
     char pname[16];
     int div[NDRV], pts[NDRV], raced[NDRV], wins[NDRV], lapp[NDRV];
-    int nholes; /* the player's cage holes stay for the season */
+    int hole_count; /* the player's cage holes stay for the season */
     Race sched[4][6];
 } Season;
 

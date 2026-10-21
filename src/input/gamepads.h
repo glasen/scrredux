@@ -78,8 +78,8 @@ static float pad_stick(int i, int a, Sint16 v)
 
 /* everything held on every pad: steer -1..1, throttle and brake 0..1, and the four directions for the menus */
 typedef struct {
-    float steer, thr, brk;
-    int bst, up, dn, lf, rt;
+    float steer, throttle, brake;
+    int boosting, up, dn, lf, rt;
 } PadIn;
 
 static PadIn pad_read(void)
@@ -127,9 +127,9 @@ static PadIn pad_read(void)
             r.steer = steer;
         }
 
-        r.thr = fmaxf(r.thr, gas);
-        r.brk = fmaxf(r.brk, brk);
-        r.bst |= bst;
+        r.throttle = fmaxf(r.throttle, gas);
+        r.brake = fmaxf(r.brake, brk);
+        r.boosting |= bst;
         r.up |= u || sy < -0.5f;
         r.dn |= d || sy > 0.5f;
         r.lf |= l || sx < -0.5f;

@@ -16,12 +16,12 @@ static void car_place(Car *c, int s, float lat, float speed)
     c->v = vmul(seg[s].T, speed);
     c->w = V(0, 0, 0);
     c->seg = s;
-    c->safe = s;
-    c->delta = 0;
-    c->flip_t = c->stuck_t = 0;
+    c->safe_segment = s;
+    c->steer_angle = 0;
+    c->flipped_time = c->stuck_time = 0;
 
     for (int i = 0; i < 4; i++) {
-        c->wl[i] = WLF[i];
+        c->suspension_len[i] = WLF[i];
     }
 }
 
@@ -31,17 +31,17 @@ static void car_hurt(Car *c, float amt, float loud)
         return;
     }
 
-    if (c->hurt_cd > 0) {
+    if (c->hurt_cooldown > 0) {
         amt *= 0.12f;
     } else {
-        c->hurt_cd = 0.3f;
+        c->hurt_cooldown = 0.3f;
     }
     float x = c->damage, left = amt; /* the crack crosses holes for free */
     while (left > 0) {
         float next = 1e9f;
         int in = 0;
 
-        for (int k = 0; k < c->nholes && !in; k++) {
+        for (int k = 0; k < c->hole_count && !in; k++) {
             float a = hole_at(k);
 
             if (x >= a && x < a + HOLE_W) {
@@ -66,7 +66,7 @@ static void car_hurt(Car *c, float amt, float loud)
 
     if (getenv("SCR_DEBUG") && amt > 1.5f && c == &cars[0]) {
         fprintf(stderr, "hurt %.1f seg %d u=%.2f v=%.1f nwc=%d vy=%.1f\n", amt, c->seg, seg[c->seg].u, vlen(c->v),
-                c->nwc, c->v.y);
+                c->wheels_touching, c->v.y);
     }
 
     if (c->damage >= 100) {
@@ -74,11 +74,11 @@ static void car_hurt(Car *c, float amt, float loud)
         c->wrecked = 1;
     }
 
-    int smash = amt >= 8.f && loud > 0 && c->smash_t <= 0 &&
-                c->nholes < NHOLE; /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
+    int smash = amt >= 8.f && loud > 0 && c->smash_time <= 0 &&
+                c->hole_count < NHOLE; /* big hit: a hole, then a while with only creaks (the original's 69 frames) */
     if (smash) {
-        c->smash_t = 6.9f;
-        c->nholes++;
+        c->smash_time = 6.9f;
+        c->hole_count++;
     }
 
     if (snd_live(c) && loud > 0) {

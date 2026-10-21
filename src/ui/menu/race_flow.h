@@ -37,11 +37,11 @@ static void race_leave(int retired)
         }
 
         const Car *p = &cars[0], *o = &cars[1];
-        float tp = !retired && p->finished && !p->wrecked ? p->ftime : -1,
-              to = !retired && o->finished && !o->wrecked ? o->ftime : -1;
+        float tp = !retired && p->finished && !p->wrecked ? p->finish_time : -1,
+              to = !retired && o->finished && !o->wrecked ? o->finish_time : -1;
         int win_p = !retired && result > 0;
         float ta = r->a == PLAYER ? tp : to, tb = r->a == PLAYER ? to : tp;
-        float la = r->a == PLAYER ? p->bestlap : o->bestlap, lb = r->a == PLAYER ? o->bestlap : p->bestlap;
+        float la = r->a == PLAYER ? p->best_lap : o->best_lap, lb = r->a == PLAYER ? o->best_lap : p->best_lap;
         race_score(r, win_p ? PLAYER : opp_drv, ta, tb, la, lb);
         last_res = *r;
         last_retired = retired;
@@ -56,7 +56,7 @@ static void race_leave(int retired)
             hof_race(tn, drv_name(opp_drv), to);
         }
 
-        sea.nholes = p->nholes;
+        sea.hole_count = p->hole_count;
         char title[64];
         snprintf(title, sizeof title, "%s - %s v %s - %s", tn, player_name(), drv_name(opp_drv),
                  win_p ? "won" : "lost");

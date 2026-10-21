@@ -21,20 +21,20 @@ static void car_step(Car *c, float dt)
         return;
     }
 
-    if (c->hook > 0) {
-        c->hook -= dt;
+    if (c->hook_time > 0) {
+        c->hook_time -= dt;
     }
 
-    if (c->crane > 0) {
+    if (c->crane_time > 0) {
         crane_step(c, dt);
         return;
     }
 
-    if (c->wrecked || c->crash > 0) {
-        c->thr = 0;
-        c->brk = 1;
-        c->bst = 0;
-        c->str = 0;
+    if (c->wrecked || c->crash_time > 0) {
+        c->throttle = 0;
+        c->brake = 1;
+        c->boosting = 0;
+        c->steer_input = 0;
     }
 
     Q q;
@@ -46,54 +46,55 @@ static void car_step(Car *c, float dt)
         if (prev > nseg * 3 / 4 && cu < nseg / 4) {
             c->lap++;
 
-            if (c->lap > c->lapmax) { /* a new lap; not the line again after reversing or a crane drop behind it */
-                c->lapmax = c->lap;
+            if (c->lap >
+                c->furthest_lap) { /* a new lap; not the line again after reversing or a crane drop behind it */
+                c->furthest_lap = c->lap;
 
                 if (state == ST_RACE && c->lap >= 2) {
-                    c->lastlap = racetime - c->lapstart;
+                    c->last_lap = racetime - c->lap_start_time;
 
-                    if (c->bestlap <= 0 || c->lastlap < c->bestlap) {
-                        c->bestlap = c->lastlap;
+                    if (c->best_lap <= 0 || c->last_lap < c->best_lap) {
+                        c->best_lap = c->last_lap;
                     }
 
-                    c->lapshow = 3.f;
+                    c->lap_banner_time = 3.f;
                     lap_done(c);
                 }
 
-                c->lapstart = racetime;
+                c->lap_start_time = racetime;
 
                 if (laps > 0 && c->lap > laps && !c->finished && state == ST_RACE) {
                     c->finished = 1;
-                    c->ftime = racetime;
+                    c->finish_time = racetime;
                 }
             }
         } else if (prev < nseg / 4 && cu > nseg * 3 / 4) {
             c->lap--;
         }
         c->seg = cu;
-        c->prog = (float)c->lap * nseg + cu + q.u;
+        c->progress = (float)c->lap * nseg + cu + q.u;
     }
 
-    if (c->hurt_cd > 0) {
-        c->hurt_cd -= dt;
+    if (c->hurt_cooldown > 0) {
+        c->hurt_cooldown -= dt;
     }
 
-    if (c->smash_t > 0) {
-        c->smash_t -= dt;
+    if (c->smash_time > 0) {
+        c->smash_time -= dt;
     }
 
     V3 Fo = V(0, -CAR_M * GRAV, 0), To = V(0, 0, 0);
     float speed = vdot(c->v, c->F);
-    float gl = -GRAV * c->R.y, dmax = steer_max(speed, c->str >= 0 ? gl : -gl);
-    float tgt = c->str * dmax, dd = tgt - c->delta, mr = phys.steer_rate * dt;
-    c->delta += clampf(dd, -mr, mr);
+    float gl = -GRAV * c->R.y, dmax = steer_max(speed, c->steer_input >= 0 ? gl : -gl);
+    float tgt = c->steer_input * dmax, dd = tgt - c->steer_angle, mr = phys.steer_rate * dt;
+    c->steer_angle += clampf(dd, -mr, mr);
 
-    float Fdrv = 0, brake = c->brk;
+    float Fdrv = 0, brake = c->brake;
 
-    if (c->thr > 0) {
+    if (c->throttle > 0) {
         float P = phys.engine_power, Fm = phys.max_drive_force;
 
-        if (c->bst && c->boost > 0) {
+        if (c->boosting && c->boost > 0) {
             P += phys.boost_power;
             Fm += phys.boost_force_max;
             c->boost -= dt * phys.boost_drain_rate;
@@ -103,14 +104,14 @@ static void car_step(Car *c, float dt)
             }
         }
 
-        float vtop = c->bst && c->boost > 0
+        float vtop = c->boosting && c->boost > 0
                          ? phys.top_speed_boost
                          : phys.top_speed; /* the engine cuts out at the top speed, boost or not, like the original */
-        Fdrv = c->thr * fminf(Fm, P / fmaxf(speed, 3.f)) * clampf((vtop - speed) / 2.f, 0, 1);
+        Fdrv = c->throttle * fminf(Fm, P / fmaxf(speed, 3.f)) * clampf((vtop - speed) / 2.f, 0, 1);
     }
 
-    if (c->brk > 0 && speed < 0.8f && c->thr <= 0 && !c->hold) {
-        Fdrv = -c->brk * 4500.f;
+    if (c->brake > 0 && speed < 0.8f && c->throttle <= 0 && !c->held_at_start) {
+        Fdrv = -c->brake * 4500.f;
         brake = 0;
     }
 
@@ -149,12 +150,12 @@ static void car_step(Car *c, float dt)
             }
         }
 
-        c->wl[i] = hub;
-        int was = c->wcon[i];
-        c->wcon[i] = contact;
+        c->suspension_len[i] = hub;
+        int was = c->wheel_contact[i];
+        c->wheel_contact[i] = contact;
 
         if (!contact) {
-            c->wbot[i] = 0;
+            c->wheel_bottomed[i] = 0;
             continue;
         }
 
@@ -175,17 +176,17 @@ static void car_step(Car *c, float dt)
             float x = WLMIN[i] - l; /* progressive hydraulic stop */
             Fs += K_BUMP * x + 6.0e6f * x * x + (rate > 0 ? 9000.f * rate : 0.f);
 
-            if (!c->wbot[i] && rate > 2.5f) {
+            if (!c->wheel_bottomed[i] && rate > 2.5f) {
                 snd_grounded(c, rate); /* bottomed out: the original's grounded sound */
             }
 
-            if (!c->wbot[i] && rate > 7.f) {
+            if (!c->wheel_bottomed[i] && rate > 7.f) {
                 car_hurt(c, (rate - 7.f) * 0.6f, 1.f);
             }
 
-            c->wbot[i] = 1;
+            c->wheel_bottomed[i] = 1;
         } else {
-            c->wbot[i] = 0;
+            c->wheel_bottomed[i] = 0;
         }
 
         if (Fs < 0) {
@@ -207,12 +208,12 @@ static void car_step(Car *c, float dt)
         V3 Fw0 = c->F;
 
         if (i < 2) {
-            Fw0 = vadd(vmul(c->F, cosf(c->delta)), vmul(c->R, sinf(c->delta)));
+            Fw0 = vadd(vmul(c->F, cosf(c->steer_angle)), vmul(c->R, sinf(c->steer_angle)));
         }
 
         V3 Fw = vnorm(vsub(Fw0, vmul(N, vdot(Fw0, N)))), Sw = vcross(Fw, N);
         float vlong = vdot(vc, Fw), vlat = vdot(vc, Sw);
-        c->wph[i] = fmodf(c->wph[i] + vlong * dt / WRAD[i], 2 * PI_F);
+        c->wheel_phase[i] = fmodf(c->wheel_phase[i] + vlong * dt / WRAD[i], 2 * PI_F);
         float Fx = 0;
 
         if (i >= 2) {
@@ -238,7 +239,7 @@ static void car_step(Car *c, float dt)
             vsub(r, vmul(c->U, 0.85f * vdot(r, c->U))); /* tyre forces act near CoM height: no roll-over from grip */
         To = vadd(To, vcross(rr, ft));
     }
-    c->nwc = nwc;
+    c->wheels_touching = nwc;
 
     for (int i = 0; i < 16; i++) {
         contact_point(c, i, CPTS[i], &Fo, &To);
@@ -253,8 +254,8 @@ static void car_step(Car *c, float dt)
     }
 
     impact = fmaxf(impact, 0.5f * fence_contact(c, &Fo, &To, &net)); /* the net gives: a softer hit */
-    if ((touch || net) && c->crash <= 0) { /* landed beside the track or caught in the net: crash */
-        c->crash = 1e-4f;
+    if ((touch || net) && c->crash_time <= 0) { /* landed beside the track or caught in the net: crash */
+        c->crash_time = 1e-4f;
         stat_falls++;
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
         dust_burst(c->x, 36, 3.f + 0.3f * impact);
@@ -289,19 +290,19 @@ static void car_step(Car *c, float dt)
     }
 
     { /* exhaust flames: only while the boost burns */
-        float tg = (c->bst && c->boost > 0 && c->thr > 0 && !c->wrecked) ? 1.4f : 0.f;
+        float tg = (c->boosting && c->boost > 0 && c->throttle > 0 && !c->wrecked) ? 1.4f : 0.f;
         c->flame += (tg - c->flame) * clampf(14.f * dt, 0, 1);
     }
     { /* body lean: rocks the cab on its springs so cornering/braking/landing are visible */
         float al = vdot(Fo, c->R) / CAR_M, ag = vdot(Fo, c->F) / CAR_M, k = clampf(16.f * dt, 0, 1);
-        c->alat_f += (clampf(al, -30, 30) - c->alat_f) * k;
-        c->along_f += (clampf(ag, -25, 25) - c->along_f) * k;
-        float tr = nwc > 1 ? clampf(-c->alat_f * phys.lean_roll_per_accel, -0.20f, 0.20f) : 0.f;
-        float tp = nwc > 1 ? clampf(c->along_f * phys.lean_pitch_per_accel, -0.14f, 0.14f) : 0.f;
-        c->lrr += (140.f * (tr - c->lr) - 21.f * c->lrr) * dt;
-        c->lr += c->lrr * dt;
-        c->lpr += (120.f * (tp - c->lp) - 19.f * c->lpr) * dt;
-        c->lp += c->lpr * dt;
+        c->lateral_accel += (clampf(al, -30, 30) - c->lateral_accel) * k;
+        c->longitudinal_accel += (clampf(ag, -25, 25) - c->longitudinal_accel) * k;
+        float tr = nwc > 1 ? clampf(-c->lateral_accel * phys.lean_roll_per_accel, -0.20f, 0.20f) : 0.f;
+        float tp = nwc > 1 ? clampf(c->longitudinal_accel * phys.lean_pitch_per_accel, -0.14f, 0.14f) : 0.f;
+        c->lean_roll_rate += (140.f * (tr - c->lean_roll) - 21.f * c->lean_roll_rate) * dt;
+        c->lean_roll += c->lean_roll_rate * dt;
+        c->lean_pitch_rate += (120.f * (tp - c->lean_pitch) - 19.f * c->lean_pitch_rate) * dt;
+        c->lean_pitch += c->lean_pitch_rate * dt;
         lean_limit(c);
     }
     c->v = vadd(c->v, vmul(Fo, dt / CAR_M));
@@ -332,35 +333,35 @@ static void car_step(Car *c, float dt)
     c->R = vcross(c->F, c->U);
 
     if (nwc >= 3 && q.valid && q.road && fabsf(q.lat) < TRACK_HW - 1.5f) {
-        c->safe = q.seg;
+        c->safe_segment = q.seg;
     }
 
-    if (c->crash > 0) { /* lying in the dirt: smoke, a little fire, then the crane */
-        c->crash += dt;
-        c->dust_t -= dt;
+    if (c->crash_time > 0) { /* lying in the dirt: smoke, a little fire, then the crane */
+        c->crash_time += dt;
+        c->dust_timer -= dt;
 
-        if (c->dust_t <= 0) {
-            c->dust_t = 0.12f;
+        if (c->dust_timer <= 0) {
+            c->dust_timer = 0.12f;
             crash_smoke(c);
         }
 
-        if (c->crash > 3.4f) {
+        if (c->crash_time > 3.4f) {
             start_crane(c, restart_seg(c), 0, 2.6f);
         }
 
         return;
     }
 
-    c->flip_t = c->U.y < 0.25f && vlen(c->v) < 6.f ? c->flip_t + dt : 0;
-    c->stuck_t = (state == ST_RACE && vlen(c->v) < 1.0f && c->thr > 0.15f) ? c->stuck_t + dt : 0;
+    c->flipped_time = c->U.y < 0.25f && vlen(c->v) < 6.f ? c->flipped_time + dt : 0;
+    c->stuck_time = (state == ST_RACE && vlen(c->v) < 1.0f && c->throttle > 0.15f) ? c->stuck_time + dt : 0;
 
-    if (c->flip_t > 2.5f || c->stuck_t > 2.5f || c->x.y < ground_h(c->x.x, c->x.z) - 4.f) {
+    if (c->flipped_time > 2.5f || c->stuck_time > 2.5f || c->x.y < ground_h(c->x.x, c->x.z) - 4.f) {
         stat_falls++;
         car_hurt(c, 4.f, 1.f);
 
         if (getenv("SCR_DEBUG") && !planning) {
-            fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flip_t,
-                    c->stuck_t);
+            fprintf(stderr, "reset car%d seg %d flip=%.1f stuck=%.1f\n", (int)(c - cars), c->seg, c->flipped_time,
+                    c->stuck_time);
         }
 
         if (c == &cars[0]) {

@@ -20,7 +20,7 @@ static void start_view(void)
     c->R = vcross(c->F, c->U);
 
     for (int i = 0; i < 4; i++) {
-        c->wl[i] = WREST[i];
+        c->suspension_len[i] = WREST[i];
     }
 
     state = ST_VIEW;

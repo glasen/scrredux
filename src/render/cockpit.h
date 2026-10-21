@@ -103,7 +103,7 @@ static void draw_crack(const Car *c)
 
     r = 777;
 
-    for (int h = 0; h < c->nholes; h++) {
+    for (int h = 0; h < c->hole_count; h++) {
         V3 hc = vadd(vadd(C0, V(X0 + (X1 - X0) * (hole_at(h) + HOLE_W / 2) / 100.f, 0, 0)), vmul(N, 0.0018f)), pts[12];
 
         for (int k = 0; k < 12; k++) {

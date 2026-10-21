@@ -11,7 +11,7 @@ static void corner_pose(const Car *c, int i, const float body[12], CornerPose *P
     const Rig *g = &rig[i];
     /* the visual body lean lifts or drops the mount; the wheel stays on the road, so the suspension takes it up */
     V3 lm = m34_apply(body, WMOUNT[i]), pm = body_pt(c, WMOUNT[i]);
-    float dz = clampf(WREST[i] - c->wl[i] - vdot(c->U, vsub(lm, pm)), -WDROOP[i], WBUMP[i]);
+    float dz = clampf(WREST[i] - c->suspension_len[i] - vdot(c->U, vsub(lm, pm)), -WDROOP[i], WBUMP[i]);
     const float *t = g->tab;
     int lo = 0, hi = g->ntab - 1;
 
@@ -35,11 +35,11 @@ static void corner_pose(const Car *c, int i, const float body[12], CornerPose *P
 
     if (i < 2) {
         float st[12];
-        m34_rot(KP_P[i], KP_A[i], c->delta, st);
+        m34_rot(KP_P[i], KP_A[i], c->steer_angle, st);
         m34_mul(P->up, st, P->up);
     } /* steer about the kingpin */
     float sp[12];
-    m34_rot(HUB0[i], V(1, 0, 0), c->wph[i], sp);
+    m34_rot(HUB0[i], V(1, 0, 0), c->wheel_phase[i], sp);
     m34_mul(P->up, sp, P->wheel);
     V3 low = m34_apply(P->la, g->elo), d0 = vsub(g->elo, g->ehi), d1 = vsub(low, g->ehi);
     m34_aim(g->ehi, d0, d1, 0, P->ct); /* damper body swings about its top eye */
@@ -86,7 +86,7 @@ static int car_group_rows(const Car *c, int g, float m[12], int first_person, in
             return 1;
         case R_STWHL: {
             float l[12];
-            m34_rot(STW_C, STW_A, -STW_RATIO * c->delta, l);
+            m34_rot(STW_C, STW_A, -STW_RATIO * c->steer_angle, l);
             m34_mul(body, l, m);
             return 1;
         }

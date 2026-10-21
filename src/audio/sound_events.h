@@ -93,7 +93,7 @@ static void snd_tick(float dt)
     }
     quiet = 0;
 
-    if (p->crane > 0) { /* on the crane all is quiet, the engine starts again from a standstill */
+    if (p->crane_time > 0) { /* on the crane all is quiet, the engine starts again from a standstill */
         if (eng_on) {
             snd_engine_stop();
         }
@@ -108,13 +108,13 @@ static void snd_tick(float dt)
             if (state == ST_DONE) {
                 eng_chg = -8; /* race over: the revs wind down to nothing */
             } else {
-                engine_revs(p->nwc > 0,
-                            (state == ST_RACE || state == ST_REPLAY) && !p->wrecked && p->crash <= 0 &&
-                                (p->thr > 0 || p->brk > 0),
+                engine_revs(p->wheels_touching > 0,
+                            (state == ST_RACE || state == ST_REPLAY) && !p->wrecked && p->crash_time <= 0 &&
+                                (p->throttle > 0 || p->brake > 0),
                             zs);
             }
 
-            if (snd_scrape && p->crash <= 0 && fer >= 1) {
+            if (snd_scrape && p->crash_time <= 0 && fer >= 1) {
                 snd_play(S_WRECK, (31 - (fer >> 1)) * 4 + 170, 64);
             }
 

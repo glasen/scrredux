@@ -36,7 +36,7 @@ static void start_race(void)
     }
 
     if (race_mode == RM_SEASON) {
-        cars[0].nholes = sea.nholes;
+        cars[0].hole_count = sea.hole_count;
     }
 
     npart = 0;
@@ -64,7 +64,7 @@ static void lap_done(Car *c)
 
     int me = c == &cars[0];
 
-    if (hof_lap(trk[cur_track].name, me ? player_name() : drv_name(opp_drv), c->lastlap) && me) {
+    if (hof_lap(trk[cur_track].name, me ? player_name() : drv_name(opp_drv), c->last_lap) && me) {
         set_msg("NEW LAP RECORD!", 2.5f);
     }
 }
@@ -88,18 +88,18 @@ static void rp_step(float dt)
 
     for (int i = 0; i < 2; i++) {
         Car *c = &cars[i];
-        float was = c->crash;
+        float was = c->crash_time;
         rec_unpack(c, &t->c[i]);
 
         if (rp_paused || rp_speed < 0) {
             continue;
         }
 
-        if (c->crash > 0 && was <= 0) {
+        if (c->crash_time > 0 && was <= 0) {
             dust_burst(c->x, 36, 4.f);
         }
 
-        if (c->crash > 0 && (rp_smoke[i] -= dt) <= 0) {
+        if (c->crash_time > 0 && (rp_smoke[i] -= dt) <= 0) {
             rp_smoke[i] = 0.12f;
             crash_smoke(c);
         }

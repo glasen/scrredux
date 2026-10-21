@@ -22,7 +22,7 @@ static void set_opponent(int i)
 static void season_schedule(void)
 {
     sea.race = 0;
-    sea.nholes = 0;
+    sea.hole_count = 0;
     memset(sea.pts, 0, sizeof sea.pts);
     memset(sea.raced, 0, sizeof sea.raced);
     memset(sea.wins, 0, sizeof sea.wins);

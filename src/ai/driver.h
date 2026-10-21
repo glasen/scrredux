@@ -66,9 +66,9 @@ static void ai_drive(Car *c, float lane, float vcap, float alat, const Car *riva
         lane = clampf(lane, -2.2f, 2.2f); /* a run-up is driven near the middle, whoever is about */
     }
 
-    if (!c->ai_lset) {
+    if (!c->ai_lane_set) {
         c->ai_lane = vdot(vsub(c->x, s0->c), s0->R);
-        c->ai_lset = 1;
+        c->ai_lane_set = 1;
     }
 
     c->ai_lane += clampf(lane - c->ai_lane, -2.f / 240.f, 2.f / 240.f); /* change lanes at 2 m/s, never with a jerk */
@@ -83,7 +83,7 @@ static void ai_drive(Car *c, float lane, float vcap, float alat, const Car *riva
     float delta = -0.55f * hdg - atanf(2.2f * e / (fmaxf(spd, 0) + 4.f)) + atanf(3.4f * kf);
     float gl = -GRAV * c->R.y, dmax = steer_max(spd, delta >= 0 ? gl : -gl);
     float dlim = 3.2f / (fmaxf(spd, 0) + 5.f);
-    c->str = c->nwc == 0 ? 0.f : clampf(clampf(delta, -dlim, dlim) / dmax, -1.f, 1.f);
+    c->steer_input = c->wheels_touching == 0 ? 0.f : clampf(clampf(delta, -dlim, dlim) / dmax, -1.f, 1.f);
     float vmax = 0, vmin = 0, vbend = 1e9f;
     int n = (int)((fmaxf(spd, 5) * 2.0f + 20) / ds);
 
@@ -108,32 +108,32 @@ static void ai_drive(Car *c, float lane, float vcap, float alat, const Car *riva
     }
 
     if (spd < vt) {
-        c->thr = clampf((vt - spd) * (jv > 0 ? 2.f : 0.5f), 0.2f, 1.f);
-        c->brk = 0;
+        c->throttle = clampf((vt - spd) * (jv > 0 ? 2.f : 0.5f), 0.2f, 1.f);
+        c->brake = 0;
     } else if (jv > 0 ? spd > vt + 1.f : spd > vt * 1.06f && !gapsoon) {
-        c->thr = 0;
-        c->brk = clampf((spd - vt) * 0.15f, 0.15f, 1.f);
+        c->throttle = 0;
+        c->brake = clampf((spd - vt) * 0.15f, 0.15f, 1.f);
     } else {
-        c->thr = 0.3f;
-        c->brk = 0;
+        c->throttle = 0.3f;
+        c->brake = 0;
     }
 
     if (spd > 8.f) {
-        c->thr *= fmaxf(0.25f, 1.f - 0.85f * fabsf(c->str));
+        c->throttle *= fmaxf(0.25f, 1.f - 0.85f * fabsf(c->steer_input));
     }
 
     if (lift && jv <= 0) {
-        c->thr = 0;
+        c->throttle = 0;
 
         if (spd > 6.f) {
-            c->brk = fmaxf(c->brk, 0.25f);
+            c->brake = fmaxf(c->brake, 0.25f);
         }
     }
 
-    if (c->nwc < 3) {
-        c->brk = 0; /* no braking in the air or on an unsettled landing */
+    if (c->wheels_touching < 3) {
+        c->brake = 0; /* no braking in the air or on an unsettled landing */
     } else {
-        c->brk *= 1.f - 0.7f * fabsf(c->str); /* leave the tyres grip to steer with */
+        c->brake *= 1.f - 0.7f * fabsf(c->steer_input); /* leave the tyres grip to steer with */
     }
-    c->bst = jump_b[c->seg] && spd < jv - 1.f;
+    c->boosting = jump_b[c->seg] && spd < jv - 1.f;
 }

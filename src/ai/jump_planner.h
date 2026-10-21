@@ -61,11 +61,11 @@ static float scratch_run(int s, float v0, int mark, int goal, float lane, int bo
         ai_drive(&t, lane, skill_vcap[1], skill_alat[1], NULL);
         car_step(&t, 1.f / 240);
 
-        if (t.crash > 0 || t.crane > 0 || t.wrecked) {
+        if (t.crash_time > 0 || t.crane_time > 0 || t.wrecked) {
             return 1000;
         }
 
-        float d = t.prog - s;
+        float d = t.progress - s;
 
         if (d >= dm && !seen) {
             seen = 1;
@@ -75,7 +75,7 @@ static float scratch_run(int s, float v0, int mark, int goal, float lane, int bo
             }
         }
 
-        if (d >= dg && (t.nwc >= 3 || goal == mark)) {
+        if (d >= dg && (t.wheels_touching >= 3 || goal == mark)) {
             return t.damage;
         }
     }

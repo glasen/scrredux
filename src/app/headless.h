@@ -36,7 +36,7 @@ static void wheel_gap_sample(const Car *c)
 
         int i = mdl_g[g].corner;
 
-        if (c->wl[i] >= WLF[i] - 1e-3f || car_out(c)) {
+        if (c->suspension_len[i] >= WLF[i] - 1e-3f || car_out(c)) {
             continue; /* wheel in the air */
         }
 
@@ -51,8 +51,8 @@ static void wheel_gap_sample(const Car *c)
             car_body_rows(c, body);
             V3 lm = m34_apply(body, WMOUNT[i]), pm = body_pt(c, WMOUNT[i]);
             printf("SINK %d gap %+.3f  wl-lmin %+.3f  lean %+.3f  dz %+.3f bump %.3f  lr %.3f lp %.3f\n", i, gap,
-                   c->wl[i] - WLMIN[i], vdot(c->U, vsub(lm, pm)), WREST[i] - c->wl[i] - vdot(c->U, vsub(lm, pm)),
-                   WBUMP[i], c->lr, c->lp);
+                   c->suspension_len[i] - WLMIN[i], vdot(c->U, vsub(lm, pm)),
+                   WREST[i] - c->suspension_len[i] - vdot(c->U, vsub(lm, pm)), WBUMP[i], c->lean_roll, c->lean_pitch);
         }
 
         if (!wg_n[i]) {
@@ -104,7 +104,7 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
         car_place(&cars[0], lk, 0, lv);
         car_place(&cars[1], (lk + 300) % nseg, 2.0f, 0);
         state = ST_RACE;
-        cars[0].crane = cars[1].crane = 0;
+        cars[0].crane_time = cars[1].crane_time = 0;
     } /* else the start crane puts them back on the grid */
     if (camsel == 4) {
         start_view();
@@ -132,10 +132,10 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
             float f = 0, st = 0;
             sscanf(getenv("SCR_POSE"), "%f,%f", &f, &st);
             view_anim = 0;
-            cars[0].delta = st;
+            cars[0].steer_angle = st;
 
             for (int i = 0; i < 4; i++) {
-                cars[0].wl[i] = WREST[i] - f * (f > 0 ? WREST[i] - WLMIN[i] : WLF[i] - WREST[i]);
+                cars[0].suspension_len[i] = WREST[i] - f * (f > 0 ? WREST[i] - WLMIN[i] : WLF[i] - WREST[i]);
             }
         }
     }
@@ -155,9 +155,9 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
             fprintf(stderr,
                     "t=%5.2f seg %4d lat %5.2f h %5.2f v %5.1f str %5.2f delta %5.2f thr %.2f brk %.2f nwc %d yaw "
                     "%5.2f roll %5.2f lean %5.3f %5.3f\n",
-                    i * PHYS_DT, cars[0].seg, q.lat, q.h, vdot(cars[0].v, cars[0].F), cars[0].str, cars[0].delta,
-                    cars[0].thr, cars[0].brk, cars[0].nwc, cars[0].w.y, vdot(cars[0].w, cars[0].F), cars[0].lr,
-                    cars[0].lp);
+                    i * PHYS_DT, cars[0].seg, q.lat, q.h, vdot(cars[0].v, cars[0].F), cars[0].steer_input,
+                    cars[0].steer_angle, cars[0].throttle, cars[0].brake, cars[0].wheels_touching, cars[0].w.y,
+                    vdot(cars[0].w, cars[0].F), cars[0].lean_roll, cars[0].lean_pitch);
         }
 
         if (i % 1200 == 0) {
@@ -210,14 +210,14 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
             track_query(car_hub(c, i), c->seg, 12, &hq);
             printf(
                 "WHEEL %s: drawn tyre bottom %+.3f m above road, physics hub %.3f above road (radius %.3f), wl %.3f\n",
-                mdl_g[g].name, lo, hq.h, WRAD[i], c->wl[i]);
+                mdl_g[g].name, lo, hq.h, WRAD[i], c->suspension_len[i]);
         }
     }
 
     printf("CONTACT samples=%d impulse=%.0f Ns sparks=%d\n", stat_contacts, stat_push, stat_sparks);
     printf("END state=%d result=%d racetime=%.1f p lap=%d dmg=%.1f best=%.1f | ai lap=%d dmg=%.1f | falls=%d nseg=%d "
            "len=%.0f\n",
-           state, result, racetime, cars[0].lap, cars[0].damage, cars[0].bestlap, cars[1].lap, cars[1].damage,
+           state, result, racetime, cars[0].lap, cars[0].damage, cars[0].best_lap, cars[1].lap, cars[1].damage,
            stat_falls, nseg, nseg * ds);
 
     if (shot) {

@@ -5,7 +5,7 @@
 /* body frame including the visual roll/pitch lean */
 static void body_frame(const Car *c, V3 *R, V3 *U, V3 *F)
 {
-    float cp = cosf(c->lp), sp = sinf(c->lp), cr = cosf(c->lr), sr = sinf(c->lr);
+    float cp = cosf(c->lean_pitch), sp = sinf(c->lean_pitch), cr = cosf(c->lean_roll), sr = sinf(c->lean_roll);
     V3 Fv = vadd(vmul(c->F, cp), vmul(c->U, sp)), Uv = vsub(vmul(c->U, cp), vmul(c->F, sp));
     *U = vadd(vmul(Uv, cr), vmul(c->R, sr));
     *R = vsub(vmul(c->R, cr), vmul(Uv, sr));
@@ -26,5 +26,5 @@ static void car_body_rows(const Car *c, float m[12])
 
 static V3 car_hub(const Car *c, int i)
 {
-    return vsub(body_pt(c, WMOUNT[i]), vmul(c->U, c->wl[i]));
+    return vsub(body_pt(c, WMOUNT[i]), vmul(c->U, c->suspension_len[i]));
 }

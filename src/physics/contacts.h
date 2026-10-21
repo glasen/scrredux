@@ -38,7 +38,7 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
     track_query(P, c->seg, 12, &q);
 
     if (!q.valid || !q.road) {
-        c->hit[idx] = 0;
+        c->point_hit[idx] = 0;
         return;
     }
 
@@ -57,7 +57,7 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         stp = 0;
     } /* the wall: pushed straight back out, never up the face */
     if (al > ow || (h < -1.2f && !stp && wd <= 0) || h > topy) {
-        c->hit[idx] = 0;
+        c->point_hit[idx] = 0;
         return;
     }
 
@@ -133,11 +133,11 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         }
     }
 
-    if (!c->hit[idx] && -vn > 9.0f) {
+    if (!c->point_hit[idx] && -vn > 9.0f) {
         car_hurt(c, (-vn - 9.0f) * 0.5f, 1.f);
     }
 
-    c->hit[idx] = 1;
+    c->point_hit[idx] = 1;
 }
 
 /* underside of the car (car frame): tub in the middle, narrower frame rails front and rear */
@@ -231,14 +231,15 @@ static void lean_limit(Car *c)
     car_body_rows(c, m);
 
     for (int i = 0; i < 4; i++) {
-        if (c->wl[i] >= WLF[i] - 1e-3f) {
+        if (c->suspension_len[i] >= WLF[i] - 1e-3f) {
             continue; /* wheel in the air */
         }
 
         V3 w = WMOUNT[i],
            lm = V(m[0] * w.x + m[1] * w.y + m[2] * w.z + m[3], m[4] * w.x + m[5] * w.y + m[6] * w.z + m[7],
                   m[8] * w.x + m[9] * w.y + m[10] * w.z + m[11]);
-        float drop = -vdot(c->U, vsub(lm, body_pt(c, w))), room = fmaxf(WBUMP[i] - (WREST[i] - c->wl[i]), 0.f);
+        float drop = -vdot(c->U, vsub(lm, body_pt(c, w))),
+              room = fmaxf(WBUMP[i] - (WREST[i] - c->suspension_len[i]), 0.f);
 
         if (drop > room) {
             k = fminf(k, room / drop);
@@ -246,22 +247,22 @@ static void lean_limit(Car *c)
     }
 
     if (k < 1) {
-        c->lr *= k;
-        c->lp *= k;
-        c->lrr *= k;
-        c->lpr *= k;
+        c->lean_roll *= k;
+        c->lean_pitch *= k;
+        c->lean_roll_rate *= k;
+        c->lean_pitch_rate *= k;
     }
 }
 
 static int car_out(const Car *c)
 {
-    return c->crash > 0 || c->crane > 0;
+    return c->crash_time > 0 || c->crane_time > 0;
 }
 
 /* where the crane puts the car back: the middle of the section it was last on, or of the nearest one before it allowed */
 static int restart_seg(const Car *c)
 {
-    int s = seg_sec[c->safe], s0;
+    int s = seg_sec[c->safe_segment], s0;
 
     for (int n = 0; n < nsec && !sec_ok[s]; n++) {
         s = (s + nsec - 1) % nsec;
@@ -285,21 +286,21 @@ static void start_crane(Car *c, int s, float lat, float T)
     }
 
     car_place(c, s, lat, 0);
-    c->crane_x = c->x;
-    c->crane_seg = c->seg;
-    c->crane = 1e-4f;
-    c->crane_T = T;
-    c->crash = 0;
-    c->hook = 0;
-    c->lr = c->lp = c->lrr = c->lpr = 0;
+    c->crane_target = c->x;
+    c->crane_segment = c->seg;
+    c->crane_time = 1e-4f;
+    c->crane_duration = T;
+    c->crash_time = 0;
+    c->hook_time = 0;
+    c->lean_roll = c->lean_pitch = c->lean_roll_rate = c->lean_pitch_rate = 0;
 }
 
 static void crane_step(Car *c, float dt)
 {
-    c->crane += dt;
-    float f = smooth01(c->crane / c->crane_T), sway = 0.04f * sinf(c->crane * 2.3f) * (1 - f);
-    const Seg *s = &seg[c->crane_seg];
-    c->x = vadd(c->crane_x, vmul(s->N, 6.5f * (1 - f)));
+    c->crane_time += dt;
+    float f = smooth01(c->crane_time / c->crane_duration), sway = 0.04f * sinf(c->crane_time * 2.3f) * (1 - f);
+    const Seg *s = &seg[c->crane_segment];
+    c->x = vadd(c->crane_target, vmul(s->N, 6.5f * (1 - f)));
     c->F = vnorm(vadd(s->T, vmul(s->R, sway)));
     c->U = s->N;
     c->R = vcross(c->F, c->U);
@@ -307,18 +308,18 @@ static void crane_step(Car *c, float dt)
     c->w = V(0, 0, 0);
 
     for (int i = 0; i < 4; i++) {
-        c->wl[i] = WLF[i];
+        c->suspension_len[i] = WLF[i];
     }
 
-    c->thr = 0;
-    c->brk = 1;
-    c->bst = 0;
-    c->str = 0;
-    c->delta = 0;
+    c->throttle = 0;
+    c->brake = 1;
+    c->boosting = 0;
+    c->steer_input = 0;
+    c->steer_angle = 0;
 
-    if (c->crane >= c->crane_T) {
-        c->crane = 0;
-        c->hook = 2.0f;
+    if (c->crane_time >= c->crane_duration) {
+        c->crane_time = 0;
+        c->hook_time = 2.0f;
     } /* released: the hook goes back up */
 }
 

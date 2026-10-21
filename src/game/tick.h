@@ -30,16 +30,16 @@ static void game_tick(float dt)
             }
 
             for (int i = 0; i < 2; i++) {
-                cars[i].thr = 0;
-                cars[i].brk = 1;
-                cars[i].hold = 1;
+                cars[i].throttle = 0;
+                cars[i].brake = 1;
+                cars[i].held_at_start = 1;
                 car_step(&cars[i], dt);
             }
 
             if (state_t <= 0) {
                 state = ST_RACE;
                 racetime = 0;
-                cars[0].hold = cars[1].hold = 0;
+                cars[0].held_at_start = cars[1].held_at_start = 0;
                 snd_play(S_CHIME, 75, 40);
                 set_msg("GO!", 1.0f);
             }
@@ -58,14 +58,14 @@ static void game_tick(float dt)
                     tg = pi.steer; /* a stick steers part way */
                 }
 
-                float rate = (tg != 0 && p->str * tg >= 0)
+                float rate = (tg != 0 && p->steer_input * tg >= 0)
                                  ? phys.key_steer_rise
                                  : phys.key_steer_return; /* tap = small correction, hold = more lock */
-                float goal = tg != 0 ? tg : 0.f, dstr = goal - p->str, stp = rate * dt;
-                p->str += clampf(dstr, -stp, stp);
-                p->thr = ctl_down(CT_ACCEL) ? 1.f : pi.thr;
-                p->brk = ctl_down(CT_BRAKE) ? 1.f : pi.brk;
-                p->bst = ctl_down(CT_BOOST) || pi.bst;
+                float goal = tg != 0 ? tg : 0.f, dstr = goal - p->steer_input, stp = rate * dt;
+                p->steer_input += clampf(dstr, -stp, stp);
+                p->throttle = ctl_down(CT_ACCEL) ? 1.f : pi.throttle;
+                p->brake = ctl_down(CT_BRAKE) ? 1.f : pi.brake;
+                p->boosting = ctl_down(CT_BOOST) || pi.boosting;
             } else {
                 static float push = -1;
 
@@ -82,7 +82,7 @@ static void game_tick(float dt)
                 ai_drive(p, plane, 67 * push, 13.f * push, NULL);
 
                 if (push > 1.f) {
-                    p->bst = 1;
+                    p->boosting = 1;
                 }
             } /* autopilot ignores the rival: worst case */
             if (o->active) {
@@ -101,7 +101,7 @@ static void game_tick(float dt)
                     result = -2;
                 } else if (o->wrecked) {
                     result = 2;
-                } else if (p->finished && (!o->finished || p->ftime <= o->ftime)) {
+                } else if (p->finished && (!o->finished || p->finish_time <= o->finish_time)) {
                     result = 1;
                 } else {
                     result = -1;
@@ -138,20 +138,20 @@ static void game_tick(float dt)
             state_t += dt;
 
             if (view_anim) {
-                c->delta = 0.30f * sinf(state_t * 0.9f); /* steering demo */
+                c->steer_angle = 0.30f * sinf(state_t * 0.9f); /* steering demo */
                 for (int i = 0; i < 4; i++) {
-                    c->wph[i] += dt * 1.8f; /* wheels turn slowly */
+                    c->wheel_phase[i] += dt * 1.8f; /* wheels turn slowly */
                 }
 
                 for (int i = 0; i < 4; i++) { /* suspension demo: each wheel works through its travel */
                     float sn = sinf(state_t * 1.1f + i * 1.7f), tr = WREST[i] - WLMIN[i];
-                    c->wl[i] = WREST[i] - sn * (sn > 0 ? tr : WLF[i] - WREST[i]) * 0.9f;
+                    c->suspension_len[i] = WREST[i] - sn * (sn > 0 ? tr : WLF[i] - WREST[i]) * 0.9f;
                 }
             } else { /* stopped: straight ahead at ride height */
-                c->delta = 0;
+                c->steer_angle = 0;
 
                 for (int i = 0; i < 4; i++) {
-                    c->wl[i] = WREST[i];
+                    c->suspension_len[i] = WREST[i];
                 }
             }
 
@@ -162,11 +162,11 @@ static void game_tick(float dt)
             state_t += dt;
 
             for (int i = 0; i < 2; i++) {
-                cars[i].thr = 0;
-                cars[i].brk = 0.4f;
-                cars[i].hold = 1;
-                cars[i].str = 0;
-                cars[i].bst = 0;
+                cars[i].throttle = 0;
+                cars[i].brake = 0.4f;
+                cars[i].held_at_start = 1;
+                cars[i].steer_input = 0;
+                cars[i].boosting = 0;
                 car_step(&cars[i], dt);
             }
 
@@ -191,8 +191,8 @@ static void game_tick(float dt)
     }
 
     for (int i = 0; i < 2; i++) {
-        if (cars[i].lapshow > 0) {
-            cars[i].lapshow -= dt;
+        if (cars[i].lap_banner_time > 0) {
+            cars[i].lap_banner_time -= dt;
         }
     }
 

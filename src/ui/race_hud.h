@@ -50,17 +50,17 @@ static void draw_hud_base(void)
     hud_text(8, 47, b, 1.5f, 0xFFE060);
     char bl[32];
 
-    if (p->bestlap > 0) {
-        fmt_time(bl, sizeof bl, p->bestlap);
+    if (p->best_lap > 0) {
+        fmt_time(bl, sizeof bl, p->best_lap);
     } else {
         snprintf(bl, sizeof bl, "-:--.-");
     }
     snprintf(b, sizeof b, "BEST %s", bl);
     hud_text(HW - 8 - text_width(b, 1.5f), 33, b, 1.5f, 0xFFFFFF);
 
-    if (p->lapshow > 0 && state == ST_RACE) {
+    if (p->lap_banner_time > 0 && state == ST_RACE) {
         char b2[96];
-        fmt_time(bl, sizeof bl, p->lastlap);
+        fmt_time(bl, sizeof bl, p->last_lap);
         snprintf(b2, sizeof b2, "LAP TIME %s", bl);
         hud_text_c(44, b2, 2, 0xFFFFFF);
     }
@@ -81,9 +81,9 @@ static void draw_hud_base(void)
                                        : "YOU LOSE!";
         hud_text_c(80, t, result == 2 || result == -2 ? 2 : 4, result > 0 ? 0x60FF60 : 0xFF6050);
 
-        if (p->bestlap > 0) {
+        if (p->best_lap > 0) {
             char b2[96];
-            fmt_time(bl, sizeof bl, p->bestlap);
+            fmt_time(bl, sizeof bl, p->best_lap);
             snprintf(b2, sizeof b2, "BEST LAP %s", bl);
             hud_text_c(130, b2, 2, 0xFFFFFF);
         }
