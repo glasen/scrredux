@@ -18,6 +18,7 @@ enum {
     S_ENGINE,
     NSND = S_ENGINE + 7
 }; /* S_ENGINE+k: TickOver decimated by 2^k */
+
 static const char *snd_file[NSND] = {"Chime",        "Wreck",        "HitCar",       "Grounded",     "Creak",
                                      "Smash",        "OffRoad",      "TickOver",     "EnginePitch2", "EnginePitch3",
                                      "EnginePitch4", "EnginePitch5", "EnginePitch6", "EnginePitch7"};
@@ -28,12 +29,14 @@ typedef struct {
     float *d;
     int n;
 } Smp;
+
 typedef struct {
     const Smp *s;
     double pos, step;
     float gl, gr;
     int on, loop;
 } Voice;
+
 static Smp smp[NSND];
 static Voice voice[S_ENGINE + 1]; /* one per effect, the last one is the engine */
 static SDL_AudioStream *snd_as;
@@ -48,6 +51,7 @@ static void snd_lock(void)
         SDL_LockAudioStream(snd_as);
     }
 }
+
 static void snd_unlock(void)
 {
     if (snd_as) {
@@ -168,6 +172,7 @@ static void snd_engine_stop(void)
     snd_unlock();
     snd_eng_run = 0;
 }
+
 static void snd_stop_all(void)
 {
     snd_lock();
@@ -244,6 +249,7 @@ static void snd_dump_begin(void)
     snd_dump_cap = SND_RATE * 60;
     snd_dump = malloc((size_t)snd_dump_cap * 2 * sizeof(float));
 }
+
 static void snd_dump_frames(float dt)
 {
     int n = (int)(dt * SND_RATE + 0.5f);
@@ -254,6 +260,7 @@ static void snd_dump_frames(float dt)
     snd_mix(snd_dump + 2 * snd_dump_n, n);
     snd_dump_n += n;
 }
+
 static void snd_dump_write(const char *path)
 {
     FILE *f = fopen(path, "wb");

@@ -13,6 +13,7 @@ static void obox(V3 c, V3 ax, V3 ay, V3 az, float hx, float hy, float hz, uint32
         draw_quad(v[f[i][0]], v[f[i][1]], v[f[i][2]], v[f[i][3]], col);
     }
 }
+
 /* tapered cylinder between two points; caps: 1 = start, 2 = end */
 static void cyl(V3 a, V3 b, float r0, float r1, int n, uint32_t col, int caps)
 {

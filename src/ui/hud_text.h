@@ -10,10 +10,12 @@ static float text_width(const char *s, float sc)
     }
     return w * 7 * sc;
 }
+
 typedef struct {
     float x, base, cap, shear;
     uint32_t ctop, cbot;
 } HudGlyph;
+
 static void hud_glyph_tri(void *u, const float *t)
 {
     const HudGlyph *h = u;
@@ -23,6 +25,7 @@ static void hud_glyph_tri(void *u, const float *t)
     hud_tri3(GV(0), GV(1), GV(2));
 #undef GV
 }
+
 /* rows shade from col_top to col_bot; shear > 0 leans the letters forward */
 static void hud_text_ex(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
 {
@@ -32,19 +35,23 @@ static void hud_text_ex(float x, float y, const char *s, float sc, uint32_t ctop
         h.x += glyph_adv(*s) * h.cap;
     }
 }
+
 static void hud_text_raw(float x, float y, const char *s, float sc, uint32_t col)
 {
     hud_text_ex(x, y, s, sc, col, col, 0);
 }
+
 static void hud_text(float x, float y, const char *s, float sc, uint32_t col)
 {
     hud_text_raw(x + sc * 0.6f, y + sc * 0.6f, s, sc, 0x101018);
     hud_text_raw(x, y, s, sc, col);
 }
+
 static void hud_text_c(float y, const char *s, float sc, uint32_t col)
 {
     hud_text((HW - text_width(s, sc)) / 2, y, s, sc, col);
 }
+
 static void fmt_time(char *b, size_t n, float t)
 {
     int m = (int)(t / 60);

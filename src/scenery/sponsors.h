@@ -9,6 +9,7 @@ static const uint32_t BR_BG[NBRAND] = {0x1E50C8, 0xF0C020, 0xC82018, 0xF2F2F2, 0
                                        0x202024, 0xE86A18, 0x2858C0, 0xF2F2F2, 0xC81E18};
 static const uint32_t BR_FG[NBRAND] = {0xF8F8F8, 0x1A1A1A, 0xF8F8F8, 0xC81E18, 0xF8F0A0,
                                        0xF0C020, 0xF8F8F8, 0xF8E040, 0x1E50C8, 0xF8F8F8};
+
 /* advertising board from a to a + al*w, h tall, readable from the side 'face' points to */
 static void ad_board(V3 a, V3 al, V3 face, float w, float h, int b)
 {

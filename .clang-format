@@ -16,3 +16,4 @@ PointerAlignment: Right
 SortIncludes: Never
 ReflowComments: false
 AlignTrailingComments: true
+SeparateDefinitionBlocks: Always

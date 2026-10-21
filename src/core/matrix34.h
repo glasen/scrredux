@@ -7,6 +7,7 @@ static V3 m34_apply(const float m[12], V3 p)
     return V(m[0] * p.x + m[1] * p.y + m[2] * p.z + m[3], m[4] * p.x + m[5] * p.y + m[6] * p.z + m[7],
              m[8] * p.x + m[9] * p.y + m[10] * p.z + m[11]);
 }
+
 static void m34_mul(const float a[12], const float b[12], float o[12]) /* o = a after b */
 {
     float r[12];
@@ -18,6 +19,7 @@ static void m34_mul(const float a[12], const float b[12], float o[12]) /* o = a 
     }
     memcpy(o, r, sizeof r);
 }
+
 static void m34_set3(float m[12], const float R[9], V3 p) /* linear part R about the fixed point p */
 {
     for (int i = 0; i < 3; i++) {
@@ -31,6 +33,7 @@ static void m34_set3(float m[12], const float R[9], V3 p) /* linear part R about
     m[7] = p.y - q.y;
     m[11] = p.z - q.z;
 }
+
 static void rot3(V3 ax, float an, float R[9])
 {
     ax = vnorm(ax);
@@ -40,12 +43,14 @@ static void rot3(V3 ax, float an, float R[9])
                   t * ax.x * ax.z - s * ax.y, t * ax.y * ax.z + s * ax.x, t * ax.z * ax.z + c};
     memcpy(R, r, sizeof r);
 }
+
 static void m34_rot(V3 p, V3 ax, float an, float m[12])
 {
     float R[9];
     rot3(ax, an, R);
     m34_set3(m, R, p);
 }
+
 /* about p: turn direction d0 onto d1; with stretch also scale along d0 so the far end lands on p + d1 */
 static void m34_aim(V3 p, V3 d0, V3 d1, int stretch, float m[12])
 {
@@ -70,6 +75,7 @@ static void m34_aim(V3 p, V3 d0, V3 d1, int stretch, float m[12])
     }
     m34_set3(m, R, p);
 }
+
 static void m34_shift(float m[12], V3 d)
 {
     m[3] += d.x;

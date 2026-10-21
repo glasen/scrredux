@@ -6,8 +6,10 @@ typedef struct {
     char track[32], lapby[16], raceby[16];
     float lap, race;
 } Hof;
+
 static Hof hof[MAXTRK + SCR_NTRACKS];
 static int nhof;
+
 static void hof_save(void)
 {
     char p[1024];
@@ -21,6 +23,7 @@ static void hof_save(void)
     }
     fclose(f);
 }
+
 static Hof *hof_get(const char *track)
 {
     for (int i = 0; i < nhof; i++) {
@@ -44,6 +47,7 @@ static Hof *hof_get(const char *track)
     }
     return h;
 }
+
 static void hof_load(void)
 {
     nhof = 0;
@@ -82,6 +86,7 @@ static void hof_load(void)
     }
     fclose(f);
 }
+
 static int hof_lap(const char *track, const char *who, float t)
 {
     Hof *h = hof_get(track);
@@ -93,6 +98,7 @@ static int hof_lap(const char *track, const char *who, float t)
     hof_save();
     return 1;
 }
+
 static int hof_race(const char *track, const char *who, float t)
 {
     Hof *h = hof_get(track);

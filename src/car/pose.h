@@ -11,6 +11,7 @@ static void body_frame(const Car *c, V3 *R, V3 *U, V3 *F)
     *R = vsub(vmul(c->R, cr), vmul(Uv, sr));
     *F = Fv;
 }
+
 /* model -> world matrix rows (3 x vec4) for the body: leans about a low roll centre */
 static void car_body_rows(const Car *c, float m[12])
 {
@@ -22,6 +23,7 @@ static void car_body_rows(const Car *c, float m[12])
     float r[12] = {R.x, U.x, F.x, t.x, R.y, U.y, F.y, t.y, R.z, U.z, F.z, t.z};
     memcpy(m, r, sizeof r);
 }
+
 static V3 car_hub(const Car *c, int i)
 {
     return vsub(body_pt(c, WMOUNT[i]), vmul(c->U, c->wl[i]));

@@ -16,6 +16,7 @@ static void chain(V3 a, V3 b)
         obox(c, ax, (k & 1) ? u : w, (k & 1) ? w : u, 0.07f, 0.035f, 0.012f, 0x5A5A62);
     }
 }
+
 static void lattice(V3 a, V3 b, V3 side, float wdt, uint32_t col) /* two-chord lattice beam with zig-zag web */
 {
     V3 o = vmul(vnorm(side), wdt * 0.5f);
@@ -29,6 +30,7 @@ static void lattice(V3 a, V3 b, V3 side, float wdt, uint32_t col) /* two-chord l
         cyl(vlerp(a1, b1, t0), vlerp(a0, b0, t0), 0.06f, 0.06f, 5, col, 0);
     }
 }
+
 static void draw_crane(const Car *c)
 {
     if (!c->active || (c->crane <= 0 && c->hook <= 0)) {
@@ -43,7 +45,7 @@ static void draw_crane(const Car *c)
     {
         Frm cf = frm_at(V(base.x + Th.x * 1.5f, base.y, base.z + Th.z * 1.5f), Th);
         crane_carrier(&cf);
-    }                             /* carrier */
+    } /* carrier */
     for (int k = 0; k < 4; k++) { /* tower */
         V3 o = vadd(vmul(Rh, (k & 1) ? 0.8f : -0.8f), vmul(Th, (k & 2) ? 0.8f : -0.8f));
         cyl(vadd(vadd(base, V(0, 1.35f, 0)), o), vadd(top, o), 0.13f, 0.13f, 6, 0xE8C020, 0);

@@ -18,6 +18,7 @@ static void container(const Frm *f, uint32_t col)
         fcyl(f, s * 0.35f, 0.2f, 3.08f, s * 0.35f, 2.4f, 3.08f, 0.035f, 4, 0x505058, 0); /* door bars */
     }
 }
+
 static void cabin(const Frm *f, uint32_t col)
 {
     fbox(f, -1.25f, 1.25f, 0.3f, 2.9f, -3.2f, 3.2f, col);
@@ -32,6 +33,7 @@ static void cabin(const Frm *f, uint32_t col)
     fpanel_z(f, 3.21f, -0.45f, 0.45f, 0.3f, 2.3f, 0x5A6A7A); /* door */
     fbox(f, -0.8f, 0.8f, 0, 0.3f, 3.2f, 3.9f, 0x6A6A72);     /* step */
 }
+
 static void toilets(const Frm *f, int n)
 {
     static const uint32_t tc[3] = {0x2A62C8, 0x2A9A5A, 0x2A62C8};
@@ -42,6 +44,7 @@ static void toilets(const Frm *f, int n)
         fpanel_z(f, 0.61f, x - 0.35f, x + 0.35f, 0.15f, 2.0f, scalecol(tc[k % 3], 0.8f));
     }
 }
+
 static void tyre_stack(V3 p, int n)
 {
     for (int k = 0; k < n; k++) {
@@ -50,12 +53,14 @@ static void tyre_stack(V3 p, int n)
     }
     cyl(vadd(p, V(0, n * 0.24f, 0)), vadd(p, V(0, n * 0.24f + 0.01f, 0)), 0.16f, 0.16f, 8, 0x0E0E10, 2);
 }
+
 static void hay_bale(const Frm *f, float x, float z, float y)
 {
     fcyl(f, x - 0.6f, y + 0.72f, z, x + 0.6f, y + 0.72f, z, 0.72f, 10, 0xD4B45C, 0);
     fcyl(f, x - 0.6f, y + 0.72f, z, x - 0.61f, y + 0.72f, z, 0.72f, 10, 0xBC9C48, 1);
     fcyl(f, x + 0.6f, y + 0.72f, z, x + 0.61f, y + 0.72f, z, 0.72f, 10, 0xBC9C48, 2);
 }
+
 /* scaffold camera tower with the cameraman under an umbrella */
 static void tv_tower(const Frm *f)
 {
@@ -82,6 +87,7 @@ static void tv_tower(const Frm *f)
     fcyl(f, 0, H, -0.3f, 0, H + 2.6f, -0.3f, 0.03f, 4, 0x5A5A62, 0);
     cyl(fpt(f, 0, H + 2.2f, -0.3f), fpt(f, 0, H + 2.6f, -0.3f), 1.3f, 0.05f, 8, 0xE8C020, 1); /* umbrella */
 }
+
 static void marshal_post(const Frm *f)
 {
     fbox(f, -1.0f, 1.0f, 0, 1.1f, -1.0f, 1.0f, 0xE87020);
@@ -94,6 +100,7 @@ static void marshal_post(const Frm *f)
     fbox(f, -0.13f, 0.13f, 1.8f, 2.05f, -0.12f, 0.12f, 0xD8A882);
     flag(fpt(f, 1.1f, 2.4f, 1.1f), 2.2f, 0xF0D020);
 }
+
 static void girder_pile(const Frm *f)
 {
     for (int l = 0; l < 2; l++) {
@@ -107,6 +114,7 @@ static void girder_pile(const Frm *f)
         fbox(f, -2.2f, 2.2f, 0, 0.15f, k * 4.5f - 0.15f, k * 4.5f + 0.15f, 0x6A5034);
     }
 }
+
 static void dirt_mound(float x, float z, float r, float h)
 {
     float g = ground_h(x, z);

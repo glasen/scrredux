@@ -8,4 +8,5 @@ typedef struct {
     float sroll, syaw, spitch, air, leanr, leanp, rgrip, steerlat, keyrise, keyret;
     float boostrate, shw, shdrop, vtop, vtopb;
 } Phys;
+
 static Phys ph;

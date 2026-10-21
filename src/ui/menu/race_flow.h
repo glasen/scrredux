@@ -16,8 +16,10 @@ static void season_race(void)
     cockpit = 1;
     preview_start();
 }
+
 /* out of a race (ENTER at the end, or ESC): the season's books, then back to where it came from */
 static void ed_return(void);
+
 static void race_leave(int retired)
 {
     rec_on = rec_on && race_mode == RM_SEASON;
@@ -58,6 +60,7 @@ static void race_leave(int retired)
         menu_go(race_mode == RM_PRACTICE ? MS_PRACTICE : MS_MAIN);
     }
 }
+
 static void replay_start(int i)
 {
     if (rp_load(rp_slot[i])) {
@@ -88,6 +91,7 @@ static void replay_start(int i)
     rp_step(0);
     update_camera(&cars[0], 0.016f, 1);
 }
+
 static void replay_leave(void)
 {
     free(rpb);

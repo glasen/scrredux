@@ -12,6 +12,7 @@ static int climb_face(int k)
     }
     return -1;
 }
+
 /* below the upper deck past a sheer face going up: the face is a wall there. How far P is through it, else 0 */
 static float in_climb_wall(V3 P, int f, V3 *n)
 {
@@ -128,6 +129,7 @@ static void belly_at(float z, float *y, float *hw)
         *hw = 0.63f;
     }
 }
+
 /* the open deck edge against the underside: when the car hangs over the edge it rides and scrapes on the corner */
 static void edge_contact(Car *c, V3 *F, V3 *Tq)
 {
@@ -183,6 +185,7 @@ static void edge_contact(Car *c, V3 *F, V3 *Tq)
 
 static void car_body_rows(const Car *c, float m[12]);
 static float WBUMP[4];
+
 /* the visual lean may not push a mount further down than its wheel's remaining bump travel (else the tyre sinks into the road) */
 static void lean_limit(Car *c)
 {
@@ -246,6 +249,7 @@ static void start_crane(Car *c, int s, float lat, float T)
     c->hook = 0;
     c->lr = c->lp = c->lrr = c->lpr = 0;
 }
+
 static void crane_step(Car *c, float dt)
 {
     c->crane += dt;

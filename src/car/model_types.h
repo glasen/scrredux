@@ -24,6 +24,7 @@ typedef struct {
     int ntab;
     float *tab; /* wheel travel dz -> lower / upper wishbone angle, sorted by dz */
 } Rig;
+
 static Rig rig[4];
 static float WDROOP[4];
 static V3 KP_P[4], KP_A[4], HUB0[4];

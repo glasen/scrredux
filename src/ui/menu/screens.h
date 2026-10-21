@@ -12,6 +12,7 @@ static int main_items(const char **it)
     it[5] = "Options";
     return 6;
 }
+
 /* a table row: cell i at column at[i] (in widths of the old 5x7 font's characters), right-aligned there if at[i] < 0 */
 static void hud_row(float x, float y, float sc, uint32_t col, int n, const float *at, const char *const *cell)
 {
@@ -20,6 +21,7 @@ static void hud_row(float x, float y, float sc, uint32_t col, int n, const float
         hud_text(at[i] < 0 ? cx - text_width(cell[i], sc) : cx, y, cell[i], sc, col);
     }
 }
+
 static void draw_hof(float x0)
 {
     hud_text_c(80, "HALL of FAME", 1.5f, 0xF0C040);
@@ -40,6 +42,7 @@ static void draw_hof(float x0)
     }
     menu_help("UP/DOWN SCROLL   ESC BACK");
 }
+
 static void draw_practice(void)
 {
     hud_text_c(80, "PRACTISE - choose a track", 1.5f, 0xF0C040);
@@ -59,6 +62,7 @@ static void draw_practice(void)
     }
     menu_help("ENTER DRIVE   ESC BACK   (ESC IN THE CAR ENDS PRACTISE)");
 }
+
 static void draw_name(void)
 {
     hud_text_c(96, "A new Racing Season", 1.5f, 0xF0C040);
@@ -74,6 +78,7 @@ static void draw_name(void)
     hud_text_c(188, "Jumping Jack and Road Hog.", 1, 0xB0B0B8);
     menu_help("ENTER START   ESC BACK");
 }
+
 static void div_rows(const Season *s, int d, float x, float y, float sc, int hl)
 {
     int tab[3], w = sc < 1 ? 11 : 13;
@@ -93,7 +98,9 @@ static void div_rows(const Season *s, int d, float x, float y, float sc, int hl)
         hud_row(x, y + (r + 1) * 10 * sc, sc, hl && i == PLAYER ? 0xFFE060 : 0xE8E8EC, 5, at, cell);
     }
 }
+
 static const char *season_items[2] = {"Race", "Main Menu"};
+
 static void draw_season(float x0)
 {
     char b[128], t0[48], t1[48];
@@ -123,6 +130,7 @@ static void draw_season(float x0)
     }
     menu_help("ENTER CHOOSE   ESC MAIN MENU");
 }
+
 static void result_line(float x, float y, int drv, float t, float lap, int pts, const char *why)
 {
     char nm[16], tt[16], ll[16], p[8];
@@ -138,6 +146,7 @@ static void result_line(float x, float y, int drv, float t, float lap, int pts, 
     const char *cell[4] = {nm, tt, ll, p};
     hud_row(x, y, 1.2f, drv == PLAYER ? 0xFFE060 : 0xE8E8EC, 4, at, cell);
 }
+
 static void draw_result(float x0)
 {
     const Race *r = &last_res;
@@ -179,6 +188,7 @@ static void draw_result(float x0)
     }
     menu_help("ENTER CONTINUE");
 }
+
 static void draw_end(float x0)
 {
     char b[96];
@@ -200,7 +210,9 @@ static void draw_end(float x0)
     hud_text_c(226, b, 1, 0xE8E8EC);
     menu_help("ENTER CONTINUE");
 }
+
 static const char *lsr_items[4] = {"Load", "Save", "Replay", "Cancel"};
+
 static void slot_label(int k, char *b, size_t n)
 {
     Season s;
@@ -210,6 +222,7 @@ static void slot_label(int k, char *b, size_t n)
     }
     snprintf(b, n, "%s, season %d, Division %s", s.pname, s.season, ROMAN[s.div[PLAYER]]);
 }
+
 static void draw_slots(void)
 {
     hud_text_c(80, ms_save ? "SAVE the season" : "LOAD a season", 1.5f, 0xF0C040);
@@ -223,6 +236,7 @@ static void draw_slots(void)
     draw_bars(98, it, 5, msel[MS_SLOTS]);
     menu_help("ENTER CHOOSE   ESC BACK");
 }
+
 static void rp_scan(void)
 {
     nrp_list = 0;
@@ -244,6 +258,7 @@ static void rp_scan(void)
         }
     }
 }
+
 static void draw_replays(void)
 {
     hud_text_c(80, "REPLAY a race", 1.5f, 0xF0C040);
@@ -261,12 +276,14 @@ static void draw_replays(void)
     draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS]);
     menu_help("ENTER WATCH   ESC BACK");
 }
+
 /* the driving keys: an action per line, its two keys in cells on the right; then the gamepad's layout */
 static void key_label(char *b, size_t n, SDL_Scancode sc)
 {
     const char *s = sc ? SDL_GetKeyName(SDL_GetKeyFromScancode(sc, 0, false)) : "";
     snprintf(b, n, "%s", s && s[0] ? s : sc ? SDL_GetScancodeName(sc) : "-");
 }
+
 static void draw_controls(void)
 {
     hud_text_c(80, "CONTROLS", 1.5f, 0xF0C040);

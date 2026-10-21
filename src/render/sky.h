@@ -5,7 +5,9 @@
 static void draw_sky(void)
 {
     static const float el[] = {-90, -3, 0, 4, 9, 16, 26, 40, 58, 90};
+
     enum { NB = 9, NS = 32 };
+
     const float R = 5800;
     for (int b = 0; b < NB; b++) {
         float t = b < 2 ? 0.f : clampf((el[b] - 2) / 62.f, 0, 1);

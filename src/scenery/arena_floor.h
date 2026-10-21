@@ -10,11 +10,13 @@ static float track_dist(float x, float z, int step)
     }
     return sqrtf(md);
 }
+
 static float seg_dist(float x, float z, float ax, float az, float bx, float bz)
 {
     float dx = bx - ax, dz = bz - az, t = clampf(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz + 1e-6f), 0, 1);
     return sqrtf(sq(x - ax - dx * t) + sq(z - az - dz * t));
 }
+
 static float svc_x, svc_z, gate_z; /* service compound in the infield, gate in the east wall */
 
 static void build_floor(void)

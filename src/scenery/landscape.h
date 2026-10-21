@@ -3,10 +3,12 @@
 
 /* ---- stadium ---- */
 static void flag(V3 base, float h, uint32_t col);
+
 /* circus big top like the ones around the original's stadium: striped wall, striped cone roof, flag on the king pole */
 static void big_top(float x, float z, float R, float wallh, float peak)
 {
     enum { NS = 28 };
+
     float g = ground_h(x, z);
     for (int k = 0; k < NS; k++) {
         float a0 = k * 2 * PI_F / NS, a1 = (k + 1) * 2 * PI_F / NS;
@@ -22,19 +24,23 @@ static void big_top(float x, float z, float R, float wallh, float peak)
     cyl(V(x, g + peak - 0.5f, z), V(x, g + peak + 7, z), 0.25f, 0.18f, 6, 0xD8D8E0, 3);
     draw_tri(V(x, g + peak + 7, z), V(x, g + peak + 5.4f, z), V(x + 4.5f, g + peak + 6.2f, z), 0xF0D020);
 }
+
 static void flag(V3 base, float h, uint32_t col)
 {
     cyl(base, vadd(base, V(0, h, 0)), 0.09f, 0.07f, 5, 0xD8D8E0, 3);
     V3 t = vadd(base, V(0, h, 0));
     draw_tri(t, vadd(t, V(0, -1.6f, 0)), vadd(t, V(2.6f, -0.7f, 0.4f)), col);
 }
+
 /* real 3D faceted mountains in a ring around the arena (static, lit, fogged) */
 static void build_mountains(void)
 {
     float cx = (ar_x0 + ar_x1) / 2, cz = (ar_z0 + ar_z1) / 2;
     float rad = 0.5f * sqrtf(sq(ar_x1 - ar_x0) + sq(ar_z1 - ar_z0));
     rngs = 9001 + cur_track;
+
     enum { NM = 52, NR = 7, NA = 16 };
+
     for (int m = 0; m < NM; m++) {
         float an = (m + frand() * 0.8f) * 2 * PI_F / NM;
         float dist = rad + 1500 + frand() * 1300;

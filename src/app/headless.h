@@ -5,6 +5,7 @@
 /* debug: gap between each drawn tyre's lowest point and the road while physics has the wheel on the ground */
 static double wg_sum[4], wg_max[4], wg_min[4];
 static int wg_n[4], wg_float[4];
+
 static float drawn_tyre_gap(const Car *c, int g)
 {
     float m[12], lo = 1e9f;
@@ -21,6 +22,7 @@ static float drawn_tyre_gap(const Car *c, int g)
     }
     return lo;
 }
+
 static void wheel_gap_sample(const Car *c)
 {
     for (int g = 0; g < mdl_ng; g++) {
@@ -55,6 +57,7 @@ static void wheel_gap_sample(const Car *c)
         }
     }
 }
+
 static void wheel_gap_report(void)
 {
     static const char *nm[4] = {"FL", "FR", "RL", "RR"};

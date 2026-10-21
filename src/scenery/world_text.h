@@ -8,6 +8,7 @@ typedef struct {
     uint32_t col;
     int unlit;
 } WorldGlyph;
+
 static void world_glyph_tri(void *u, const float *t)
 {
     const WorldGlyph *w = u;
@@ -19,6 +20,7 @@ static void world_glyph_tri(void *u, const float *t)
     }
 #undef WP
 }
+
 static void world_text(V3 o, V3 al, V3 up, const char *s, float c, uint32_t col, int unlit)
 {
     WorldGlyph w = {o, al, up, 7 * c, col, unlit};
@@ -27,6 +29,7 @@ static void world_text(V3 o, V3 al, V3 up, const char *s, float c, uint32_t col,
         w.o = vadd(w.o, vmul(al, glyph_adv(*s) * w.cap));
     }
 }
+
 /* text centred on m, reading along 'rd' */
 static void world_text_c(V3 m, V3 rd, V3 up, const char *s, float c, uint32_t col, int unlit)
 {

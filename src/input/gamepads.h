@@ -5,6 +5,7 @@
 static SDL_Gamepad *gpad[NPAD];
 static SDL_Joystick *gjoy[NPAD];
 static unsigned char gcen[NPAD]; /* the stick axes (bit 0 x, bit 1 y) seen at rest in the middle */
+
 static void pad_added(SDL_JoystickID id)
 {
     for (int i = 0; i < NPAD; i++) {
@@ -20,6 +21,7 @@ static void pad_added(SDL_JoystickID id)
         return;
     }
 }
+
 static void pad_removed(SDL_JoystickID id)
 {
     for (int i = 0; i < NPAD; i++) {
@@ -33,6 +35,7 @@ static void pad_removed(SDL_JoystickID id)
         }
     }
 }
+
 static const char *pad_name(void)
 {
     for (int i = 0; i < NPAD; i++) {
@@ -43,15 +46,18 @@ static const char *pad_name(void)
     }
     return NULL;
 }
+
 static float pad_axis(Sint16 v)
 {
     return clampf(v / 32767.f, -1, 1);
 }
+
 static float pad_dz(float v)
 {
     float a = fabsf(v);
     return a < 0.2f ? 0 : copysignf((a - 0.2f) / 0.8f, v);
 } /* dead zone round the middle */
+
 /* a stick axis counts only once it has been in the middle: some keyboards and LED controllers are joysticks too,
  * with an axis that sits at one end for good and would hold the car on full lock and push the menus along */
 static float pad_stick(int i, int a, Sint16 v)
@@ -68,6 +74,7 @@ typedef struct {
     float steer, thr, brk;
     int bst, up, dn, lf, rt;
 } PadIn;
+
 static PadIn pad_read(void)
 {
     PadIn r = {0};
@@ -119,6 +126,7 @@ static PadIn pad_read(void)
     }
     return r;
 }
+
 /* a shake on every pad (Options: gamepad rumble): strength 0..1, for ms milliseconds */
 static void pad_rumble(float strength, int ms)
 {

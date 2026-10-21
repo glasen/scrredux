@@ -22,6 +22,7 @@ static void tpl_cross(int at, int i, int cx, int cz, int out[2][2])
         out[e][1] = cz * 2048 + rz;
     }
 }
+
 static int pc_ns(const TPiece *p)
 {
     return SCR_TPL_NS[p->at & 15];

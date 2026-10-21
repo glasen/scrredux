@@ -56,6 +56,7 @@ static void draw_menu(void)
 
 /* ---- going places ---- */
 static void ed_open(void);
+
 static void menu_go(int screen)
 {
     ms = screen;

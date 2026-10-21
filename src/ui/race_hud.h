@@ -80,6 +80,7 @@ static void draw_hud_base(void)
     }
     race_hud_extra();
 }
+
 static void draw_hud(void)
 {
     draw_hud_base();

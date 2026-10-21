@@ -3,8 +3,10 @@
 
 /* the track's cross-sections in driving order from the start line, with the jump edits: x/z in metres, heights in units */
 enum { MAXX = MAXPC * 13 + 1, PER = 24 };
+
 static float tx_ex[MAXX][2], tx_ez[MAXX][2];
 static int tx_ey[MAXX][2], tx_sec[MAXX];
+
 static int track_xsecs(const TrackDef *td)
 {
     float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez;

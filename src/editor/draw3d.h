@@ -14,6 +14,7 @@ static void ed_fence(const TPiece *pc, int p, float h0, float h1, uint32_t col) 
         }
     }
 }
+
 static void ed_deck(const TPiece *pc, int p, float lift, uint32_t col) /* a flat copy of the road over it */
 {
     V3 a[2], b[2], l = V(0, lift, 0);
@@ -23,6 +24,7 @@ static void ed_deck(const TPiece *pc, int p, float lift, uint32_t col) /* a flat
         draw_quad_unlit(vadd(a[0], l), vadd(a[1], l), vadd(b[1], l), vadd(b[0], l), col);
     }
 }
+
 static void ed_pole(V3 p, float h, uint32_t col)
 {
     for (int k = 0; k < 2; k++) {
@@ -33,7 +35,9 @@ static void ed_pole(V3 p, float h, uint32_t col)
     draw_tri_unlit(vadd(t, V(0, 1.8f, 0)), vadd(t, r), vsub(t, r), col);
     draw_tri_unlit(vsub(t, V(0, 1.8f, 0)), vadd(t, r), vsub(t, r), col);
 }
+
 static Pick ed_hov;
+
 static void ed_draw3d(void)
 {
     if (ed_mode == EM_FLY || !ed.np) {

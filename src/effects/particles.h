@@ -3,15 +3,18 @@
 
 /* ---- particles: sparks, dust, smoke, fire (world space, drawn as unlit camera-facing shapes) ---- */
 enum { P_SPARK, P_DUST, P_SMOKE, P_FIRE };
+
 typedef struct {
     V3 p, v;
     float t, life, size;
     uint32_t col;
     int kind;
 } Part;
+
 static Part parts[MAXPART];
 static int npart;
 static int stat_sparks;
+
 static void spawn(int kind, V3 p, V3 v, float life, float size, uint32_t col)
 {
     if (kind == P_SPARK) {
@@ -29,10 +32,12 @@ static void spawn(int kind, V3 p, V3 v, float life, float size, uint32_t col)
     q->col = col;
     q->kind = kind;
 }
+
 static V3 rnd_dir(void)
 {
     return vnorm(V(frand() - 0.5f, frand() - 0.5f, frand() - 0.5f));
 }
+
 static void dust_burst(V3 p, int n, float speed)
 {
     for (int k = 0; k < n; k++) {
@@ -42,6 +47,7 @@ static void dust_burst(V3 p, int n, float speed)
               0.25f + frand() * 0.35f, (k & 1) ? 0xA58A62 : 0x8E7552);
     }
 }
+
 static void parts_step(float dt)
 {
     for (int i = 0; i < npart; i++) {

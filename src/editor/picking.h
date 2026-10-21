@@ -5,7 +5,9 @@
 typedef struct {
     int kind, p, turn;
 } Pick; /* kind 0 nothing, 1 a piece (p), 2 a ghost (turn) */
+
 static float ed_hx = -1, ed_hy = -1;
+
 static float ray_tri(V3 o, V3 d, V3 a, V3 b, V3 c)
 {
     V3 e1 = vsub(b, a), e2 = vsub(c, a), p = vcross(d, e2);
@@ -17,6 +19,7 @@ static float ray_tri(V3 o, V3 d, V3 a, V3 b, V3 c)
     float u = vdot(t, p) / det, v = vdot(d, q) / det, s = vdot(e2, q) / det;
     return u < 0 || v < 0 || u + v > 1 || s <= 0 ? -1 : s;
 }
+
 static float ray_piece(V3 o, V3 d, const TPiece *pc, int p)
 {
     float best = -1;
@@ -34,6 +37,7 @@ static float ray_piece(V3 o, V3 d, const TPiece *pc, int p)
     }
     return best;
 }
+
 static Pick ed_pick(float hx, float hy)
 {
     Pick k = {0, -1, 0};

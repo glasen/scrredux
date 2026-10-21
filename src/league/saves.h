@@ -8,6 +8,7 @@ static void save_path(char *out, size_t n, const char *fmt, int k)
     snprintf(rel, sizeof rel, fmt, k);
     user_path(out, n, rel);
 }
+
 /* plain text, a line per item, so a later version can add to it and still read this one: lines it does not know are
  * skipped, and a save missing a driver or a race is no save */
 static int season_write(int slot)
@@ -37,10 +38,12 @@ static int season_write(int slot)
     } /* the old save stays until the new one is whole */
     return 0;
 }
+
 static int in_rng(int v, int lo, int hi)
 {
     return v >= lo && v <= hi;
 }
+
 static int season_peek(int slot, Season *s)
 {
     char p[1024], line[256];
@@ -97,6 +100,7 @@ static int season_peek(int slot, Season *s)
     s->on = 1;
     return 0;
 }
+
 static int season_read(int slot)
 {
     Season s;

@@ -18,6 +18,7 @@ static float strip_off(int k)
     }
     return -TRACK_HW + EDGE_W + (k - 1) * (2 * (TRACK_HW - EDGE_W)) / (NSTR - 2);
 }
+
 /* weathered concrete at deck row i, lateral offset d: blotchy wear, rubber streaks from the tyres (heavier in the
  * bends), grime along the edges */
 static uint32_t deck_col(int i, float d)
@@ -38,18 +39,22 @@ static uint32_t deck_col(int i, float d)
     }
     return scalecol(0x9E998E, s);
 }
+
 static uint32_t edge_col(int i, float d)
 {
     return scalecol(0xECEBE4, 0.9f + 0.1f * vnoise(i * ds / 3.f, d, 4));
 }
+
 static int is_edge(int k)
 {
     return k == 0 || k == NSTR - 1;
 }
+
 static uint32_t start_col(int i, int k)
 {
     return (((k - 1) / 2 + i) & 1) ? 0xF2F2F2 : 0x161616;
 }
+
 /* repair patches: a few slightly darker rectangles with sharp edges */
 static float patch_f(int i, int k)
 {

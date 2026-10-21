@@ -14,6 +14,7 @@ static void menu_text(const char *t)
         }
     }
 }
+
 /* returns 0 to quit the game */
 static int menu_key(SDL_Keycode k)
 {

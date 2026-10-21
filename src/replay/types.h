@@ -10,11 +10,13 @@ typedef struct {
     signed char lap;
     unsigned char nholes, active, nwc;
 } RCar;
+
 typedef struct {
     float t;
     int st;
     RCar c[2];
 } RTick;
+
 typedef struct {
     uint32_t magic, ver, seq, nt;
     char title[64], names[2][16];
@@ -24,7 +26,9 @@ typedef struct {
     int64_t when;
     TrackDef td;
 } RHead;
+
 enum { RC_COCKPIT, RC_CHASE, RC_TV, RC_OPP_COCKPIT, RC_OPP_CHASE, NRC };
+
 static const char *const RC_NAME[NRC] = {"COCKPIT", "CHASE", "TV", "OPPONENT COCKPIT", "OPPONENT CHASE"};
 static RTick *rec;
 static int nrec, caprec, rec_on, rec_k;
@@ -39,6 +43,7 @@ static void rec_begin(void)
     rec_k = 0;
     rec_on = 1;
 }
+
 static void rec_pack(const Car *c, RCar *r)
 {
     memcpy(r->x, &c->x, 12);
@@ -65,6 +70,7 @@ static void rec_pack(const Car *c, RCar *r)
     r->active = (unsigned char)c->active;
     r->nwc = (unsigned char)c->nwc;
 }
+
 static void rec_unpack(Car *c, const RCar *r)
 {
     memcpy(&c->x, r->x, 12);
@@ -92,6 +98,7 @@ static void rec_unpack(Car *c, const RCar *r)
     c->active = r->active;
     c->nwc = r->nwc;
 }
+
 /* every 4th physics tick of a race, and for a few seconds after it */
 static void rec_tick(void)
 {

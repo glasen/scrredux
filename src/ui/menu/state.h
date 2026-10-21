@@ -18,6 +18,7 @@ enum {
     MS_CTL,
     MS_OPT
 };
+
 static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ct_col, ct_wait, pause_on, pause_sel;
 static char name_buf[16], ms_note[80];
 static float ms_note_t;
@@ -29,11 +30,13 @@ static float panel_w(void)
 {
     return fminf(HW - 70.f, 330.f);
 }
+
 static void menu_note(const char *s)
 {
     snprintf(ms_note, sizeof ms_note, "%s", s);
     ms_note_t = 2.5f;
 }
+
 static void fmt_time2(char *b, size_t n, float t)
 {
     if (t > 0) {
@@ -42,6 +45,7 @@ static void fmt_time2(char *b, size_t n, float t)
         snprintf(b, n, "-:--.-");
     }
 }
+
 static void track_title(char *b, size_t n, int t)
 {
     snprintf(b, n, "The %s", trk[t].name);

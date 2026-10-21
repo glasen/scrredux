@@ -11,6 +11,7 @@ static int ed_left_edge(void)
     float dx = (b[0][0] + b[1][0]) * 0.5f - mx, dz = (b[0][1] + b[1][1]) * 0.5f - mz;
     return ((a[0][0] - mx) * -dz + (a[0][1] - mz) * dx) > 0 ? 0 : 1;
 }
+
 static int *joint_ptr(int j, int e)
 {
     if (j >= ed.np) {
@@ -18,6 +19,7 @@ static int *joint_ptr(int j, int e)
     }
     return &ed.p[j].h[e][0];
 }
+
 static void regen(int p)
 {
     TPiece *pc = &ed.p[p];
@@ -53,12 +55,14 @@ static void regen(int p)
         }
     }
 }
+
 static void joint_get(int j, float *c, float *b)
 {
     int L = ed_left_edge(), hl = *joint_ptr(j, L), hr = *joint_ptr(j, 1 - L);
     *c = (hl + hr) * 0.5f / U_PER_M;
     *b = (hl - hr) / U_PER_M;
 }
+
 static void joint_set(int j, float c, float b)
 {
     ed_nbad = 0;
@@ -95,6 +99,7 @@ static int ed_joints(int *j)
     }
     return n;
 }
+
 static void ed_tweak_joints(int kind, float dh, float db)
 {
     int jl[MAXPC + 1], nj = ed_joints(jl);

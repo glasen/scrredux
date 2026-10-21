@@ -3,14 +3,17 @@
 
 /* ---------------------------------------------------------------- cockpit instruments (driver's view only) */
 static float ck_m[12]; /* body rows of the player's car: car frame -> world */
+
 static V3 ckp(V3 l)
 {
     return m34_apply(ck_m, l);
 }
+
 static V3 ckd(V3 l)
 {
     return vsub(ckp(l), ckp(V(0, 0, 0)));
 }
+
 static void ck_ring(V3 C, V3 u, V3 v, float r0, float r1, int n, uint32_t col)
 {
     for (int k = 0; k < n; k++) {
@@ -20,6 +23,7 @@ static void ck_ring(V3 C, V3 u, V3 v, float r0, float r1, int n, uint32_t col)
                   ckp(vadd(C, vmul(d1, r0))), col);
     }
 }
+
 static void ck_disc(V3 C, V3 u, V3 v, float r, int n, uint32_t col)
 {
     for (int k = 0; k < n; k++) {
@@ -28,6 +32,7 @@ static void ck_disc(V3 C, V3 u, V3 v, float r, int n, uint32_t col)
                  ckp(vadd(C, vmul(vadd(vmul(u, cosf(a0)), vmul(v, sinf(a0))), r))), col);
     }
 }
+
 /* round gauge in a cup on a bracket, facing the eye; frac 0..1 sweeps 270 degrees from lower left to lower right */
 static void gauge(V3 C, float r, float frac, int nmaj, const char **lab, const char *title, V3 mount)
 {
@@ -63,6 +68,7 @@ static void gauge(V3 C, float r, float frac, int nmaj, const char **lab, const c
     draw_tri_unlit(ckp(vsub(tail, sd)), ckp(vadd(N, vmul(d, r * 0.86f))), ckp(vadd(tail, sd)), 0xFF5A10);
     ck_disc(vadd(C, vmul(n, 0.009f)), u, v, r * 0.1f, 12, 0x303036);
 }
+
 /* damage: a crack grows along the lit face of the front top tube (like the original), holes where big hits landed;
  * both fit the stretch of the tube the window shows */
 static void draw_crack(const Car *c)
@@ -104,6 +110,7 @@ static void draw_crack(const Car *c)
         }
     }
 }
+
 static void draw_cockpit(void)
 {
     int fp = fp_car();

@@ -6,6 +6,7 @@ static float bend_hold(int k)
 {
     return seg[k].curv > 0.004f ? sqrtf(fmaxf(RUN_ALAT + GRAV * seg[k].bin, 3.f) / seg[k].curv) : 1e9f;
 }
+
 /* fastest the AI goes at seg k, q segments before a take-off: bends near the limit, no flying off a crest on the way */
 static float run_cap(int k, int q)
 {
@@ -15,6 +16,7 @@ static float run_cap(int k, int q)
     }
     return v;
 }
+
 /* run-up to a take-off at speed vt from seg L: flat out (boost if b) up to a braking curve that meets vt at the lip,
  * back through the last bend before it */
 static void run_up(int L, float vt, int b)
@@ -91,6 +93,7 @@ static float try_jumps(const int *l, int n, float v, int b, int s, float v0, int
  * spare, that the run-up can reach (without boost if it can) */
 static int badj[NJ], nbadj; /* lips of jumps nothing gets over cleanly */
 static int plan_gen = -1;   /* the track_gen the plan is for */
+
 static void plan_jumps(void)
 {
     int lip[NJ], end[NJ], back[NJ], nj = 0;
@@ -173,8 +176,10 @@ static void plan_jumps(void)
         for (int b = 0; b < 2; b++) {
             try_jumps(l, 1, 200.f, b, rs, 55.f, L, 0, &vr[b]);
         }
+
         /* what each take-off speed does */
         enum { V0 = 20, NV = 92 };
+
         float sc[NV], best = 1e9f;
         int bv = 0;
         int vtop = (int)fminf(vr[1] + 3, V0 + NV - 1);
@@ -231,6 +236,7 @@ static void plan_jumps(void)
     planning = 0;
     plan_gen = track_gen;
 }
+
 /* the plan is only needed once the AI drives: at the start of a race, not when a track is shown */
 static void plan_need(void)
 {

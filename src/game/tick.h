@@ -13,6 +13,7 @@ static void setup_menu(void)
 }
 
 static void ed_tick(float dt);
+
 static void game_tick(float dt)
 {
     switch (state) {

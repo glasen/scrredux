@@ -6,15 +6,18 @@ static int eng_revs, eng_chg, eng_fluct, eng_on; /* the original's engine.revs m
 static float snd_t10, snd_t50, grounded_cd, hitcar_cd;
 static int snd_scrape, snd_dirt; /* player since the last 10 Hz frame: steel scraping the deck / sliding in the dirt */
 static uint32_t snd_rng = 1;
+
 static int snd_rand(void)
 {
     snd_rng = snd_rng * 1664525u + 1013904223u;
     return (int)(snd_rng >> 16);
 } /* not frand: the game's sequence stays as it was */
+
 static int snd_live(const Car *c)
 {
     return c == &cars[0] && !planning && (state == ST_COUNT || state == ST_RACE || state == ST_DONE);
 }
+
 static void snd_grounded(const Car *c, float rate)
 {
     if (!snd_live(c) || grounded_cd > 0) {
@@ -24,6 +27,7 @@ static void snd_grounded(const Car *c, float rate)
     grounded_cd = 0.5f;
     pad_rumble(clampf((rate - 3.f) * 0.06f, 0.1f, 0.5f), 90);
 }
+
 /* UpdateEngineRevs, at the original's ~10 Hz frame rate */
 static void engine_revs(int touch, int input, int zs)
 {
@@ -40,6 +44,7 @@ static void engine_revs(int touch, int input, int zs)
     eng_chg = c;
     eng_fluct = snd_rand() & 0xf;
 }
+
 /* FramesWheelsEngine, 50 Hz: the revs pick a sample and a period below 256, which is the same as TickOver at 47.3 * (revs + 378) Hz */
 static void engine_frame(void)
 {
@@ -63,6 +68,7 @@ static void engine_frame(void)
     }
     snd_engine(k, period);
 }
+
 static void snd_tick(float dt)
 {
     static int quiet;
@@ -121,6 +127,7 @@ static void snd_tick(float dt)
         snd_dump_frames(dt);
     }
 }
+
 /* pause: the engine stops, effects play out */
 static void snd_paused(void)
 {

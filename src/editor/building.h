@@ -17,6 +17,7 @@ static void ed_new(void)
     ed_dirty = 0;
     ed_gen++;
 }
+
 static void ed_append(const Move *m, int closes)
 {
     ed_push(0);
@@ -36,6 +37,7 @@ static void ed_append(const Move *m, int closes)
     }
     ed_select(ed.np - 1, 0);
 }
+
 /* the move for this turn at the open end that fits, or NULL (*joins: there is one but no room, 2: too many pieces) */
 static const Move *ed_move_for(int turn, Move *mv, int *closes, int *joins)
 {
@@ -57,6 +59,7 @@ static const Move *ed_move_for(int turn, Move *mv, int *closes, int *joins)
     }
     return NULL;
 }
+
 static void ed_extend(int turn)
 {
     if (ed_closed()) {
@@ -96,6 +99,7 @@ static void ed_extend(int turn)
                                : " - the ghosts show what does");
     ed_note(b);
 }
+
 /* the same loop numbered from piece k */
 static void ed_renumber(int k)
 {
@@ -108,6 +112,7 @@ static void ed_renumber(int k)
     ed_sel = (ed_sel - k + ed.np) % ed.np;
     ed_anchor = (ed_anchor - k + ed.np) % ed.np;
 }
+
 /* the selected pieces come off: a closed loop opens there, an open track loses pieces at either end */
 static void ed_remove(void)
 {
@@ -150,6 +155,7 @@ static void ed_remove(void)
         }
     }
 }
+
 /* the whole track a cube over (dx, dz) and q quarter turns clockwise (seen from above) about the grid's middle */
 static void ed_move(int dx, int dz, int q)
 {
@@ -177,6 +183,7 @@ static void ed_move(int dx, int dz, int q)
     ed_push(0);
     ed = t;
 }
+
 /* the shortest way back to the first piece: breadth first over single pieces, clear of the track */
 static int ed_autoclose(void)
 {
@@ -184,11 +191,14 @@ static int ed_autoclose(void)
         ed_note("The loop is already closed");
         return 0;
     }
+
     typedef struct {
         int e[2][2], prev, depth;
         TPiece p;
     } BN;
+
     enum { CAP = 40000 };
+
     static BN q[CAP];
     static unsigned char vis[256 * 256 * 8];
     memset(vis, 0, sizeof vis);
@@ -267,6 +277,7 @@ static int ed_autoclose(void)
     ed_note("No way back to the start from here - remove a few pieces (DEL) and try again");
     return 0;
 }
+
 /* ready to drive: a closed loop with a straight for the start line */
 static int ed_ready(void)
 {
@@ -291,6 +302,7 @@ static int ed_ready(void)
     }
     return 1;
 }
+
 /* the AI's jump planner on the track as it stands: the pieces whose jumps can't be cleared */
 static void ed_jumps_note(void)
 {
@@ -307,6 +319,7 @@ static void ed_jumps_note(void)
     ed_note(b);
     ed_msg_t = 8.f;
 }
+
 static void ed_check_jumps(void)
 {
     if (!ed_ready()) {
@@ -327,6 +340,7 @@ static void ed_check_jumps(void)
     ed_jumps_note();
     ed_built = -1; /* the mesh again (an open track has its gap) */
 }
+
 static void ed_test(void)
 {
     if (!ed_ready()) {
@@ -339,6 +353,7 @@ static void ed_test(void)
     cockpit = 1;
     start_race();
 }
+
 static void ed_save(void)
 {
     if (!ed_ready()) {
@@ -359,6 +374,7 @@ static void ed_save(void)
     ed_note(b);
     ed_dirty = 0;
 }
+
 /* an original comes in with its jump edits baked into the heights */
 static void ed_import(int i)
 {

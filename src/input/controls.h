@@ -4,7 +4,9 @@
 /* controls.h - the driving keys, two per action, changed in the Controls menu and kept in save/controls.txt; and gamepads and
  * joysticks: held sticks, D-pads, triggers and buttons drive the car, and they shake on hits.  */
 static const bool *keys; /* the keyboard, held keys; NULL when headless */
+
 enum { CT_ACCEL, CT_BRAKE, CT_LEFT, CT_RIGHT, CT_BOOST, NCT };
+
 static const char *const CT_NAME[NCT] = {"Accelerate", "Brake", "Steer left", "Steer right", "Boost"};
 static const char *const CT_ID[NCT] = {"accelerate", "brake", "left", "right", "boost"};
 static const SDL_Scancode CT_DEF[NCT][2] = {{SDL_SCANCODE_UP, SDL_SCANCODE_W},
@@ -18,6 +20,7 @@ static void ctl_defaults(void)
 {
     memcpy(ctl, CT_DEF, sizeof ctl);
 }
+
 static void ctl_save(void)
 {
     char p[1024];
@@ -31,6 +34,7 @@ static void ctl_save(void)
     }
     fclose(f);
 }
+
 static void ctl_load(void)
 {
     ctl_defaults();
@@ -65,6 +69,7 @@ static void ctl_load(void)
     }
     fclose(f);
 }
+
 /* a key goes to one place only: where it was, it swaps with the key it replaces */
 static void ctl_bind(int a, int k, SDL_Scancode sc)
 {
@@ -78,6 +83,7 @@ static void ctl_bind(int a, int k, SDL_Scancode sc)
     ctl[a][k] = sc;
     ctl_save();
 }
+
 static int ctl_down(int a)
 {
     return keys && ((ctl[a][0] && keys[ctl[a][0]]) || (ctl[a][1] && keys[ctl[a][1]]));

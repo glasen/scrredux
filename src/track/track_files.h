@@ -13,6 +13,7 @@ static void track_filename(const char *name, char *out, size_t n)
     }
     snprintf(out + k, n - k, ".trk");
 }
+
 static int track_save(TrackDef *td)
 {
     char fn[64], path[1024];
@@ -45,6 +46,7 @@ static int track_save(TrackDef *td)
     snprintf(td->file, sizeof td->file, "%s", fn);
     return 0;
 }
+
 static int track_load(const char *path, TrackDef *td)
 {
     FILE *f = fopen(path, "r");
@@ -98,10 +100,12 @@ static int track_load(const char *path, TrackDef *td)
     }
     return 0;
 }
+
 static int trk_cmp(const void *a, const void *b)
 {
     return strcmp(((const TrackDef *)a)->name, ((const TrackDef *)b)->name);
 }
+
 /* the originals, then every tracks/NAME.trk sorted by name */
 static void tracks_scan(void)
 {
@@ -129,6 +133,7 @@ static void tracks_scan(void)
     SDL_free(files);
     qsort(trk + SCR_NTRACKS, ntrk - SCR_NTRACKS, sizeof(TrackDef), trk_cmp);
 }
+
 static int track_find(const char *name)
 {
     for (int i = 0; i < ntrk; i++) {

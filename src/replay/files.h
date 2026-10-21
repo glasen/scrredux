@@ -13,6 +13,7 @@ static int rp_read_head(int slot, RHead *h)
     fclose(f);
     return ok ? 0 : -1;
 }
+
 /* the race just driven goes over the oldest of the five */
 static void rec_save(const char *title, const char *n0, const char *n1, int result)
 {
@@ -65,6 +66,7 @@ static void rec_save(const char *title, const char *n0, const char *n1, int resu
     fwrite(rec, sizeof *rec, (size_t)nrec, f);
     fclose(f);
 }
+
 static int rp_load(int slot)
 {
     char p[1024];

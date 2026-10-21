@@ -18,6 +18,7 @@ static void ed_build_scene(void)
     track_gen++;
     nseg = ns;
 }
+
 static void ed_build_mesh(void)
 {
     float keep[4] = {ar_x0, ar_x1, ar_z0, ar_z1};

@@ -19,6 +19,7 @@ typedef struct {
     float ai_lane;
     int ai_lset; /* AI: the lane it is easing towards its target */
 } Car;
+
 /* the original's ten hole spots on the 240-pixel crack: 12 pixels wide, every 24, filled from the right end */
 static float hole_at(int k)
 {

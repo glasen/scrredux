@@ -15,6 +15,7 @@ static void ed_text(const char *t)
         }
     }
 }
+
 static void ed_name_begin(void)
 {
     snprintf(ed_name, sizeof ed_name, "%s", strcmp(ed.name, "NEW TRACK") ? ed.name : "");
@@ -24,6 +25,7 @@ static void ed_name_begin(void)
         SDL_StartTextInput(win);
     }
 }
+
 static void ed_save_key(void)
 {
     if (!strcmp(ed.name, "NEW TRACK")) {
@@ -34,12 +36,14 @@ static void ed_save_key(void)
         ed_save();
     }
 }
+
 static void ed_leave(void)
 {
     fc_set_look(0);
     ed_dirty = 0;
     menu_go(MS_MAIN);
 }
+
 static void ed_fly_key(SDL_Keycode k)
 {
     switch (k) {
@@ -78,6 +82,7 @@ static void ed_fly_key(SDL_Keycode k)
             break;
     }
 }
+
 static void ed_key(SDL_Keycode k, SDL_Keymod mod)
 {
     int sh = (mod & SDL_KMOD_SHIFT) != 0, cmd = (mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0,
@@ -329,6 +334,7 @@ static void ed_key(SDL_Keycode k, SDL_Keymod mod)
         ed_tweak = -1;
     }
 }
+
 static void ed_button(float hx, float hy, int b, int down)
 {
     if (b == SDL_BUTTON_RIGHT) {
@@ -348,6 +354,7 @@ static void ed_button(float hx, float hy, int b, int down)
         ed_select(k.p, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
     }
 }
+
 static void ed_motion(float hx, float hy, float xr, float yr)
 {
     if (fc_look) {
@@ -358,6 +365,7 @@ static void ed_motion(float hx, float hy, float xr, float yr)
     ed_hx = hx;
     ed_hy = hy;
 }
+
 static void ed_wheel(float w)
 {
     if (ed_mode != EM_EDIT) {
@@ -366,6 +374,7 @@ static void ed_wheel(float w)
     fc_pos = vadd(fc_pos, vmul(fc_dir(), w * fmaxf(6.f, fc_pos.y * 0.12f)));
     fc_clamp();
 }
+
 static void ed_open(void)
 {
     if (!ed.np) {
@@ -387,6 +396,7 @@ static void ed_open(void)
         ed_view_sel(); /* the first time: close to where the track starts */
     }
 }
+
 static void ed_return(void)
 {
     ed_open();
@@ -400,6 +410,7 @@ static void ed_fly_to(const float *v)
     fc_yaw = v[3] * PI_F / 180;
     fc_pitch = v[4] * PI_F / 180;
 }
+
 static void ed_report(void)
 {
     int joins = 1, clash = 0, cl = ed_closed(), jl[MAXPC + 1], nj = ed_joints(jl);
@@ -437,6 +448,7 @@ static void ed_report(void)
         }
     }
 }
+
 /* debug: the originals' pieces keep clear of each other by the builder's own rule (--check-tracks) */
 static void ed_check_originals(void)
 {

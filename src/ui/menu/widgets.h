@@ -11,6 +11,7 @@ static void soft_shadow(float x, float y, float w, float h, float r)
     }
     hud_a = 255;
 }
+
 /* a raised plate: vertical gradient, light top edge, dark bottom edge */
 static void plate(float x, float y, float w, float h, uint32_t ctop, uint32_t cbot)
 {
@@ -20,6 +21,7 @@ static void plate(float x, float y, float w, float h, uint32_t ctop, uint32_t cb
     hud_rect(x, y + h - 1, w, 1, 0x000000);
     hud_a = 255;
 }
+
 /* the preview's chequered border, q wide, with the thin white line inside */
 static void chq_border(float x0, float y0, float x1, float y1, float q)
 {
@@ -38,6 +40,7 @@ static void chq_border(float x0, float y0, float x1, float y1, float q)
     hud_rect(x0 + q, y0 + q, 1, y1 - y0 - 2 * q, 0xF4F4F4);
     hud_rect(x1 - q - 1, y0 + q, 1, y1 - y0 - 2 * q, 0xF4F4F4);
 }
+
 /* text with a soft shadow */
 static void soft_text(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
 {
@@ -48,6 +51,7 @@ static void soft_text(float x, float y, const char *s, float sc, uint32_t ctop, 
     hud_a = 255;
     hud_text_ex(x, y, s, sc, ctop, cbot, shear);
 }
+
 /* the title logo: italic lettering, SCR in red and REDUX in white */
 static void draw_logo(float y)
 {
@@ -56,6 +60,7 @@ static void draw_logo(float y)
     soft_text(x, y, "SCR", sc, 0xFF7A5A, 0xC01C10, 0.3f);
     soft_text(x + text_width("SCR ", sc), y, "REDUX", sc, 0xFFFFFF, 0xB8C4C8, 0.3f);
 }
+
 /* the frame every menu screen shares: a teal panel in a chequered border; returns the panel's left edge */
 static float menu_frame(void)
 {
@@ -73,6 +78,7 @@ static float menu_frame(void)
     plate(x0 - 3, 76, W + 6, VH - 83, 0x24767A, 0x123E42);
     return x0;
 }
+
 /* a menu line: dark plate, the chosen one gold with a chequered flag at its start */
 static void draw_bar(float x, float y, float w, const char *s, int on)
 {
@@ -105,6 +111,7 @@ static void draw_bar(float x, float y, float w, const char *s, int on)
     }
     hud_text_raw(tx, y + (h - 7 * sc) / 2, b, sc, on ? 0x201008 : 0xE8ECEC);
 }
+
 static void draw_bars(float y, const char *const *it, int n, int sel)
 {
     float W = panel_w() - 30, x = (HW - W) / 2;
@@ -112,6 +119,7 @@ static void draw_bars(float y, const char *const *it, int n, int sel)
         draw_bar(x, y + i * BAR_GAP, W, it[i], i == sel);
     }
 }
+
 /* the help line at the bottom; a note (Season saved, ...) takes its place while it shows */
 static void menu_help(const char *s)
 {
@@ -119,6 +127,7 @@ static void menu_help(const char *s)
         hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC);
     }
 }
+
 /* "Really exit?": Y yes, N or ESC no */
 static void ask_box(const char *sub)
 {
@@ -131,6 +140,7 @@ static void ask_box(const char *sub)
         hud_text_c(y + 35, sub, 1, 0xFF8070);
     }
 }
+
 static int ask_answer(SDL_Keycode k)
 {
     return k == SDLK_Y ? 1 : k == SDLK_N || k == SDLK_ESCAPE ? 0 : -1;

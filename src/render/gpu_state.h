@@ -22,6 +22,7 @@ typedef struct {
     int role, corner, link;
     uint32_t first, count;
 } MGroup;
+
 static MGroup mdl_g[64];
 static int mdl_ng, mdl_nv;
 static Vtx *mdl_v;

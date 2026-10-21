@@ -4,6 +4,7 @@
 /* ---------------------------------------------------------------- camera */
 static V3 cam_dir, cam_pos_s, cam_f, cam_u;
 static void ed_cam(float dt);
+
 static void update_camera(const Car *c, float dt, int snap)
 {
     if (state == ST_PREVIEW || state == ST_MENU) {

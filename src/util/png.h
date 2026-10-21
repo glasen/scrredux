@@ -3,6 +3,7 @@
 
 /* ------------------------------------------------------------ PNG writer */
 static uint32_t crc_tab[256];
+
 static uint32_t crc32u(uint32_t crc, const uint8_t *b, size_t n)
 {
     if (!crc_tab[1]) {
@@ -20,6 +21,7 @@ static uint32_t crc32u(uint32_t crc, const uint8_t *b, size_t n)
     }
     return ~crc;
 }
+
 static void png_chunk(FILE *f, const char *type, const uint8_t *d, uint32_t len)
 {
     uint8_t h[8] = {len >> 24, len >> 16, len >> 8, len, type[0], type[1], type[2], type[3]};
@@ -34,6 +36,7 @@ static void png_chunk(FILE *f, const char *type, const uint8_t *d, uint32_t len)
     uint8_t cb[4] = {c >> 24, c >> 16, c >> 8, c};
     fwrite(cb, 1, 4, f);
 }
+
 static int save_png(const char *path, const uint8_t *rgba, int w, int h)
 {
     FILE *f = fopen(path, "wb");

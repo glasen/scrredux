@@ -5,10 +5,12 @@ static const char *drv_name(int i)
 {
     return i == PLAYER ? sea.pname : DRV_NAME[i];
 }
+
 static float drv_rating(int i)
 {
     return i == PLAYER ? 0.5f : 1.f - i * 0.085f;
 }
+
 static void set_opponent(int i)
 {
     float r = drv_rating(i);
@@ -46,6 +48,7 @@ static void season_schedule(void)
         }
     }
 }
+
 static void season_new(const char *name)
 {
     memset(&sea, 0, sizeof sea);
@@ -58,10 +61,12 @@ static void season_new(const char *name)
     sea.div[PLAYER] = 3;
     season_schedule();
 }
+
 static int player_div(void)
 {
     return sea.div[PLAYER];
 }
+
 static Race *player_race(void)
 {
     if (sea.race >= 6) {
@@ -70,6 +75,7 @@ static Race *player_race(void)
     Race *r = &sea.sched[player_div()][sea.race];
     return (r->a == PLAYER || r->b == PLAYER) && !r->done ? r : NULL;
 }
+
 static int player_races_done(void)
 {
     int n = 0;
@@ -100,6 +106,7 @@ static void race_score(Race *r, int winner, float ta, float tb, float la, float 
         sea.lapp[r->fast]++;
     }
 }
+
 /* a race between two computer drivers: three laps around their usual pace, now and then a fall off the track and a
  * wait for the crane, rarely a wreck */
 static void sim_race(Race *r)
@@ -121,6 +128,7 @@ static void sim_race(Race *r)
     int w = t[0] >= 0 && (t[1] < 0 || t[0] <= t[1]) ? r->a : t[1] >= 0 ? r->b : sea_rand() < 0.5f ? r->a : r->b;
     race_score(r, w, t[0], t[1], l[0], l[1]);
 }
+
 /* every division races in step; stops at the player's next race */
 static void season_advance(void)
 {
@@ -142,6 +150,7 @@ static void season_advance(void)
         sea.race++;
     }
 }
+
 static int rank_cmp(const Season *s, int a, int b)
 {
     if (s->pts[a] != s->pts[b]) {
@@ -155,6 +164,7 @@ static int rank_cmp(const Season *s, int a, int b)
     }
     return a == PLAYER ? -1 : b == PLAYER ? 1 : a - b;
 }
+
 static void div_table(const Season *s, int d, int out[3])
 {
     int n = 0;
@@ -173,6 +183,7 @@ static void div_table(const Season *s, int d, int out[3])
         }
     }
 }
+
 /* season over: the top driver of each division goes up, the bottom one down, then the next season's fixtures */
 static void season_end(void)
 {

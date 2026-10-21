@@ -3,12 +3,15 @@
 
 /* ---- undo: the whole track before each change. A run of the same tweak (kind > 0) on one selection is one step ---- */
 enum { UNDO_N = 64, TW_HEIGHT = 1, TW_BANK, TW_SIZE };
+
 typedef struct {
     TrackDef t;
     int endh[2], sel, anchor;
 } EdSnap;
+
 static EdSnap ed_un[UNDO_N], ed_re[UNDO_N]; /* ed_un a ring (oldest dropped), ed_re a stack */
 static int ed_un_n, ed_un_top, ed_re_n, ed_tweak = -1, ed_tweak_sel;
+
 static void snap_take(EdSnap *s)
 {
     s->t = ed;
@@ -16,6 +19,7 @@ static void snap_take(EdSnap *s)
     s->sel = ed_sel;
     s->anchor = ed_anchor;
 }
+
 static void snap_put(const EdSnap *s)
 {
     ed = s->t;
@@ -28,6 +32,7 @@ static void snap_put(const EdSnap *s)
     ed_gen++;
     ed_gen_t = 0;
 }
+
 static void ed_push(int kind)
 {
     ed_nbad = 0;
@@ -46,6 +51,7 @@ static void ed_push(int kind)
     }
     ed_re_n = 0;
 }
+
 static void ed_undo(int redo)
 {
     if (redo ? !ed_re_n : !ed_un_n) {

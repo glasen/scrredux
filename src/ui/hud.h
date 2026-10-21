@@ -5,6 +5,7 @@
 static int mdl_nv;
 static float HW = 480;      /* HUD virtual width (height is VH) */
 static uint8_t hud_a = 255; /* opacity of what the HUD draws next */
+
 static void hud_rect(float x, float y, float w, float h, uint32_t col)
 {
     VB *save = cur;
@@ -20,6 +21,7 @@ static void hud_rect(float x, float y, float w, float h, uint32_t col)
     emit(V(x0, y1, 0), col, hud_a);
     cur = save;
 }
+
 /* a triangle with a colour at each corner */
 static void hud_tri3(float x0, float y0, uint32_t c0, float x1, float y1, uint32_t c1, float x2, float y2, uint32_t c2)
 {
@@ -32,6 +34,7 @@ static void hud_tri3(float x0, float y0, uint32_t c0, float x1, float y1, uint32
     emit(V(x2 * sx - 1, 1 - y2 * sy, 0), c2, hud_a);
     cur = save;
 }
+
 /* a rectangle shading from ctop to cbot */
 static void hud_vgrad(float x, float y, float w, float h, uint32_t ctop, uint32_t cbot)
 {

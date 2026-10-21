@@ -8,16 +8,19 @@ static int fc_look, fc_space;       /* looking round: the right mouse button or 
 static float fly_u, fly_v, fly_was; /* fly-along: where on the road, how fast */
 static V3 fly_f, fly_n;
 static int fly_snap;
+
 static V3 fc_dir(void)
 {
     return V(sinf(fc_yaw) * cosf(fc_pitch), sinf(fc_pitch), cosf(fc_yaw) * cosf(fc_pitch));
 }
+
 static void fc_clamp(void)
 {
     fc_pos.y = clampf(fc_pos.y, 2, 700);
     fc_pos.x = clampf(fc_pos.x, -1600, 1600);
     fc_pos.z = clampf(fc_pos.z, -1600, 1600);
 }
+
 static void fc_set_look(int on)
 {
     if (on != fc_look) {
@@ -27,8 +30,10 @@ static void fc_set_look(int on)
         }
     }
 }
+
 /* the camera to the selection, from the way it looks now: one piece's end (where the track goes on), a run's middle */
 static V3 joint_world(int j);
+
 static void ed_view_sel(void)
 {
     V3 a = piece_mid(&ed.p[ed_lo()], ed_lo()), b = piece_mid(&ed.p[ed_hi()], ed_hi()), t = vmul(vadd(a, b), 0.5f);
@@ -43,6 +48,7 @@ static void ed_view_sel(void)
     fc_pos = vsub(t, vmul(fc_dir(), 110 + vlen(vsub(a, b)) * 0.6f));
     fc_clamp();
 }
+
 static int ed_seg_of(int p)
 {
     for (int k = 0; k < nseg; k++) {
@@ -52,6 +58,7 @@ static int ed_seg_of(int p)
     }
     return -1;
 }
+
 static void ed_fly(int on)
 {
     if (!on) {
@@ -71,6 +78,7 @@ static void ed_fly(int on)
     fly_snap = 1;
     fc_set_look(0);
 }
+
 static void ed_tick(float dt)
 {
     ed_gen_t += dt;
@@ -119,6 +127,7 @@ static void ed_tick(float dt)
     fc_pos = vadd(fc_pos, vmul(d, v * dt));
     fc_clamp();
 }
+
 static void ed_cam(float dt)
 {
     V3 up = UP;

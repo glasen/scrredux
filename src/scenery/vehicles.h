@@ -9,6 +9,7 @@ static void vwheel(const Frm *f, float x, float z, float r, float w)
     fcyl(f, x + s * w / 2, r, z, x + s * (w / 2 + 0.03f), r, z, r * 0.62f, 10, 0xB4B4BC, 2);
     fcyl(f, x + s * (w / 2 + 0.03f), r, z, x + s * (w / 2 + 0.09f), r, z, r * 0.2f, 6, 0x5A5A62, 2);
 }
+
 /* cab of a heavy truck with its front face at z = zf */
 static void truck_cab(const Frm *f, float zf, uint32_t col, int beacon)
 {
@@ -37,6 +38,7 @@ static void truck_cab(const Frm *f, float zf, uint32_t col, int beacon)
         }
     }
 }
+
 static void truck_chassis(const Frm *f, float z0, float z1, float zfw, const float *rear, int nrear)
 {
     fbox(f, -0.5f, 0.5f, 0.55f, 0.92f, z0, z1, 0x1E1E22);
@@ -72,6 +74,7 @@ static void tow_truck(const Frm *f)
     fbox(f, -0.12f, 0.12f, 1.0f, 1.25f, -4.62f, -4.48f, 0x303034);
     fbox(f, -1.0f, 1.0f, 0.55f, 0.75f, -3.9f, -3.6f, 0x2A2A2E); /* under-lift */
 }
+
 /* water bowser for keeping the dust down */
 static void tanker(const Frm *f)
 {
@@ -88,6 +91,7 @@ static void tanker(const Frm *f)
     world_text_c(fpt(f, 1.0f, 2.05f, -1.15f), vmul(f->F, 1), UP, "WATER", 0.09f, 0x2A5AB0, 0);
     world_text_c(fpt(f, -1.0f, 2.05f, -1.15f), vmul(f->F, -1), UP, "WATER", 0.09f, 0x2A5AB0, 0);
 }
+
 /* flatbed carrying spare track girders */
 static void flatbed(const Frm *f)
 {
@@ -106,6 +110,7 @@ static void flatbed(const Frm *f)
         fcyl(f, -1.25f, 2.48f, -3.0f + k * 3.0f, 1.25f, 2.48f, -3.0f + k * 3.0f, 0.04f, 4, 0xE8A020, 0); /* straps */
     }
 }
+
 /* outside-broadcast van with a dish */
 static void tv_truck(const Frm *f)
 {
@@ -121,6 +126,7 @@ static void tv_truck(const Frm *f)
     fcyl(f, 0, 4.25f, -2.5f, 0, 4.55f, -2.95f, 0.85f, 12, 0xE0E0E4, 3); /* dish */
     fcyl(f, 0, 3.5f, 0.2f, 0, 6.5f, 0.2f, 0.07f, 5, 0x9A9AA2, 0);       /* mast */
 }
+
 /* pickup truck */
 static void pickup(const Frm *f, uint32_t col)
 {
@@ -145,6 +151,7 @@ static void pickup(const Frm *f, uint32_t col)
     fbox(f, -0.95f, 0.95f, 0.38f, 0.6f, 2.55f, 2.75f, 0x3A3A40);
     fbox(f, -0.95f, 0.95f, 0.38f, 0.6f, -2.75f, -2.55f, 0x3A3A40);
 }
+
 /* ambulance */
 static void ambulance(const Frm *f)
 {

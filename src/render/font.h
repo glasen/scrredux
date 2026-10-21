@@ -12,9 +12,11 @@ static void glyph_tris(char ch, void (*tri)(void *u, const float *t), void *u)
         tri(u, FV_TRI + 6 * (FV_GLYPH[ch - 32].first + k));
     }
 }
+
 static float glyph_adv(char ch)
 {
     return ch < 32 || ch > 126 ? 0 : FV_GLYPH[ch - 32].adv;
 }
+
 /* what may be typed into a name */
 static const char NAME_CHARS[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.:-/!+<>?,abcdefghijklmnopqrstuvwxyz'()_=*%";

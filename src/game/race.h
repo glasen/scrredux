@@ -8,6 +8,7 @@ static const char *player_name(void)
 {
     return sea.pname[0] ? sea.pname : "Player";
 }
+
 /* season races: three laps against one opponent; practice and the builder's test drive: alone, laps until ESC */
 static void start_race(void)
 {
@@ -46,6 +47,7 @@ static void start_race(void)
         rec_on = 0;
     }
 }
+
 /* a lap in a season race or in practice: the Hall of Fame's lap record */
 static void lap_done(Car *c)
 {
@@ -57,6 +59,7 @@ static void lap_done(Car *c)
         set_msg("NEW LAP RECORD!", 2.5f);
     }
 }
+
 /* replay: the recorded cars at the replay clock; crashes smoke again */
 static void rp_step(float dt)
 {
@@ -87,6 +90,7 @@ static void rp_step(float dt)
     }
     racetime = t->t;
 }
+
 /* the car seen from its driver's seat, -1 for none */
 static int fp_car(void)
 {
@@ -98,6 +102,7 @@ static int fp_car(void)
     }
     return -1;
 }
+
 static int cam_car(void)
 {
     return state == ST_REPLAY && (rp_cam == RC_OPP_COCKPIT || rp_cam == RC_OPP_CHASE) && cars[1].active ? 1 : 0;

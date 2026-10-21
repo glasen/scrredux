@@ -13,6 +13,7 @@ static int ed_proj(V3 p, float *sx, float *sy)
     *sy = (1 - vdot(d, cam.up) / z * FOCAL_Y) * VH * 0.5f;
     return 1;
 }
+
 static const char *piece_kind(const TPiece *p)
 {
     switch (p->at & 15) {
@@ -29,6 +30,7 @@ static const char *piece_kind(const TPiece *p)
             return "Bend 90, half";
     }
 }
+
 /* keys in yellow, what they do in grey: {key, words, key, words, ..., NULL}, centred at y */
 static void ed_keyline(float y, const char *const *kw, float sc)
 {
@@ -44,6 +46,7 @@ static void ed_keyline(float y, const char *const *kw, float sc)
         x += text_width(kw[k + 1], sc) + 8;
     }
 }
+
 static void ed_draw_list(void)
 {
     float w = 220, x = (HW - w) / 2, y = 30, h = VH - 60;
@@ -57,6 +60,7 @@ static void ed_draw_list(void)
         draw_bar(x, y + 28 + r * LIST_GAP, w, trk[first + r].name, first + r == ed_list);
     }
 }
+
 static void ed_draw_help(void)
 {
     static const char *const help[][2] = {{"FLYING", 0},
@@ -123,6 +127,7 @@ static void ed_draw_help(void)
     }
     hud_text_raw(x + w - text_width("H OR ESC CLOSES THIS", 0.85f), VH - 44, "H OR ESC CLOSES THIS", 0.85f, 0x9C9CA4);
 }
+
 static void ed_draw(void)
 {
     char b[128];

@@ -13,6 +13,7 @@ static void flame_cone(V3 base, V3 ax1, V3 ax2, V3 apex, float r, uint32_t col)
         draw_tri_unlit(ring[k], ring[(k + 1) % 6], apex, col);
     }
 }
+
 /* flames come out of the eight zoomie pipes while the boost burns; they flicker every frame */
 static void draw_flames(void)
 {

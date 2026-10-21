@@ -15,7 +15,9 @@ static void pv_frame(float hw, float f[4]) /* the menu: the whole screen is the 
         f[3] = VH - 54;
     }
 }
+
 #define CHQ(k) ((k) & 1 ? 0xD8D8D8u : 0x0C0C0Cu)
+
 static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
 {
     b[0] = b[1] = 1e9f;
@@ -32,12 +34,14 @@ static void pv_bounds(V3 pos, V3 fwd, V3 right, V3 up, float fx, float b[4])
         }
     }
 }
+
 /* menu and preview: the camera turns slowly round the track, starting square to its long axis, from above and at one distance: the
  * nearest that keeps the track in the picture all the way round. Worked out at PV_NA angles, the aim between them */
 static V3 pv_fwd(float th)
 {
     return vnorm(V(cosf(th) * cosf(PV_EL), -sinf(PV_EL), sinf(th) * cosf(PV_EL)));
 }
+
 static void pv_fit(V3 fwd, float fx, const float n[4], V3 *tg, float *D, int fixed)
 {
     V3 right = vnorm(vcross(fwd, UP)), up = vcross(right, fwd);
@@ -61,6 +65,7 @@ static void pv_fit(V3 fwd, float fx, const float n[4], V3 *tg, float *D, int fix
                              vmul(up, ((b[1] + b[3]) - (n[1] + n[3])) * 0.5f / FOCAL_Y * *D)));
     }
 }
+
 static void preview_cam(float asp)
 {
     static float was_asp, th0, D;
@@ -112,6 +117,7 @@ static void preview_cam(float asp)
     cam.right = vnorm(vcross(fwd, UP));
     cam.up = vcross(cam.right, fwd);
 }
+
 static void draw_preview(void)
 {
     float f[4], q = PV_Q;
@@ -148,6 +154,7 @@ static void draw_preview(void)
     hud_text_raw((HW - text_width(b, sc) + sc) / 2, by + (bh - 7 * sc) / 2, b, sc, 0xF0F0F0);
     hud_text_c(VH - 12, "ENTER START   ESC BACK", 1, 0xA8CCCC);
 }
+
 static void preview_start(void)
 {
     memset(cars, 0, sizeof cars);
@@ -156,6 +163,7 @@ static void preview_start(void)
     state = ST_PREVIEW;
     orbit_t = 0;
 }
+
 static void preview_key(SDL_Keycode k)
 {
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {

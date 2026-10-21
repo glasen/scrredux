@@ -2,6 +2,7 @@
 #pragma once
 
 enum { ST_MENU, ST_COUNT, ST_RACE, ST_DONE, ST_VIEW, ST_REPLAY, ST_EDIT, ST_PREVIEW };
+
 static Car cars[2];
 static int state = ST_MENU, laps = 3, sel_track = 0, result = 0, paused = 0, cockpit = 1;
 static float state_t, racetime;

@@ -5,8 +5,10 @@
 typedef struct {
     float x, z, r;
 } Spot;
+
 static Spot spots[256];
 static int nspots;
+
 static int spot_free(float x, float z, float r, float clear)
 {
     if (x < ar_x0 + 12 + r || x > ar_x1 - 12 - r || z < ar_z0 + 12 + r || z > ar_z1 - 12 - r) {
@@ -25,6 +27,7 @@ static int spot_free(float x, float z, float r, float clear)
     }
     return 1;
 }
+
 static void take_spot(float x, float z, float r)
 {
     if (nspots < 256) {
@@ -61,12 +64,14 @@ static void build_infield(void)
     Frm f;
     float ang = atan2f(gate_z - svc_z, ar_x1 - svc_x);
     float ca = cosf(ang), sa = sinf(ang);
+
     struct {
         float u, v, a, r;
         int kind;
     } lay[] = {{-6, 12, PI_F / 2, 4, 0},  {2, 12, PI_F / 2, 4, 1}, {10, 12, PI_F / 2, 4, 2}, {-6, -12, -PI_F / 2, 4, 3},
                {4, -12, -PI_F / 2, 3, 4}, {-16, 2, 0, 4, 5},       {-16, -6, 0, 4, 6},       {-24, 6, PI_F / 2, 4, 7},
                {-24, -4, PI_F / 2, 4, 8}, {14, -12, 0, 3, 9},      {-32, 1, 0, 2, 10}};
+
     for (unsigned i = 0; i < sizeof lay / sizeof lay[0]; i++) {
         float u = lay[i].u, v = lay[i].v;
         float x = svc_x + ca * u - sa * v, z = svc_z + sa * u + ca * v;

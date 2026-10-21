@@ -11,7 +11,9 @@ static void crash_smoke(const Car *c)
               frand() < 0.5f ? 0xFF8A18 : 0xFFD040);
     }
 }
+
 static void lap_done(Car *c);
+
 static void car_step(Car *c, float dt)
 {
     if (!c->active) {
@@ -307,6 +309,7 @@ static void apply_ang(Car *a, V3 t, float dt)
                                 vadd(vmul(a->U, vdot(t, a->U) / IY), vmul(a->F, vdot(t, a->F) / IZ))),
                            dt));
 }
+
 static void cars_interact(Car *a, Car *b, float dt)
 {
     if (!a->active || !b->active || car_out(a) || car_out(b)) {

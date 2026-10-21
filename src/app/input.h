@@ -30,6 +30,7 @@ static int handle_key(SDL_Keycode k, SDL_Keymod mod)
             return race_key(k);
     }
 }
+
 /* pads: a button press becomes the key it stands for where the game is; held directions move through the menus */
 static SDL_Keycode pad_key(int b)
 {
@@ -62,6 +63,7 @@ static SDL_Keycode pad_key(int b)
             return 0;
     }
 }
+
 static SDL_Keycode pad_nav(float dt)
 {
     static const SDL_Keycode NAV[5] = {0, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT};
@@ -84,6 +86,7 @@ static SDL_Keycode pad_nav(float dt)
     t = 0.12f;
     return NAV[d];
 }
+
 static void frame_timers(float frame)
 {
     if (ms_note_t > 0) {

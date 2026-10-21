@@ -19,6 +19,7 @@ typedef struct {
     const uint8_t *p, *end;
     int bad;
 } Rd;
+
 static uint32_t rd_u32(Rd *r)
 {
     uint32_t v = 0;
@@ -30,6 +31,7 @@ static uint32_t rd_u32(Rd *r)
     r->p += 4;
     return v;
 }
+
 static float rd_f(Rd *r)
 {
     float v = 0;
@@ -41,6 +43,7 @@ static float rd_f(Rd *r)
     r->p += 4;
     return v;
 }
+
 static V3 rd_v3(Rd *r)
 {
     float x = rd_f(r), y = rd_f(r), z = rd_f(r);

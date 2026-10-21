@@ -12,18 +12,22 @@ static int xs_eq(const int a[2][2], const int b[2][2])
     }
     return 1;
 }
+
 static void pc_xs(const TPiece *p, int i, int o[2][2])
 {
     tpl_cross(p->at, i, p->cx, p->cz, o);
 }
+
 static void pc_endxs(const TPiece *p, int o[2][2])
 {
     pc_xs(p, pc_ns(p), o);
 }
+
 static float xs_ang(const int e[2][2])
 {
     return atan2f((float)(e[1][0] - e[0][0]), (float)-(e[1][1] - e[0][1]));
 }
+
 static int ed_closed(void)
 {
     if (ed.np < 2) {
@@ -71,6 +75,7 @@ static int cands(const int e[2][2], TPiece *out)
     }
     return n;
 }
+
 /* a heading the road can carry on straight from (along the grid or diagonally) */
 static int stable(const int e[2][2])
 {
@@ -83,6 +88,7 @@ static int stable(const int e[2][2])
     }
     return 0;
 }
+
 /* the cubes a piece's road passes over (-1: off the grid) */
 static int pc_cubes(const TPiece *p, int *cb)
 {
@@ -102,6 +108,7 @@ static int pc_cubes(const TPiece *p, int *cb)
     }
     return n;
 }
+
 static int pc_clash(const TPiece *a, const TPiece *b)
 {
     int ca[16], cb[16], na = pc_cubes(a, ca), nb = pc_cubes(b, cb);
@@ -114,6 +121,7 @@ static int pc_clash(const TPiece *a, const TPiece *b)
     }
     return 0;
 }
+
 static int pc_ongrid(const TPiece *p)
 {
     int c[16], n = pc_cubes(p, c);
@@ -124,6 +132,7 @@ static int pc_ongrid(const TPiece *p)
     }
     return 1;
 }
+
 /* new piece c, the k-th after the open end: clear of every piece but its neighbours */
 static int fits(const TPiece *c, int k, int closes)
 {
@@ -140,6 +149,7 @@ static int fits(const TPiece *c, int k, int closes)
     }
     return 1;
 }
+
 static void move_find(const int e[2][2], Move *m, Move *out, int *nm)
 {
     int x[2][2];
@@ -179,6 +189,7 @@ static void move_find(const int e[2][2], Move *m, Move *out, int *nm)
         m->n--;
     }
 }
+
 /* straight on, 45 and 90 degree bends: the pieces it takes to get to the next heading */
 static int moves(const int e[2][2], Move *out)
 {
@@ -188,10 +199,12 @@ static int moves(const int e[2][2], Move *out)
     move_find(e, &m, out, &nm);
     return nm;
 }
+
 static void open_end(int e[2][2])
 {
     pc_endxs(&ed.p[ed.np - 1], e);
 }
+
 static int move_ok(const Move *m, int *closes)
 {
     int s0[2][2], x[2][2];

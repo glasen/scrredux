@@ -23,6 +23,7 @@ static float smooth01(float t)
     t = clampf(t, 0, 1);
     return t * t * (3 - 2 * t);
 }
+
 static void smooth_circ(float *a, int passes)
 {
     static float tmp[MAXSEG];

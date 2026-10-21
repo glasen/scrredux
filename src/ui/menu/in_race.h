@@ -12,6 +12,7 @@ static int pause_items(const char **it)
     it[n++] = race_mode == RM_SEASON ? "Retire" : race_mode == RM_TEST ? "Back to the builder" : "Leave practice";
     return n;
 }
+
 static void draw_pause(void)
 {
     const char *it[3];
@@ -29,6 +30,7 @@ static void draw_pause(void)
     }
     hud_text_c(y + h + 8, "UP/DOWN SELECT   ENTER CHOOSE   ESC/P CONTINUE", 1, 0xE0E0E0);
 }
+
 static void race_hud_extra(void)
 {
     char b[96];
@@ -49,11 +51,13 @@ static void race_hud_extra(void)
         ask_box("YOU RETIRE AND LOSE THE RACE");
     }
 }
+
 static void pause_set(int on)
 {
     pause_on = paused = on;
     pause_sel = 0;
 }
+
 static void pause_key(SDL_Keycode k)
 {
     const char *it[3];
@@ -84,6 +88,7 @@ static void pause_key(SDL_Keycode k)
         race_leave(1);
     }
 }
+
 static int race_key(SDL_Keycode k)
 {
     if (ask_quit) { /* "Really exit?" over the pause menu */
@@ -138,6 +143,7 @@ static void draw_replay_hud(void)
     hud_rect(20, VH - 22, W * f, 4, 0xF08C1C);
     hud_text_c(VH - 12, "C CAMERA   SPACE PAUSE   LEFT/RIGHT REWIND/FAST   HOME START   ESC BACK", 1, 0xC0C0C8);
 }
+
 static void replay_key(SDL_Keycode k)
 {
     if (k == SDLK_ESCAPE) {
@@ -155,6 +161,7 @@ static void replay_key(SDL_Keycode k)
         npart = 0;
     }
 }
+
 static void replay_hold(void) /* held keys: wind back or forward at four times the speed */
 {
     rp_speed = 1;

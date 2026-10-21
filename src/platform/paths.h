@@ -6,6 +6,7 @@ static void data_path(char *out, size_t n, const char *rel)
     const char *b = SDL_GetBasePath();
     snprintf(out, n, "%s%s", b ? b : "", rel);
 }
+
 /* the player's own files - settings, saves, replays, tracks - go in SDL's folder for them, not beside the game (an app
  * bundle or a folder the game cannot write to): ~/Library/Application Support/SCR Redux/SCR Redux/ on macOS,
  * %APPDATA%\SCR Redux\SCR Redux\ on Windows, ~/.local/share/SCR Redux/SCR Redux/ on Linux. SCR_HOME overrides it

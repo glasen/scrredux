@@ -15,6 +15,7 @@ static void tree(float x, float z, float s, int kind)
         cyl(V(x, g + 3.6f * s, z), V(x, g + 6.2f * s, z), 2.6f * s, 0.6f * s, 7, scalecol(c, 1.1f), 2);
     }
 }
+
 static void parked_car(V3 p, V3 F, uint32_t col)
 {
     V3 R = vcross(F, UP);
@@ -22,6 +23,7 @@ static void parked_car(V3 p, V3 F, uint32_t col)
     obox(vadd(vadd(p, V(0, 1.12f, 0)), vmul(F, -0.2f)), R, UP, F, 0.78f, 0.26f, 1.1f, GLASS);
     obox(vadd(vadd(p, V(0, 1.39f, 0)), vmul(F, -0.2f)), R, UP, F, 0.76f, 0.02f, 1.0f, col);
 }
+
 static void build_outside(void)
 {
     rngs = 777 + cur_track;

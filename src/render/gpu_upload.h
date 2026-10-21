@@ -37,6 +37,7 @@ static int upload_mesh(const VB *b, SDL_GPUBuffer **buf)
     SDL_ReleaseGPUTransferBuffer(dev, t);
     return b->n;
 }
+
 static void upload_static(void)
 {
     if (static_gen == track_gen) {
@@ -46,8 +47,10 @@ static void upload_static(void)
     static_gen = track_gen;
     fprintf(stderr, "static mesh: %d triangles\n", sb.n / 3);
 }
+
 static SDL_GPUBuffer *vbuf_t; /* the track builder's track */
 static int tkb_up = -1, tkb_n;
+
 static void upload_track(void)
 {
     if (tkb_up != tkb_gen) {

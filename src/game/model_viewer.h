@@ -6,6 +6,7 @@ static float view_yaw = 0.6f, view_pitch = 0.22f, view_dist = 7.5f;
 static int view_auto = 1, view_hide = 0, view_col = 0, view_flame = 0, view_anim = 1;
 static V3 view_target = {0, 0.55f, 0};
 static const uint32_t PALETTE[] = {CAR_RED, 0x2860D8, 0xF07818, 0x30A050, 0xE8D030, 0xF0F0F0, 0x303034, 0x9040C0};
+
 static void start_view(void)
 {
     memset(&cars[0], 0, sizeof(Car));
@@ -22,6 +23,7 @@ static void start_view(void)
     }
     state = ST_VIEW;
 }
+
 static void view_key(SDL_Keycode k)
 {
     if (k == SDLK_SPACE) {
