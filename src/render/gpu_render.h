@@ -19,6 +19,242 @@ static void make_cascade(V3 center, float E, float D, int size, float *rows)
     memcpy(rows + 12, r3, 16);
 }
 
+/* how many vertices of each buffer a frame draws */
+typedef struct {
+    int dynamic, hud, world, track;
+} FrameCounts;
+
+/* the world buffer, the builder's track buffer and the per-frame geometry up to `dynamic_count` (a prefix of the
+ * dynamic buffer, after the sky) into whatever render pass is open */
+static void draw_world_buffers(SDL_GPURenderPass *pass, int world_count, int track_count, int dynamic_first,
+                               int dynamic_count)
+{
+    if (world_count) {
+        SDL_GPUBufferBinding binding = {gpu.vbuf_static, 0};
+        SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        SDL_DrawGPUPrimitives(pass, world_count, 1, 0, 0);
+    }
+
+    if (track_count) {
+        SDL_GPUBufferBinding binding = {gpu.vbuf_track, 0};
+        SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        SDL_DrawGPUPrimitives(pass, track_count, 1, 0, 0);
+    }
+
+    if (dynamic_count > 0) {
+        SDL_GPUBufferBinding binding = {gpu.vbuf_dynamic, (Uint32)((size_t)dynamic_first * sizeof(Vtx))};
+        SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        SDL_DrawGPUPrimitives(pass, dynamic_count, 1, 0, 0);
+    }
+}
+
+/* the frame's dynamic and HUD vertices into the GPU buffer */
+static void upload_frame_vertices(SDL_GPUCommandBuffer *cmd, const FrameCounts *n)
+{
+    uint8_t *map = SDL_MapGPUTransferBuffer(gpu.device, gpu.upload_buffer, true);
+    memcpy(map, db.v, (size_t)n->dynamic * sizeof(Vtx));
+    memcpy(map + (size_t)n->dynamic * sizeof(Vtx), hb.v, (size_t)n->hud * sizeof(Vtx));
+    SDL_UnmapGPUTransferBuffer(gpu.device, gpu.upload_buffer);
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTransferBufferLocation src = {gpu.upload_buffer, 0};
+    SDL_GPUBufferRegion dst = {gpu.vbuf_dynamic, 0, (Uint32)((n->dynamic + n->hud) * sizeof(Vtx))};
+    SDL_UploadToGPUBuffer(cp, &src, &dst, true);
+    SDL_EndGPUCopyPass(cp);
+}
+
+/* the near and far sun shadow cascades; *near_depth and *far_depth are their depth ranges */
+static void sun_cascades(float *near_rows, float *far_rows, float *near_depth, float *far_depth)
+{
+    float far_extent = 0.5f * sqrtf(sq(ar_x1 - ar_x0) + sq(ar_z1 - ar_z0)) + SHADOW_FAR_MARGIN;
+    float far_range = SHADOW_FAR_DEPTH_FACTOR * far_extent + SHADOW_FAR_DEPTH_BASE;
+    float near_extent = SHADOW_NEAR_EXTENT, near_range = SHADOW_NEAR_DEPTH;
+    int viewer_mode = state == ST_VIEW; /* the car alone: tight cascades round it */
+
+    if (viewer_mode) {
+        near_extent = 6.f;
+        near_range = 24.f;
+        far_extent = 24.f;
+        far_range = 50.f;
+    }
+
+    make_cascade(viewer_mode ? V(0, 0.6f, 0) : vadd(cam.pos, vmul(cam.fwd, SHADOW_NEAR_AHEAD)), near_extent, near_range,
+                 SH_SIZE[0], near_rows);
+    make_cascade(viewer_mode ? V(0, 0, 0) : V((ar_x0 + ar_x1) / 2, SHADOW_FAR_CENTRE_HEIGHT, (ar_z0 + ar_z1) / 2),
+                 far_extent, far_range, SH_SIZE[1], far_rows);
+    *near_depth = near_range;
+    *far_depth = far_range;
+}
+
+/* one depth-only pass per cascade: the world, the builder's track, the dynamic scenery and the cars */
+static void shadow_passes(SDL_GPUCommandBuffer *cmd, const FrameCounts *n, const float *near_rows,
+                          const float *far_rows)
+{
+    for (int cascade = 0; cascade < 2; cascade++) {
+        SDL_GPUDepthStencilTargetInfo depth;
+        SDL_zero(depth);
+        depth.texture = gpu.shadow_texture[cascade];
+        depth.clear_depth = 1.f;
+        depth.load_op = SDL_GPU_LOADOP_CLEAR;
+        depth.store_op = SDL_GPU_STOREOP_STORE;
+        depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+        depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, NULL, 0, &depth);
+        SDL_BindGPUGraphicsPipeline(pass, gpu.pipeline_shadow);
+        SDL_PushGPUVertexUniformData(cmd, 0, cascade ? far_rows : near_rows, 64);
+        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+        int shadow_end = SDL_min(gpu.dynamic_shadow_end, n->dynamic); /* what casts shadows: up to the cars */
+        draw_world_buffers(pass, n->world, n->track, gpu.sky_vertices, shadow_end - gpu.sky_vertices);
+        draw_cars_gpu(pass, cmd, 1, NULL);
+        SDL_EndGPURenderPass(pass);
+    }
+}
+
+/* the camera's view-projection rows: reversed depth (near 1, far 0) in a float buffer, so precision stays fine out to
+ * the mountains and nothing z-fights */
+static void view_projection_rows(float pr[16])
+{
+    float fy = FOCAL_Y, fx = fy / ((float)gpu.target_w / gpu.target_h), B = NEAR_Z / (FAR_Z - NEAR_Z);
+    float rows[16] = {fx * cam.right.x, fx * cam.right.y, fx * cam.right.z, -fx * vdot(cam.pos, cam.right),
+                      fy * cam.up.x,    fy * cam.up.y,    fy * cam.up.z,    -fy * vdot(cam.pos, cam.up),
+                      -B * cam.fwd.x,   -B * cam.fwd.y,   -B * cam.fwd.z,   B * (FAR_Z + vdot(cam.pos, cam.fwd)),
+                      cam.fwd.x,        cam.fwd.y,        cam.fwd.z,        -vdot(cam.pos, cam.fwd)};
+    memcpy(pr, rows, sizeof rows);
+}
+
+/* the fragment shader's constants: camera, fog, sun, both shadow cascades and their texel and bias sizes */
+static void fragment_uniforms(float fu[56], const float *near_rows, const float *far_rows, float near_depth,
+                              float far_depth)
+{
+    uint32_t fc = FOGCOL;
+    V3 L = vnorm(V(0.42f, 0.78f, 0.46f));
+    float head[16] = {cam.pos.x,
+                      cam.pos.y,
+                      cam.pos.z,
+                      0,
+                      ((fc >> 16) & 255) / 255.f,
+                      ((fc >> 8) & 255) / 255.f,
+                      (fc & 255) / 255.f,
+                      0,
+                      state == ST_EDIT ? 3 * FOG0 : FOG0, /* the builder: the whole grid clear */
+                      FOG1,
+                      0,
+                      0,
+                      L.x,
+                      L.y,
+                      L.z,
+                      0};
+    memset(fu, 0, 56 * sizeof(float));
+    memcpy(fu, head, sizeof head);
+    memcpy(fu + 16, near_rows, 64);
+    memcpy(fu + 32, far_rows, 64);
+    fu[48] = 1.f / SH_SIZE[0];
+    fu[49] = 1.f / SH_SIZE[1];
+    fu[50] = SHADOW_NEAR_BIAS / (2 * near_depth);
+    fu[51] = SHADOW_FAR_BIAS / (2 * far_depth);
+}
+
+/* the lit world, the cars and then the HUD on top, with 4x MSAA resolved into the output texture */
+static void colour_pass(SDL_GPUCommandBuffer *cmd, const FrameCounts *n, const float *near_rows, const float *far_rows,
+                        float near_depth, float far_depth)
+{
+    uint32_t fc = FOGCOL;
+    SDL_GPUColorTargetInfo colour;
+    SDL_zero(colour);
+    colour.texture = gpu.msaa > 1 ? gpu.target_msaa : gpu.target_resolved;
+    colour.load_op = SDL_GPU_LOADOP_CLEAR;
+
+    if (gpu.msaa > 1) {
+        colour.resolve_texture = gpu.target_resolved;
+        colour.store_op = SDL_GPU_STOREOP_RESOLVE;
+    } else {
+        colour.store_op = SDL_GPU_STOREOP_STORE;
+    }
+
+    colour.clear_color = (SDL_FColor){((fc >> 16) & 255) / 255.f, ((fc >> 8) & 255) / 255.f, (fc & 255) / 255.f, 1};
+    SDL_GPUDepthStencilTargetInfo depth;
+    SDL_zero(depth);
+    depth.texture = gpu.depth_texture;
+    depth.clear_depth = 0.f;
+    depth.load_op = SDL_GPU_LOADOP_CLEAR;
+    depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    depth.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    depth.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &colour, 1, &depth);
+
+    float view_projection[16], fu[56];
+    view_projection_rows(view_projection);
+    fragment_uniforms(fu, near_rows, far_rows, near_depth, far_depth);
+    SDL_PushGPUFragmentUniformData(cmd, 0, fu, sizeof fu);
+    SDL_BindGPUGraphicsPipeline(pass, gpu.pipeline_world);
+    SDL_GPUTextureSamplerBinding shadow_maps[2] = {{gpu.shadow_texture[0], gpu.shadow_sampler},
+                                                   {gpu.shadow_texture[1], gpu.shadow_sampler}};
+    SDL_BindGPUFragmentSamplers(pass, 0, shadow_maps, 2);
+    SDL_PushGPUVertexUniformData(cmd, 0, view_projection, sizeof view_projection);
+    SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+    draw_world_buffers(pass, n->world, n->track, 0, n->dynamic);
+    draw_cars_gpu(pass, cmd, 0, fu);
+
+    if (n->hud) {
+        static const float identity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        SDL_BindGPUGraphicsPipeline(pass, gpu.pipeline_hud);
+        SDL_PushGPUVertexUniformData(cmd, 0, identity, sizeof identity);
+        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+        SDL_GPUBufferBinding binding = {gpu.vbuf_dynamic, (Uint32)((size_t)n->dynamic * sizeof(Vtx))};
+        SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        SDL_DrawGPUPrimitives(pass, n->hud, 1, 0, 0);
+    }
+
+    SDL_EndGPURenderPass(pass);
+}
+
+/* reads the rendered image back and writes it as a PNG */
+static void save_screenshot(SDL_GPUCommandBuffer *cmd, const char *path)
+{
+    SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTextureRegion region;
+    SDL_zero(region);
+    region.texture = gpu.target_resolved;
+    region.w = gpu.target_w;
+    region.h = gpu.target_h;
+    region.d = 1;
+    SDL_GPUTextureTransferInfo transfer;
+    SDL_zero(transfer);
+    transfer.transfer_buffer = gpu.download_buffer;
+    transfer.pixels_per_row = gpu.target_w;
+    transfer.rows_per_layer = gpu.target_h;
+    SDL_DownloadFromGPUTexture(copy, &region, &transfer);
+    SDL_EndGPUCopyPass(copy);
+    SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    SDL_WaitForGPUFences(gpu.device, true, &fence, 1);
+    SDL_ReleaseGPUFence(gpu.device, fence);
+    uint8_t *pixels = SDL_MapGPUTransferBuffer(gpu.device, gpu.download_buffer, false);
+    save_png(path, pixels, gpu.target_w, gpu.target_h);
+    SDL_UnmapGPUTransferBuffer(gpu.device, gpu.download_buffer);
+}
+
+/* scales the rendered image onto the window's swapchain image and presents it */
+static void present_to_window(SDL_GPUCommandBuffer *cmd)
+{
+    SDL_GPUTexture *swapchain = NULL;
+    Uint32 w = 0, h = 0;
+
+    if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, win, &swapchain, &w, &h) && swapchain) {
+        SDL_GPUBlitInfo blit;
+        SDL_zero(blit);
+        blit.source.texture = gpu.target_resolved;
+        blit.source.w = gpu.target_w;
+        blit.source.h = gpu.target_h;
+        blit.destination.texture = swapchain;
+        blit.destination.w = w;
+        blit.destination.h = h;
+        blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+        blit.filter = SDL_GPU_FILTER_NEAREST;
+        SDL_BlitGPUTexture(cmd, &blit);
+    }
+
+    SDL_SubmitGPUCommandBuffer(cmd);
+}
+
 /* If shot_path != NULL: render offscreen and write PNG. Otherwise present to the window. */
 static void gpu_render(const char *shot_path)
 {
@@ -26,15 +262,7 @@ static void gpu_render(const char *shot_path)
         int w, h;
         SDL_GetWindowSizeInPixels(win, &w, &h);
 
-        if (w < 64) {
-            w = 64;
-        }
-
-        if (h < 64) {
-            h = 64;
-        }
-
-        if (ensure_targets(w, h)) {
+        if (ensure_targets(SDL_max(w, 64), SDL_max(h, 64))) {
             return;
         }
     }
@@ -50,206 +278,22 @@ static void gpu_render(const char *shot_path)
     }
 
     build_frame();
-    int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > HUD_CAP ? HUD_CAP : hb.n;
+    FrameCounts n = {
+        .dynamic = SDL_min(db.n, DYN_CAP),
+        .hud = SDL_min(hb.n, HUD_CAP),
+        .world = state == ST_VIEW ? 0 : gpu.static_vertices,
+        .track = state == ST_EDIT ? gpu.track_vertices : 0,
+    };
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(gpu.device);
-    uint8_t *map = SDL_MapGPUTransferBuffer(gpu.device, gpu.upload_buffer, true);
-    memcpy(map, db.v, (size_t)nd * sizeof(Vtx));
-    memcpy(map + (size_t)nd * sizeof(Vtx), hb.v, (size_t)nhud * sizeof(Vtx));
-    SDL_UnmapGPUTransferBuffer(gpu.device, gpu.upload_buffer);
-    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
-    SDL_GPUTransferBufferLocation src = {gpu.upload_buffer, 0};
-    SDL_GPUBufferRegion dst = {gpu.vbuf_dynamic, 0, (Uint32)((nd + nhud) * sizeof(Vtx))};
-    SDL_UploadToGPUBuffer(cp, &src, &dst, true);
-    SDL_EndGPUCopyPass(cp);
-
-    /* sun shadow cascades */
-    float nrows[16], frows[16];
-    float Ef = 0.5f * sqrtf(sq(ar_x1 - ar_x0) + sq(ar_z1 - ar_z0)) + 80.f, Df = 0.7f * Ef + 160.f, En = 70.f,
-          Dn = 250.f;
-    int vwm = state == ST_VIEW;
-
-    if (vwm) {
-        En = 6.f;
-        Dn = 24.f;
-        Ef = 24.f;
-        Df = 50.f;
-    }
-
-    make_cascade(vwm ? V(0, 0.6f, 0) : vadd(cam.pos, vmul(cam.fwd, 40.f)), En, Dn, SH_SIZE[0], nrows);
-    make_cascade(vwm ? V(0, 0, 0) : V((ar_x0 + ar_x1) / 2, 20.f, (ar_z0 + ar_z1) / 2), Ef, Df, SH_SIZE[1], frows);
-    int sn = vwm ? 0 : gpu.static_vertices, tn = state == ST_EDIT ? gpu.track_vertices : 0;
-
-    for (int ci = 0; ci < 2; ci++) {
-        SDL_GPUDepthStencilTargetInfo sd;
-        SDL_zero(sd);
-        sd.texture = gpu.shadow_texture[ci];
-        sd.clear_depth = 1.f;
-        sd.load_op = SDL_GPU_LOADOP_CLEAR;
-        sd.store_op = SDL_GPU_STOREOP_STORE;
-        sd.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-        sd.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-        SDL_GPURenderPass *sp_ = SDL_BeginGPURenderPass(cmd, NULL, 0, &sd);
-        SDL_BindGPUGraphicsPipeline(sp_, gpu.pipeline_shadow);
-        SDL_PushGPUVertexUniformData(cmd, 0, ci ? frows : nrows, 64);
-        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
-
-        if (sn) {
-            SDL_GPUBufferBinding b0 = {gpu.vbuf_static, 0};
-            SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
-            SDL_DrawGPUPrimitives(sp_, sn, 1, 0, 0);
-        }
-
-        if (tn) {
-            SDL_GPUBufferBinding b0 = {gpu.vbuf_track, 0};
-            SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
-            SDL_DrawGPUPrimitives(sp_, tn, 1, 0, 0);
-        }
-
-        int she = SDL_min(gpu.dynamic_shadow_end, nd);
-
-        if (she > gpu.sky_vertices) {
-            SDL_GPUBufferBinding b1 = {gpu.vbuf_dynamic, (Uint32)((size_t)gpu.sky_vertices * sizeof(Vtx))};
-            SDL_BindGPUVertexBuffers(sp_, 0, &b1, 1);
-            SDL_DrawGPUPrimitives(sp_, she - gpu.sky_vertices, 1, 0, 0);
-        }
-
-        draw_cars_gpu(sp_, cmd, 1, NULL);
-        SDL_EndGPURenderPass(sp_);
-    }
-
-    uint32_t fc = FOGCOL;
-    SDL_GPUColorTargetInfo ct;
-    SDL_zero(ct);
-    ct.texture = gpu.msaa > 1 ? gpu.target_msaa : gpu.target_resolved;
-    ct.load_op = SDL_GPU_LOADOP_CLEAR;
-
-    if (gpu.msaa > 1) {
-        ct.resolve_texture = gpu.target_resolved;
-        ct.store_op = SDL_GPU_STOREOP_RESOLVE;
-    } else {
-        ct.store_op = SDL_GPU_STOREOP_STORE;
-    }
-    ct.clear_color = (SDL_FColor){((fc >> 16) & 255) / 255.f, ((fc >> 8) & 255) / 255.f, (fc & 255) / 255.f, 1};
-    SDL_GPUDepthStencilTargetInfo dt;
-    SDL_zero(dt);
-    dt.texture = gpu.depth_texture;
-    dt.clear_depth = 0.f;
-    dt.load_op = SDL_GPU_LOADOP_CLEAR;
-    dt.store_op = SDL_GPU_STOREOP_DONT_CARE;
-    dt.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-    dt.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-    SDL_GPURenderPass *rp_ = SDL_BeginGPURenderPass(cmd, &ct, 1, &dt);
-
-    /* reversed depth (near 1, far 0) in a float buffer: precision stays fine out to the mountains, no z-fighting */
-    float fy = FOCAL_Y, fx = fy / ((float)gpu.target_w / gpu.target_h), B = NEAR_Z / (FAR_Z - NEAR_Z);
-    float pr[16] = {fx * cam.right.x, fx * cam.right.y, fx * cam.right.z, -fx * vdot(cam.pos, cam.right),
-                    fy * cam.up.x,    fy * cam.up.y,    fy * cam.up.z,    -fy * vdot(cam.pos, cam.up),
-                    -B * cam.fwd.x,   -B * cam.fwd.y,   -B * cam.fwd.z,   B * (FAR_Z + vdot(cam.pos, cam.fwd)),
-                    cam.fwd.x,        cam.fwd.y,        cam.fwd.z,        -vdot(cam.pos, cam.fwd)};
-    static const float ident[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-    V3 L = vnorm(V(0.42f, 0.78f, 0.46f));
-    float fu[56] = {cam.pos.x,
-                    cam.pos.y,
-                    cam.pos.z,
-                    0,
-                    ((fc >> 16) & 255) / 255.f,
-                    ((fc >> 8) & 255) / 255.f,
-                    (fc & 255) / 255.f,
-                    0,
-                    state == ST_EDIT ? 3 * FOG0 : FOG0,
-                    FOG1,
-                    0,
-                    0,
-                    L.x,
-                    L.y,
-                    L.z,
-                    0}; /* the builder: the whole grid clear */
-    memcpy(fu + 16, nrows, 64);
-    memcpy(fu + 32, frows, 64);
-    fu[48] = 1.f / SH_SIZE[0];
-    fu[49] = 1.f / SH_SIZE[1];
-    fu[50] = 0.15f / (2 * Dn);
-    fu[51] = 1.6f / (2 * Df);
-    SDL_PushGPUFragmentUniformData(cmd, 0, fu, sizeof fu);
-    SDL_BindGPUGraphicsPipeline(rp_, gpu.pipeline_world);
-    SDL_GPUTextureSamplerBinding shb[2] = {{gpu.shadow_texture[0], gpu.shadow_sampler},
-                                           {gpu.shadow_texture[1], gpu.shadow_sampler}};
-    SDL_BindGPUFragmentSamplers(rp_, 0, shb, 2);
-    SDL_PushGPUVertexUniformData(cmd, 0, pr, sizeof pr);
-    SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
-
-    if (sn) {
-        SDL_GPUBufferBinding vbs = {gpu.vbuf_static, 0};
-        SDL_BindGPUVertexBuffers(rp_, 0, &vbs, 1);
-        SDL_DrawGPUPrimitives(rp_, sn, 1, 0, 0);
-    }
-
-    if (tn) {
-        SDL_GPUBufferBinding vbt = {gpu.vbuf_track, 0};
-        SDL_BindGPUVertexBuffers(rp_, 0, &vbt, 1);
-        SDL_DrawGPUPrimitives(rp_, tn, 1, 0, 0);
-    }
-
-    SDL_GPUBufferBinding vbd_ = {gpu.vbuf_dynamic, 0};
-    SDL_BindGPUVertexBuffers(rp_, 0, &vbd_, 1);
-
-    if (nd) {
-        SDL_DrawGPUPrimitives(rp_, nd, 1, 0, 0);
-    }
-
-    draw_cars_gpu(rp_, cmd, 0, fu);
-
-    if (nhud) {
-        SDL_BindGPUGraphicsPipeline(rp_, gpu.pipeline_hud);
-        SDL_PushGPUVertexUniformData(cmd, 0, ident, sizeof ident);
-        SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
-        SDL_GPUBufferBinding vb2 = {gpu.vbuf_dynamic, (Uint32)((size_t)nd * sizeof(Vtx))};
-        SDL_BindGPUVertexBuffers(rp_, 0, &vb2, 1);
-        SDL_DrawGPUPrimitives(rp_, nhud, 1, 0, 0);
-    }
-
-    SDL_EndGPURenderPass(rp_);
+    upload_frame_vertices(cmd, &n);
+    float near_rows[16], far_rows[16], near_depth, far_depth;
+    sun_cascades(near_rows, far_rows, &near_depth, &far_depth);
+    shadow_passes(cmd, &n, near_rows, far_rows);
+    colour_pass(cmd, &n, near_rows, far_rows, near_depth, far_depth);
 
     if (shot_path) {
-        SDL_GPUCopyPass *dp = SDL_BeginGPUCopyPass(cmd);
-        SDL_GPUTextureRegion reg;
-        SDL_zero(reg);
-        reg.texture = gpu.target_resolved;
-        reg.w = gpu.target_w;
-        reg.h = gpu.target_h;
-        reg.d = 1;
-        SDL_GPUTextureTransferInfo ti;
-        SDL_zero(ti);
-        ti.transfer_buffer = gpu.download_buffer;
-        ti.pixels_per_row = gpu.target_w;
-        ti.rows_per_layer = gpu.target_h;
-        SDL_DownloadFromGPUTexture(dp, &reg, &ti);
-        SDL_EndGPUCopyPass(dp);
-        SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-        SDL_WaitForGPUFences(gpu.device, true, &fence, 1);
-        SDL_ReleaseGPUFence(gpu.device, fence);
-        uint8_t *px = SDL_MapGPUTransferBuffer(gpu.device, gpu.download_buffer, false);
-        save_png(shot_path, px, gpu.target_w, gpu.target_h);
-        SDL_UnmapGPUTransferBuffer(gpu.device, gpu.download_buffer);
-        return;
+        save_screenshot(cmd, shot_path);
+    } else {
+        present_to_window(cmd);
     }
-
-    SDL_GPUTexture *sw = NULL;
-    Uint32 w = 0, h = 0;
-
-    if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, win, &sw, &w, &h) && sw) {
-        SDL_GPUBlitInfo bl;
-        SDL_zero(bl);
-        bl.source.texture = gpu.target_resolved;
-        bl.source.w = gpu.target_w;
-        bl.source.h = gpu.target_h;
-        bl.destination.texture = sw;
-        bl.destination.w = w;
-        bl.destination.h = h;
-        bl.load_op = SDL_GPU_LOADOP_DONT_CARE;
-        bl.filter = SDL_GPU_FILTER_NEAREST;
-        SDL_BlitGPUTexture(cmd, &bl);
-    }
-
-    SDL_SubmitGPUCommandBuffer(cmd);
 }

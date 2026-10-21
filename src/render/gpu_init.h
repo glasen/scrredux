@@ -102,53 +102,42 @@ static int ensure_targets(int w, int h)
     return 0;
 }
 
-static int gpu_init(void)
+/* the depth format, and 4x MSAA when the device supports it for colour and depth */
+static void gpu_choose_formats(void)
 {
-    gpu.device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL);
-
-    if (!gpu.device) {
-        fprintf(stderr, "GPU device: %s\n", SDL_GetError());
-        return -1;
-    }
-
-    if (win) {
-        if (!SDL_ClaimWindowForGPUDevice(gpu.device, win)) {
-            fprintf(stderr, "claim: %s\n", SDL_GetError());
-            return -1;
-        }
-
-        SDL_SetGPUSwapchainParameters(gpu.device, win, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
-    }
-
-    SDL_GPUShader *vs = load_shader("game.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 2, 0);
-    SDL_GPUShader *fs = load_shader("game.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
-    SDL_GPUShader *hfs = load_shader("hud.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
-
-    if (!vs || !fs || !hfs) {
-        return -1;
-    }
-
     gpu.depth_format = SDL_GPUTextureSupportsFormat(gpu.device, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D,
                                                     SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)
                            ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT
                            : SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+
     if (SDL_GPUTextureSupportsSampleCount(gpu.device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_SAMPLECOUNT_4) &&
         SDL_GPUTextureSupportsSampleCount(gpu.device, gpu.depth_format, SDL_GPU_SAMPLECOUNT_4)) {
         gpu.msaa = 4;
     }
-    SDL_GPUVertexBufferDescription vbd;
-    SDL_zero(vbd);
-    vbd.slot = 0;
-    vbd.pitch = sizeof(Vtx);
-    vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-    SDL_GPUVertexAttribute at[2];
-    SDL_zero(at);
+}
+
+/* the layout of Vtx: position as 3 floats, colour and lighting flag as 4 normalised bytes */
+static void vertex_layout(SDL_GPUVertexBufferDescription *vbd, SDL_GPUVertexAttribute at[2])
+{
+    SDL_zero(*vbd);
+    vbd->slot = 0;
+    vbd->pitch = sizeof(Vtx);
+    vbd->input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    memset(at, 0, 2 * sizeof *at);
     at[0].location = 0;
     at[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
     at[0].offset = 0;
     at[1].location = 1;
     at[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
     at[1].offset = 12;
+}
+
+/* the world pipeline (depth tested, lit) and the HUD pipeline (blended by vertex alpha) */
+static int create_world_and_hud_pipelines(SDL_GPUShader *vs, SDL_GPUShader *fs, SDL_GPUShader *hfs)
+{
+    SDL_GPUVertexBufferDescription vbd;
+    SDL_GPUVertexAttribute at[2];
+    vertex_layout(&vbd, at);
     SDL_GPUColorTargetDescription ctd;
     SDL_zero(ctd);
     ctd.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -194,75 +183,89 @@ static int gpu_init(void)
             gpu.pipeline_hud = pl;
         }
     }
-    /* shadow mapping: two cascades (D16), depth-only pipeline, comparison sampler */
-    {
-        SDL_GPUShader *sfs = load_shader("shadow.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
 
-        if (!sfs) {
-            return -1;
-        }
+    return 0;
+}
 
-        SDL_GPUGraphicsPipelineCreateInfo pi;
-        SDL_zero(pi);
-        pi.vertex_shader = vs;
-        pi.fragment_shader = sfs;
-        pi.vertex_input_state.vertex_buffer_descriptions = &vbd;
-        pi.vertex_input_state.num_vertex_buffers = 1;
-        pi.vertex_input_state.vertex_attributes = at;
-        pi.vertex_input_state.num_vertex_attributes = 2;
-        pi.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-        pi.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pi.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pi.rasterizer_state.enable_depth_bias = true;
-        pi.rasterizer_state.depth_bias_constant_factor = 2.0f;
-        pi.rasterizer_state.depth_bias_slope_factor = 2.0f;
-        pi.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pi.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
-        pi.depth_stencil_state.enable_depth_test = true;
-        pi.depth_stencil_state.enable_depth_write = true;
-        pi.target_info.num_color_targets = 0;
-        pi.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
-        pi.target_info.has_depth_stencil_target = true;
-        gpu.pipeline_shadow = SDL_CreateGPUGraphicsPipeline(gpu.device, &pi);
+/* shadow mapping: two cascades (D16), a depth-only pipeline and a comparison sampler */
+static int create_shadow_resources(SDL_GPUShader *vs)
+{
+    SDL_GPUShader *sfs = load_shader("shadow.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
 
-        if (!gpu.pipeline_shadow) {
-            fprintf(stderr, "shadow pipeline: %s\n", SDL_GetError());
-            return -1;
-        }
+    if (!sfs) {
+        return -1;
+    }
 
-        for (int i = 0; i < 2; i++) {
-            SDL_GPUTextureCreateInfo ti;
-            SDL_zero(ti);
-            ti.type = SDL_GPU_TEXTURETYPE_2D;
-            ti.format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
-            ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-            ti.width = ti.height = SH_SIZE[i];
-            ti.layer_count_or_depth = 1;
-            ti.num_levels = 1;
-            ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
-            gpu.shadow_texture[i] = SDL_CreateGPUTexture(gpu.device, &ti);
+    SDL_GPUVertexBufferDescription vbd;
+    SDL_GPUVertexAttribute at[2];
+    vertex_layout(&vbd, at);
+    SDL_GPUGraphicsPipelineCreateInfo pi;
+    SDL_zero(pi);
+    pi.vertex_shader = vs;
+    pi.fragment_shader = sfs;
+    pi.vertex_input_state.vertex_buffer_descriptions = &vbd;
+    pi.vertex_input_state.num_vertex_buffers = 1;
+    pi.vertex_input_state.vertex_attributes = at;
+    pi.vertex_input_state.num_vertex_attributes = 2;
+    pi.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pi.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    pi.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    pi.rasterizer_state.enable_depth_bias = true;
+    pi.rasterizer_state.depth_bias_constant_factor = 2.0f;
+    pi.rasterizer_state.depth_bias_slope_factor = 2.0f;
+    pi.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    pi.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+    pi.depth_stencil_state.enable_depth_test = true;
+    pi.depth_stencil_state.enable_depth_write = true;
+    pi.target_info.num_color_targets = 0;
+    pi.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+    pi.target_info.has_depth_stencil_target = true;
+    gpu.pipeline_shadow = SDL_CreateGPUGraphicsPipeline(gpu.device, &pi);
 
-            if (!gpu.shadow_texture[i]) {
-                fprintf(stderr, "shadow texture: %s\n", SDL_GetError());
-                return -1;
-            }
-        }
+    if (!gpu.pipeline_shadow) {
+        fprintf(stderr, "shadow pipeline: %s\n", SDL_GetError());
+        return -1;
+    }
 
-        SDL_GPUSamplerCreateInfo sc;
-        SDL_zero(sc);
-        sc.min_filter = SDL_GPU_FILTER_LINEAR;
-        sc.mag_filter = SDL_GPU_FILTER_LINEAR;
-        sc.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-        sc.address_mode_u = sc.address_mode_v = sc.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-        sc.enable_compare = true;
-        sc.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
-        gpu.shadow_sampler = SDL_CreateGPUSampler(gpu.device, &sc);
+    for (int i = 0; i < 2; i++) {
+        SDL_GPUTextureCreateInfo ti;
+        SDL_zero(ti);
+        ti.type = SDL_GPU_TEXTURETYPE_2D;
+        ti.format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+        ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        ti.width = ti.height = SH_SIZE[i];
+        ti.layer_count_or_depth = 1;
+        ti.num_levels = 1;
+        ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        gpu.shadow_texture[i] = SDL_CreateGPUTexture(gpu.device, &ti);
 
-        if (!gpu.shadow_sampler) {
-            fprintf(stderr, "shadow sampler: %s\n", SDL_GetError());
+        if (!gpu.shadow_texture[i]) {
+            fprintf(stderr, "shadow texture: %s\n", SDL_GetError());
             return -1;
         }
     }
+
+    SDL_GPUSamplerCreateInfo sc;
+    SDL_zero(sc);
+    sc.min_filter = SDL_GPU_FILTER_LINEAR;
+    sc.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sc.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sc.address_mode_u = sc.address_mode_v = sc.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sc.enable_compare = true;
+    sc.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+    gpu.shadow_sampler = SDL_CreateGPUSampler(gpu.device, &sc);
+
+    if (!gpu.shadow_sampler) {
+        fprintf(stderr, "shadow sampler: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    return 0;
+}
+
+/* the per-frame vertex buffer (world extras, then the HUD) and the buffer it is uploaded through */
+static int create_frame_buffers(void)
+{
     SDL_GPUBufferCreateInfo bi;
     SDL_zero(bi);
     bi.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -279,31 +282,71 @@ static int gpu_init(void)
         return -1;
     }
 
-    {
-        SDL_GPUBufferCreateInfo mb;
-        SDL_zero(mb);
-        mb.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-        mb.size = (Uint32)((size_t)car_mesh.vertex_count * sizeof(Vtx));
-        car_mesh.vbuf = SDL_CreateGPUBuffer(gpu.device, &mb);
-        SDL_GPUTransferBufferCreateInfo mt;
-        SDL_zero(mt);
-        mt.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        mt.size = mb.size;
-        SDL_GPUTransferBuffer *t = SDL_CreateGPUTransferBuffer(gpu.device, &mt);
-        void *m = SDL_MapGPUTransferBuffer(gpu.device, t, false);
-        memcpy(m, car_mesh.vertices, mb.size);
-        SDL_UnmapGPUTransferBuffer(gpu.device, t);
-        SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(gpu.device);
-        SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
-        SDL_GPUTransferBufferLocation src = {t, 0};
-        SDL_GPUBufferRegion dst = {car_mesh.vbuf, 0, mb.size};
-        SDL_UploadToGPUBuffer(cp, &src, &dst, false);
-        SDL_EndGPUCopyPass(cp);
-        SDL_GPUFence *f = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-        SDL_WaitForGPUFences(gpu.device, true, &f, 1);
-        SDL_ReleaseGPUFence(gpu.device, f);
-        SDL_ReleaseGPUTransferBuffer(gpu.device, t);
-        fprintf(stderr, "car model: %d triangles per car\n", car_mesh.vertex_count / 3);
+    return 0;
+}
+
+/* the loaded car model's vertices, once, into their own GPU buffer */
+static void upload_car_mesh(void)
+{
+    SDL_GPUBufferCreateInfo mb;
+    SDL_zero(mb);
+    mb.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    mb.size = (Uint32)((size_t)car_mesh.vertex_count * sizeof(Vtx));
+    car_mesh.vbuf = SDL_CreateGPUBuffer(gpu.device, &mb);
+    SDL_GPUTransferBufferCreateInfo mt;
+    SDL_zero(mt);
+    mt.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    mt.size = mb.size;
+    SDL_GPUTransferBuffer *t = SDL_CreateGPUTransferBuffer(gpu.device, &mt);
+    void *m = SDL_MapGPUTransferBuffer(gpu.device, t, false);
+    memcpy(m, car_mesh.vertices, mb.size);
+    SDL_UnmapGPUTransferBuffer(gpu.device, t);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(gpu.device);
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTransferBufferLocation src = {t, 0};
+    SDL_GPUBufferRegion dst = {car_mesh.vbuf, 0, mb.size};
+    SDL_UploadToGPUBuffer(cp, &src, &dst, false);
+    SDL_EndGPUCopyPass(cp);
+    SDL_GPUFence *f = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    SDL_WaitForGPUFences(gpu.device, true, &f, 1);
+    SDL_ReleaseGPUFence(gpu.device, f);
+    SDL_ReleaseGPUTransferBuffer(gpu.device, t);
+    fprintf(stderr, "car model: %d triangles per car\n", car_mesh.vertex_count / 3);
+}
+
+static int gpu_init(void)
+{
+    gpu.device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL);
+
+    if (!gpu.device) {
+        fprintf(stderr, "GPU device: %s\n", SDL_GetError());
+        return -1;
     }
+
+    if (win) {
+        if (!SDL_ClaimWindowForGPUDevice(gpu.device, win)) {
+            fprintf(stderr, "claim: %s\n", SDL_GetError());
+            return -1;
+        }
+
+        SDL_SetGPUSwapchainParameters(gpu.device, win, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+    }
+
+    SDL_GPUShader *vs = load_shader("game.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 2, 0);
+    SDL_GPUShader *fs = load_shader("game.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
+    SDL_GPUShader *hfs = load_shader("hud.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+
+    if (!vs || !fs || !hfs) {
+        return -1;
+    }
+
+    gpu_choose_formats();
+
+    if (create_world_and_hud_pipelines(vs, fs, hfs) != 0 || create_shadow_resources(vs) != 0 ||
+        create_frame_buffers() != 0) {
+        return -1;
+    }
+
+    upload_car_mesh();
     return 0;
 }

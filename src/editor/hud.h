@@ -140,65 +140,114 @@ static void ed_draw_help(void)
     hud_text_raw(x + w - text_width("H OR ESC CLOSES THIS", 0.85f), VH - 44, "H OR ESC CLOSES THIS", 0.85f, 0x9C9CA4);
 }
 
-static void ed_draw(void)
+/* fly-along mode: just the road, with the piece and speed along the top and the keys at the bottom */
+static void ed_draw_fly_hud(void)
 {
     char b[128];
+    hud_a = 190;
+    hud_rect(0, 0, HW, 20, 0x08080A);
+    hud_rect(0, VH - 17, HW, 17, 0x08080A);
+    hud_a = 255;
+    snprintf(b, sizeof b, "%s - FLY ALONG", editor.track.name);
+    hud_text(8, 5, b, 1.5f, 0xF08A28);
 
-    if (editor.mode == EM_FLY) {
-        hud_a = 190;
-        hud_rect(0, 0, HW, 20, 0x08080A);
-        hud_rect(0, VH - 17, HW, 17, 0x08080A);
-        hud_a = 255;
-        snprintf(b, sizeof b, "%s - FLY ALONG", editor.track.name);
-        hud_text(8, 5, b, 1.5f, 0xF08A28);
-
-        if (nseg) {
-            int k = (int)editor.fly.position % nseg;
-            snprintf(b, sizeof b, "PIECE %d   HEIGHT %.1f M   %+.0f KM/H", seg_sec[k] + 1, seg[k].c.y,
-                     editor.fly.speed * 3.6f);
-            hud_text(HW - 8 - text_width(b, 1.2f), 6, b, 1.2f, 0xFFFFFF);
-        }
-
-        static const char *const kw[] = {"UP/DOWN",    "speed (below 0: backwards)", "SPACE", "stop",
-                                         "LEFT/RIGHT", "piece before/after",         "G/ESC", "back",
-                                         NULL};
-        ed_keyline(VH - 12, kw, 0.9f);
-        return;
+    if (nseg) {
+        int k = (int)editor.fly.position % nseg;
+        snprintf(b, sizeof b, "PIECE %d   HEIGHT %.1f M   %+.0f KM/H", seg_sec[k] + 1, seg[k].c.y,
+                 editor.fly.speed * 3.6f);
+        hud_text(HW - 8 - text_width(b, 1.2f), 6, b, 1.2f, 0xFFFFFF);
     }
 
+    static const char *const kw[] = {"UP/DOWN",    "speed (below 0: backwards)", "SPACE", "stop",
+                                     "LEFT/RIGHT", "piece before/after",         "G/ESC", "back",
+                                     NULL};
+    ed_keyline(VH - 12, kw, 0.9f);
+}
+
+/* the ghosts' keys, over their ends */
+static void ed_draw_ghost_labels(void)
+{
     Move mv[8];
-    int n = editor.show_help ? 0 : ed_ghosts(mv); /* the ghosts' keys, over their ends */
-    for (int g = 0; g < n && editor.mode == EM_EDIT; g++) {
+    int n = ed_ghosts(mv);
+
+    for (int g = 0; g < n; g++) {
         V3 o[2];
-        const TPiece *lp = &mv[g].p[mv[g].n - 1];
-        piece_world(lp, -1, pc_ns(lp), o);
+        const TPiece *last = &mv[g].p[mv[g].n - 1];
+        piece_world(last, -1, pc_ns(last), o);
         float sx, sy;
 
         if (!ed_proj(vadd(vmul(vadd(o[0], o[1]), 0.5f), V(0, 3, 0)), &sx, &sy)) {
             continue;
         }
 
-        const char *lab = mv[g].turn == 0     ? "UP"
-                          : mv[g].turn == 45  ? "LEFT"
-                          : mv[g].turn == -45 ? "RIGHT"
-                          : mv[g].turn == 90  ? "SHIFT+LEFT"
-                                              : "SHIFT+RIGHT";
-        float tw = text_width(lab, 0.8f);
+        const char *label = mv[g].turn == 0     ? "UP"
+                            : mv[g].turn == 45  ? "LEFT"
+                            : mv[g].turn == -45 ? "RIGHT"
+                            : mv[g].turn == 90  ? "SHIFT+LEFT"
+                                                : "SHIFT+RIGHT";
+        float tw = text_width(label, 0.8f);
         hud_a = 200;
         hud_rect(sx - tw / 2 - 2, sy - 4.5f, tw + 4, 9.5f, 0x101014);
         hud_a = 255;
-        hud_text_raw(sx - tw / 2, sy - 2.8f, lab, 0.8f, 0xFFFFFF);
+        hud_text_raw(sx - tw / 2, sy - 2.8f, label, 0.8f, 0xFFFFFF);
+    }
+}
+
+/* the three lines of the selection's heights, banking and shape: what the selected run has in common */
+static void ed_selection_rows(char row[3][64])
+{
+    const TPiece *pc = &editor.track.p[editor.sel];
+    int lo = ed_lo(), hi = ed_hi();
+    int joints[MAXPC + 1], nj = ed_joints(joints), same_banking = 1, same_shape = 1;
+    float height, banking, height_min = 1e9f, height_max = -1e9f, banking_first = 0;
+
+    for (int k = 0; k < nj; k++) {
+        joint_get(joints[k], &height, &banking);
+        height_min = fminf(height_min, height);
+        height_max = fmaxf(height_max, height);
+
+        if (!k) {
+            banking_first = banking;
+        } else {
+            same_banking &= fabsf(banking - banking_first) < 0.05f;
+        }
     }
 
-    /* the panel: the track, the selection and the keys that change it */
+    for (int p = lo; p <= hi; p++) {
+        same_shape &= editor.track.p[p].shape == pc->shape && editor.track.p[p].amp == pc->amp;
+    }
+
+    if (lo == hi) {
+        snprintf(row[0], 64, "Height at its end (pole)  %.1f m", height_max);
+    } else if (height_max - height_min < 0.05f) {
+        snprintf(row[0], 64, "Height, all of it  %.1f m", height_max);
+    } else {
+        snprintf(row[0], 64, "Height, all of it  %.1f - %.1f m", height_min, height_max);
+    }
+
+    if (!same_banking) {
+        snprintf(row[1], 64, "Banking  mixed");
+    } else if (fabsf(banking_first) < 0.05f) {
+        snprintf(row[1], 64, "Banking  level");
+    } else {
+        snprintf(row[1], 64, "Banking  %.2f m to the %s", fabsf(banking_first), banking_first > 0 ? "right" : "left");
+    }
+
+    if (!same_shape) {
+        snprintf(row[2], 64, "Shape  mixed");
+    } else if (pc->shape == SH_HUMP || pc->shape == SH_KICKER || pc->shape == SH_PIT) {
+        snprintf(row[2], 64, "Shape  %s %.1f m", SHAPE_NAME[pc->shape], pc->amp);
+    } else {
+        snprintf(row[2], 64, "Shape  %s", SHAPE_NAME[pc->shape]);
+    }
+}
+
+/* the panel top right: the track, the selection and the keys that change it */
+static void ed_draw_panel(void)
+{
+    char b[128];
     int closed = ed_closed(), lo = ed_lo(), hi = ed_hi();
     float pw = 150, px = HW - pw - 6, y = 6;
-
-    if (editor.show_help) {
-        ed_draw_help();
-        goto keys;
-    }
-
     hud_a = 185;
     hud_rect(px - 4, y - 3, pw + 8, editor.track.np ? 61 : 24, 0x101014);
     hud_a = 255;
@@ -210,69 +259,34 @@ static void ed_draw(void)
     hud_text_raw(px, y, b, 0.8f, closed ? 0x60FF60 : 0xFFB060);
     y += 10;
 
-    if (editor.track.np) {
-        const TPiece *pc = &editor.track.p[editor.sel];
-        int jl[MAXPC + 1], nj = ed_joints(jl), same_b = 1, same_s = 1;
-        float c, bk, cmin = 1e9f, cmax = -1e9f, b0 = 0;
-
-        for (int k = 0; k < nj; k++) {
-            joint_get(jl[k], &c, &bk);
-            cmin = fminf(cmin, c);
-            cmax = fmaxf(cmax, c);
-
-            if (!k) {
-                b0 = bk;
-            } else {
-                same_b &= fabsf(bk - b0) < 0.05f;
-            }
-        }
-
-        for (int p = lo; p <= hi; p++) {
-            same_s &= editor.track.p[p].shape == pc->shape && editor.track.p[p].amp == pc->amp;
-        }
-
-        if (lo == hi) {
-            snprintf(b, sizeof b, "Piece %d: %s%s", editor.sel + 1, piece_kind(pc),
-                     editor.sel == editor.track.start ? " (start line)" : "");
-        } else {
-            snprintf(b, sizeof b, "Pieces %d-%d: %d selected", lo + 1, hi + 1, hi - lo + 1);
-        }
-        hud_text_raw(px, y, b, 0.85f, 0x40E0FF);
-        y += 9;
-        char row[3][64];
-
-        if (lo == hi) {
-            snprintf(row[0], sizeof row[0], "Height at its end (pole)  %.1f m", cmax);
-        } else if (cmax - cmin < 0.05f) {
-            snprintf(row[0], sizeof row[0], "Height, all of it  %.1f m", cmax);
-        } else {
-            snprintf(row[0], sizeof row[0], "Height, all of it  %.1f - %.1f m", cmin, cmax);
-        }
-
-        if (!same_b) {
-            snprintf(row[1], sizeof row[1], "Banking  mixed");
-        } else if (fabsf(b0) < 0.05f) {
-            snprintf(row[1], sizeof row[1], "Banking  level");
-        } else {
-            snprintf(row[1], sizeof row[1], "Banking  %.2f m to the %s", fabsf(b0), b0 > 0 ? "right" : "left");
-        }
-
-        if (!same_s) {
-            snprintf(row[2], sizeof row[2], "Shape  mixed");
-        } else if (pc->shape == SH_HUMP || pc->shape == SH_KICKER || pc->shape == SH_PIT) {
-            snprintf(row[2], sizeof row[2], "Shape  %s %.1f m", SHAPE_NAME[pc->shape], pc->amp);
-        } else {
-            snprintf(row[2], sizeof row[2], "Shape  %s", SHAPE_NAME[pc->shape]);
-        }
-        static const char *const keys[3] = {"R F", ", .", "1-6  - +"};
-
-        for (int r = 0; r < 3; r++, y += 8.5f) {
-            hud_text_raw(px, y, row[r], 0.8f, 0xE8E8EC);
-            hud_text_raw(px + pw - text_width(keys[r], 0.8f), y, keys[r], 0.8f, 0xF0D040);
-        }
+    if (!editor.track.np) {
+        return;
     }
-    /* the main keys at the bottom, all of them with H */
-keys:
+
+    const TPiece *pc = &editor.track.p[editor.sel];
+
+    if (lo == hi) {
+        snprintf(b, sizeof b, "Piece %d: %s%s", editor.sel + 1, piece_kind(pc),
+                 editor.sel == editor.track.start ? " (start line)" : "");
+    } else {
+        snprintf(b, sizeof b, "Pieces %d-%d: %d selected", lo + 1, hi + 1, hi - lo + 1);
+    }
+
+    hud_text_raw(px, y, b, 0.85f, 0x40E0FF);
+    y += 9;
+    char row[3][64];
+    ed_selection_rows(row);
+    static const char *const keys[3] = {"R F", ", .", "1-6  - +"};
+
+    for (int r = 0; r < 3; r++, y += 8.5f) {
+        hud_text_raw(px, y, row[r], 0.8f, 0xE8E8EC);
+        hud_text_raw(px + pw - text_width(keys[r], 0.8f), y, keys[r], 0.8f, 0xF0D040);
+    }
+}
+
+/* the main keys at the bottom, all of them with H */
+static void ed_draw_key_bar(void)
+{
     hud_a = 185;
     hud_rect(0, VH - 25, HW, 25, 0x101014);
     hud_a = 255;
@@ -296,37 +310,75 @@ keys:
                                      NULL};
     ed_keyline(VH - 22, k1, 0.85f);
     ed_keyline(VH - 11, k2, 0.85f);
+}
+
+/* the box for typing the track's name */
+static void ed_draw_name_entry(void)
+{
+    char b[128];
+    float w = 200, x = (HW - w) / 2, y = VH / 2 - 30;
+    hud_rect(x - 6, y - 6, w + 12, 54, 0x202024);
+    hud_text(x, y, "TRACK NAME:", 1.5f, 0xF0C040);
+    hud_rect(x, y + 16, w, 18, 0x56565A);
+    hud_rect(x + 1, y + 17, w - 2, 16, 0x101014);
+    snprintf(b, sizeof b, "%s%s", editor.name_input, (SDL_GetTicks() / 400) & 1 ? "_" : "");
+    hud_text_raw(x + 5, y + 21, b, 1.3f, 0xFFE060);
+    hud_text_raw(x, y + 38, "ENTER SAVE   ESC CANCEL", 1, 0x9C9CA4);
+}
+
+/* the question across the middle of the screen: start a new track, or leave with unsaved changes */
+static void ed_draw_confirm(void)
+{
+    hud_a = 225;
+    hud_rect(0, VH / 2 - 6, HW, 7 * 1.5f + 12, 0x08080A);
+    hud_a = 255;
+    hud_text_c(VH / 2,
+               editor.mode == EM_NEW ? "N AGAIN: START A NEW TRACK (CTRL+Z BRINGS THIS ONE BACK)"
+                                     : "UNSAVED CHANGES - ESC/B AGAIN TO LEAVE, CTRL+S TO SAVE",
+               1.5f, 0xFF8070);
+}
+
+static void ed_draw_message(void)
+{
+    float tw = text_width(editor.message, 1.1f);
+    hud_a = 200;
+    hud_rect((HW - tw) / 2 - 5, VH - 44, tw + 10, 13, 0x101014);
+    hud_a = 255;
+    hud_text((HW - tw) / 2, VH - 41, editor.message, 1.1f, 0x60FF60);
+}
+
+static void ed_draw(void)
+{
+    if (editor.mode == EM_FLY) {
+        ed_draw_fly_hud();
+        return;
+    }
+
+    if (editor.show_help) {
+        ed_draw_help();
+    } else {
+        if (editor.mode == EM_EDIT) {
+            ed_draw_ghost_labels();
+        }
+
+        ed_draw_panel();
+    }
+
+    ed_draw_key_bar();
 
     if (editor.mode == EM_LIST) {
         ed_draw_list();
     }
 
     if (editor.mode == EM_NAME) {
-        float w = 200, x = (HW - w) / 2, yy = VH / 2 - 30;
-        hud_rect(x - 6, yy - 6, w + 12, 54, 0x202024);
-        hud_text(x, yy, "TRACK NAME:", 1.5f, 0xF0C040);
-        hud_rect(x, yy + 16, w, 18, 0x56565A);
-        hud_rect(x + 1, yy + 17, w - 2, 16, 0x101014);
-        snprintf(b, sizeof b, "%s%s", editor.name_input, (SDL_GetTicks() / 400) & 1 ? "_" : "");
-        hud_text_raw(x + 5, yy + 21, b, 1.3f, 0xFFE060);
-        hud_text_raw(x, yy + 38, "ENTER SAVE   ESC CANCEL", 1, 0x9C9CA4);
+        ed_draw_name_entry();
     }
 
     if (editor.mode == EM_NEW || editor.mode == EM_QUIT) {
-        hud_a = 225;
-        hud_rect(0, VH / 2 - 6, HW, 7 * 1.5f + 12, 0x08080A);
-        hud_a = 255;
-        hud_text_c(VH / 2,
-                   editor.mode == EM_NEW ? "N AGAIN: START A NEW TRACK (CTRL+Z BRINGS THIS ONE BACK)"
-                                         : "UNSAVED CHANGES - ESC/B AGAIN TO LEAVE, CTRL+S TO SAVE",
-                   1.5f, 0xFF8070);
+        ed_draw_confirm();
     }
 
     if (editor.message_time > 0) {
-        float tw = text_width(editor.message, 1.1f);
-        hud_a = 200;
-        hud_rect((HW - tw) / 2 - 5, VH - 44, tw + 10, 13, 0x101014);
-        hud_a = 255;
-        hud_text((HW - tw) / 2, VH - 41, editor.message, 1.1f, 0x60FF60);
+        ed_draw_message();
     }
 }
