@@ -65,10 +65,47 @@ static void plan_arena(void)
     }
 }
 
-static void build_infield(void)
+/* one service-compound item of the given kind (see `layout` in build_service_compound) at frame f */
+static void service_item(const Frm *f, int kind)
 {
-    rngs = 4242 + cur_track;
-    /* service compound: vehicles, cabins, containers, toilets */
+    switch (kind) {
+        case 0:
+            tow_truck(f);
+            break;
+        case 1:
+            tanker(f);
+            break;
+        case 2:
+            ambulance(f);
+            break;
+        case 3:
+            flatbed(f);
+            break;
+        case 4:
+            pickup(f, 0x2A5AB0);
+            break;
+        case 5:
+        case 6:
+            cabin(f, 0xE8E8E0);
+            break;
+        case 7:
+            container(f, 0x2E6AA8);
+            break;
+        case 8:
+            container(f, 0xB8442C);
+            break;
+        case 9:
+            tv_truck(f);
+            break;
+        case 10:
+            toilets(f, 5);
+            break;
+    }
+}
+
+/* the service compound: vehicles, cabins, containers, toilets, laid out in a grid turned towards the gate */
+static void build_service_compound(void)
+{
     Frm f;
     float ang = atan2f(gate_z - svc_z, ar_x1 - svc_x);
     float ca = cosf(ang), sa = sinf(ang);
@@ -90,46 +127,55 @@ static void build_infield(void)
 
         f = frm_ground(x, z, ang + lay[i].a);
 
-        switch (lay[i].kind) {
-            case 0:
-                tow_truck(&f);
-                break;
-            case 1:
-                tanker(&f);
-                break;
-            case 2:
-                ambulance(&f);
-                break;
-            case 3:
-                flatbed(&f);
-                break;
-            case 4:
-                pickup(&f, 0x2A5AB0);
-                break;
-            case 5:
-                cabin(&f, 0xE8E8E0);
-                break;
-            case 6:
-                cabin(&f, 0xE8E8E0);
-                break;
-            case 7:
-                container(&f, 0x2E6AA8);
-                break;
-            case 8:
-                container(&f, 0xB8442C);
-                break;
-            case 9:
-                tv_truck(&f);
-                break;
-            case 10:
-                toilets(&f, 5);
-                break;
-        }
+        service_item(&f, lay[i].kind);
 
         take_spot(x, z, lay[i].r + 2);
     }
+}
 
-    /* scattered: TV towers and marshal posts beside the track, tyre stacks, hay bales, girders, dirt heaps */
+/* one scattered prop of the given kind at frame f; n counts the ones of this kind placed so far */
+static void scattered_item(const Frm *f, int kind, int n, float x, float z)
+{
+    switch (kind) {
+        case 0:
+            tv_tower(f);
+            break;
+        case 1:
+            marshal_post(f);
+            break;
+        case 2: /* a row of tyre stacks */
+            for (int q = 0; q < 5; q++) {
+                tyre_stack(fpt(f, 0, 0, (q - 2) * 0.75f), 3 + (hash2(q, n) & 1));
+            }
+
+            break;
+        case 3: /* hay bales, some stacked */
+            hay_bale(f, -0.7f, 0, 0);
+            hay_bale(f, 0.7f, 0, 0);
+            hay_bale(f, 0, 1.6f, 0);
+
+            if (n & 1) {
+                hay_bale(f, 0, 0, 1.25f);
+            }
+
+            break;
+        case 4:
+            girder_pile(f);
+            break;
+        case 5:
+            dirt_mound(x, z, 3.5f + frand() * 2, 1.4f + frand());
+            break;
+        case 6:
+            container(f, (n & 1) ? 0x3E8A4A : 0xD8A030);
+            break;
+    }
+}
+
+/* scattered: TV towers and marshal posts beside the track, tyre stacks, hay bales, girders, dirt heaps */
+static void build_scattered_props(void)
+{
+    Frm f;
+
     for (int kind = 0; kind < 7; kind++) {
         int want = (int[]){3, 5, 7, 6, 2, 4, 3}[kind], tries = 0;
 
@@ -155,41 +201,16 @@ static void build_infield(void)
             take_spot(x, z, r);
             f = frm_ground(x, z, a);
 
-            switch (kind) {
-                case 0:
-                    tv_tower(&f);
-                    break;
-                case 1:
-                    marshal_post(&f);
-                    break;
-                case 2: /* a row of tyre stacks */
-                    for (int q = 0; q < 5; q++) {
-                        tyre_stack(fpt(&f, 0, 0, (q - 2) * 0.75f), 3 + (hash2(q, n) & 1));
-                    }
-
-                    break;
-                case 3: /* hay bales, some stacked */
-                    hay_bale(&f, -0.7f, 0, 0);
-                    hay_bale(&f, 0.7f, 0, 0);
-                    hay_bale(&f, 0, 1.6f, 0);
-
-                    if (n & 1) {
-                        hay_bale(&f, 0, 0, 1.25f);
-                    }
-
-                    break;
-                case 4:
-                    girder_pile(&f);
-                    break;
-                case 5:
-                    dirt_mound(x, z, 3.5f + frand() * 2, 1.4f + frand());
-                    break;
-                case 6:
-                    container(&f, (n & 1) ? 0x3E8A4A : 0xD8A030);
-                    break;
-            }
+            scattered_item(&f, kind, n, x, z);
 
             n++;
         }
     }
+}
+
+static void build_infield(void)
+{
+    rngs = 4242 + cur_track;
+    build_service_compound();
+    build_scattered_props();
 }
