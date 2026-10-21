@@ -85,18 +85,18 @@ static void car_step(Car *c, float dt)
     V3 Fo = V(0, -CAR_M * GRAV, 0), To = V(0, 0, 0);
     float speed = vdot(c->v, c->F);
     float gl = -GRAV * c->R.y, dmax = steer_max(speed, c->str >= 0 ? gl : -gl);
-    float tgt = c->str * dmax, dd = tgt - c->delta, mr = ph.steerrate * dt;
+    float tgt = c->str * dmax, dd = tgt - c->delta, mr = phys.steer_rate * dt;
     c->delta += clampf(dd, -mr, mr);
 
     float Fdrv = 0, brake = c->brk;
 
     if (c->thr > 0) {
-        float P = ph.power, Fm = ph.fmax;
+        float P = phys.engine_power, Fm = phys.max_drive_force;
 
         if (c->bst && c->boost > 0) {
-            P += ph.boostp;
-            Fm += ph.boostf;
-            c->boost -= dt * ph.boostrate;
+            P += phys.boost_power;
+            Fm += phys.boost_force_max;
+            c->boost -= dt * phys.boost_drain_rate;
 
             if (c->boost < 0) {
                 c->boost = 0;
@@ -104,8 +104,8 @@ static void car_step(Car *c, float dt)
         }
 
         float vtop = c->bst && c->boost > 0
-                         ? ph.vtopb
-                         : ph.vtop; /* the engine cuts out at the top speed, boost or not, like the original */
+                         ? phys.top_speed_boost
+                         : phys.top_speed; /* the engine cuts out at the top speed, boost or not, like the original */
         Fdrv = c->thr * fminf(Fm, P / fmaxf(speed, 3.f)) * clampf((vtop - speed) / 2.f, 0, 1);
     }
 
@@ -126,7 +126,7 @@ static void car_step(Car *c, float dt)
         float over = fabsf(wq.lat) - (TRACK_HW + 0.1f);
 
         if (wq.valid && over > 0) {
-            wq.h += ph.shdrop + 0.5f * over;
+            wq.h += phys.shoulder_drop + 0.5f * over;
             wq.N = vnorm(vadd(wq.N, vmul(wq.R, wq.lat > 0 ? 0.5f : -0.5f)));
         }
 
@@ -138,7 +138,8 @@ static void car_step(Car *c, float dt)
             wq.valid = 0; /* below the top of a face going up: the wall */
         }
 
-        if (wq.valid && wq.road && over < ph.shw && cosd > 0.15f && wq.h > (seg[wq.seg].steep ? -8.f : -0.6f)) {
+        if (wq.valid && wq.road && over < phys.shoulder_width && cosd > 0.15f &&
+            wq.h > (seg[wq.seg].steep ? -8.f : -0.6f)) {
             float d = wq.h / cosd;
             l = d - WRAD[i];
 
@@ -218,11 +219,11 @@ static void car_step(Car *c, float dt)
             Fx += Fdrv * 0.5f;
         }
 
-        Fx -= brake * (i < 2 ? ph.brkf : ph.brkr) * tanhf(vlong * 0.25f);
+        Fx -= brake * (i < 2 ? phys.brake_force_front : phys.brake_force_rear) * tanhf(vlong * 0.25f);
         Fx -= 0.012f * Fs * tanhf(vlong * 3.f);
-        float maxF = MU * (i < 2 ? 1.f : ph.rgrip) *
-                     fminf(Fs, ph.loadmax); /* tyre load saturation: landing spikes don't add grip */
-        float Fy = -maxF * tanhf(ph.corner * vlat / (fabsf(vlong) + ph.lowspd));
+        float maxF = MU * (i < 2 ? 1.f : phys.rear_grip_factor) *
+                     fminf(Fs, phys.tyre_load_max); /* tyre load saturation: landing spikes don't add grip */
+        float Fy = -maxF * tanhf(phys.cornering_stiffness * vlat / (fabsf(vlong) + phys.low_speed_slip_offset));
         float mag = sqrtf(Fx * Fx + Fy * Fy);
 
         if (mag > maxF && mag > 1e-3f) {
@@ -268,13 +269,13 @@ static void car_step(Car *c, float dt)
     }
 
     float sp2 = vlen(c->v);
-    Fo = vsub(Fo, vmul(c->v, ph.drag * sp2));
+    Fo = vsub(Fo, vmul(c->v, phys.drag * sp2));
     To = vsub(To, vmul(c->w, 180.f));
 
     if (nwc == 0 && sp2 > 6.f) { /* air-control assist: nose follows the flight path, wings level */
         V3 vn = vmul(c->v, 1.f / sp2);
         V3 ax = vcross(c->F, vn); /* axis taking the nose toward the velocity */
-        To = vadd(To, vsub(vmul(ax, ph.air),
+        To = vadd(To, vsub(vmul(ax, phys.air_control_torque),
                            vadd(vmul(c->R, 4500.f * vdot(c->w, c->R)), vmul(c->U, 4500.f * vdot(c->w, c->U)))));
         V3 Ut = vnorm(vsub(UP, vmul(c->F, vdot(UP, c->F))));
         To = vadd(To, vmul(c->F, 9000.f * vdot(vcross(c->U, Ut), c->F) - 3200.f * vdot(c->w, c->F)));
@@ -282,9 +283,9 @@ static void car_step(Car *c, float dt)
 
     if (nwc > 0) { /* stability aid while on the ground */
         float g = nwc >= 3 ? 1.f : 0.5f;
-        To = vsub(To, vmul(c->F, g * ph.sroll * vdot(c->w, c->F)));
-        To = vsub(To, vmul(c->U, g * ph.syaw * vdot(c->w, c->U)));
-        To = vsub(To, vmul(c->R, g * ph.spitch * vdot(c->w, c->R)));
+        To = vsub(To, vmul(c->F, g * phys.roll_damping * vdot(c->w, c->F)));
+        To = vsub(To, vmul(c->U, g * phys.yaw_damping * vdot(c->w, c->U)));
+        To = vsub(To, vmul(c->R, g * phys.pitch_damping * vdot(c->w, c->R)));
     }
 
     { /* exhaust flames: only while the boost burns */
@@ -295,8 +296,8 @@ static void car_step(Car *c, float dt)
         float al = vdot(Fo, c->R) / CAR_M, ag = vdot(Fo, c->F) / CAR_M, k = clampf(16.f * dt, 0, 1);
         c->alat_f += (clampf(al, -30, 30) - c->alat_f) * k;
         c->along_f += (clampf(ag, -25, 25) - c->along_f) * k;
-        float tr = nwc > 1 ? clampf(-c->alat_f * ph.leanr, -0.20f, 0.20f) : 0.f;
-        float tp = nwc > 1 ? clampf(c->along_f * ph.leanp, -0.14f, 0.14f) : 0.f;
+        float tr = nwc > 1 ? clampf(-c->alat_f * phys.lean_roll_per_accel, -0.20f, 0.20f) : 0.f;
+        float tp = nwc > 1 ? clampf(c->along_f * phys.lean_pitch_per_accel, -0.14f, 0.14f) : 0.f;
         c->lrr += (140.f * (tr - c->lr) - 21.f * c->lrr) * dt;
         c->lr += c->lrr * dt;
         c->lpr += (120.f * (tp - c->lp) - 19.f * c->lpr) * dt;

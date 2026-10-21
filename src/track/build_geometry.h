@@ -188,8 +188,8 @@ static int track_xsecs(const TrackDef *td)
 
             for (int it = 0; it < 6000 && n < 700; it++) {
                 float sp = hypotf(vx, vy), dt = 0.005f;
-                vx -= ph.drag / ph.mass * sp * vx * dt;
-                vy -= (GRAV + ph.drag / ph.mass * sp * vy) * dt;
+                vx -= phys.drag / phys.mass * sp * vx * dt;
+                vy -= (GRAV + phys.drag / phys.mass * sp * vy) * dt;
                 px += vx * dt;
                 py += vy * dt;
 

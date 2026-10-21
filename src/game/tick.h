@@ -58,8 +58,9 @@ static void game_tick(float dt)
                     tg = pi.steer; /* a stick steers part way */
                 }
 
-                float rate = (tg != 0 && p->str * tg >= 0) ? ph.keyrise
-                                                           : ph.keyret; /* tap = small correction, hold = more lock */
+                float rate = (tg != 0 && p->str * tg >= 0)
+                                 ? phys.key_steer_rise
+                                 : phys.key_steer_return; /* tap = small correction, hold = more lock */
                 float goal = tg != 0 ? tg : 0.f, dstr = goal - p->str, stp = rate * dt;
                 p->str += clampf(dstr, -stp, stp);
                 p->thr = ctl_down(CT_ACCEL) ? 1.f : pi.thr;
