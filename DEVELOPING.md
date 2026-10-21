@@ -78,7 +78,7 @@ circle), weight transfer, full 3D rotation, solid deck collisions and car-to-car
 Damage: a crack grows along the cage's top tube; at 100 the car is wrecked. Big hits punch holes at the original's
 ten fixed spots (`hole_at()` in `car/car.h`: 12 of the crack's 240 pixels wide, every 24, filled from the right end).
 The crack crosses a hole for free, so each hole brings the wreck 5% closer. In a season the holes carry over from race
-to race (`Season.nholes`) and are cleared when a new season starts; once all ten are made, big hits only creak.
+to race (`Season.hole_count`) and are cleared when a new season starts; once all ten are made, big hits only creak.
 
 An 8 m catch net on the arena wall stops a car that leaves the track before it reaches the stands. It gives a few metres
 and holds the car (counted as a crash); only a car flying higher than the net goes over it.
@@ -190,3 +190,10 @@ find src -name '*.[ch]' ! -name font_vec.h ! -name scr_tracks.h | xargs tools/sp
 ```
 
 `tools/space_blocks.py` adds the blank line before and after control blocks that clang-format cannot add.
+
+## State
+
+File-level state is grouped by subsystem into a few structs, so a name says whose it is: `editor` (the track builder),
+`menu`, `gpu`, `car_mesh`, `mixer` and `sfx` (sound), `recorder` and `replay`, `viewer`, `cam_smooth`, `stats`, and
+`phys` (the tunable vehicle parameters, `Phys` in `physics/params.h`). The race itself still uses plain globals
+(`cars`, `state`, `seg`, `nseg`, ...).
