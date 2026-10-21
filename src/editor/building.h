@@ -221,6 +221,60 @@ static void ed_move(int dx, int dz, int q)
 }
 
 /* the shortest way back to the first piece: breadth first over single pieces, clear of the track */
+/* a node of the search back to the start: where the road ends after this piece, the node before it, how many pieces */
+typedef struct {
+    int e[2][2], prev, depth;
+    TPiece p;
+} CloseNode;
+
+/* does any piece of the path run into one that is not next to it? */
+static int path_clashes(const TPiece *path, int count)
+{
+    for (int a = 0; a < count; a++) {
+        for (int b = a + 2; b < count; b++) {
+            if (pc_clash(&path[a], &path[b])) {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+/* appends the pieces of a path that closes the loop, their heights easing from the open end's to the start piece's */
+static void ed_append_path(const TPiece *path, int count)
+{
+    ed_push(0);
+    int h0[2] = {editor.end_heights[0], editor.end_heights[1]}, n0 = editor.track.np;
+
+    for (int a = 0; a < count; a++) {
+        TPiece p = path[a];
+        p.shape = SH_SMOOTH;
+        p.amp = 0;
+
+        for (int e = 0; e < 2; e++) {
+            int h = h0[e] + (editor.track.p[0].h[e][0] - h0[e]) * a / count;
+
+            for (int i = 0; i < 14; i++) {
+                p.h[e][i] = h;
+            }
+        }
+
+        editor.track.p[editor.track.np++] = p;
+    }
+
+    for (int a = n0; a < editor.track.np; a++) {
+        regen(a);
+    }
+
+    ed_select(editor.track.np - 1, 0);
+    char b[64];
+    snprintf(b, sizeof b, "Loop closed with %d pieces", count);
+    ed_note(b);
+}
+
+/* closes the loop with the fewest pieces: a breadth-first search over the pieces that fit on from the open end, until
+ * one meets the start piece. Returns 1 when it closed the loop */
 static int ed_autoclose(void)
 {
     if (ed_closed()) {
@@ -228,15 +282,10 @@ static int ed_autoclose(void)
         return 0;
     }
 
-    typedef struct {
-        int e[2][2], prev, depth;
-        TPiece p;
-    } BN;
-
     enum { CAP = 40000 };
 
-    static BN q[CAP];
-    static unsigned char vis[256 * 256 * 8];
+    static CloseNode q[CAP];
+    static unsigned char vis[256 * 256 * 8]; /* end positions (128 units) and directions (45 degrees) tried */
     memset(vis, 0, sizeof vis);
     int s0[2][2], qt = 1;
     pc_xs(&editor.track.p[0], 0, s0);
@@ -271,45 +320,11 @@ static int ed_autoclose(void)
                     path[d] = q[i].p;
                 }
 
-                int bad = 0;
-
-                for (int a = 0; a < L && !bad; a++) {
-                    for (int b = a + 2; b < L && !bad; b++) {
-                        bad = pc_clash(&path[a], &path[b]);
-                    }
-                }
-
-                if (bad) {
+                if (path_clashes(path, L)) {
                     continue;
                 }
 
-                ed_push(0);
-                int h0[2] = {editor.end_heights[0], editor.end_heights[1]}, n0 = editor.track.np;
-
-                for (int a = 0; a < L; a++) {
-                    TPiece p = path[a];
-                    p.shape = SH_SMOOTH;
-                    p.amp = 0;
-
-                    for (int e = 0; e < 2; e++) {
-                        int h = h0[e] + (editor.track.p[0].h[e][0] - h0[e]) * a / L;
-
-                        for (int i = 0; i < 14; i++) {
-                            p.h[e][i] = h;
-                        }
-                    }
-
-                    editor.track.p[editor.track.np++] = p;
-                }
-
-                for (int a = n0; a < editor.track.np; a++) {
-                    regen(a);
-                }
-
-                ed_select(editor.track.np - 1, 0);
-                char b[64];
-                snprintf(b, sizeof b, "Loop closed with %d pieces", L);
-                ed_note(b);
+                ed_append_path(path, L);
                 return 1;
             }
 

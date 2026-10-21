@@ -30,24 +30,16 @@ static float in_climb_wall(V3 P, int f, V3 *n)
     return d;
 }
 
-/* penalty contact of one body point against the solid deck / barriers */
-static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
+/* where a body point sits against the deck: how far it is pushed out (depth, m), in which direction (normal), and
+ * whether the face is solid down to the ground. Returns 0 when the point is not in contact */
+static int contact_depth(V3 P, const Q *q, float *depth, V3 *normal, int *solid)
 {
-    V3 P = body_pt(c, lp);
-    Q q;
-    track_query(P, c->seg, 12, &q);
-
-    if (!q.valid || !q.road) {
-        c->point_hit[idx] = 0;
-        return;
-    }
-
     const float ow = TRACK_HW;
-    float al = fabsf(q.lat), h = q.h, sg = q.lat > 0 ? 1.f : -1.f;
+    float al = fabsf(q->lat), h = q->h, sg = q->lat > 0 ? 1.f : -1.f;
     float topy = 0.0f;
-    int stp = seg[q.seg].steep || seg[(q.seg + 1) % nseg].steep ||
-              seg[(q.seg + nseg - 1) % nseg].steep; /* solid down to the ground */
-    int cf = al < ow ? climb_face(q.seg) : -1;
+    int stp = seg[q->seg].steep || seg[(q->seg + 1) % nseg].steep ||
+              seg[(q->seg + nseg - 1) % nseg].steep; /* solid down to the ground */
+    int cf = al < ow ? climb_face(q->seg) : -1;
     V3 wn;
     float wd = cf >= 0 ? in_climb_wall(P, cf, &wn) : 0;
 
@@ -57,42 +49,62 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         stp = 0;
     } /* the wall: pushed straight back out, never up the face */
     if (al > ow || (h < -BODY_DEPTH && !stp && wd <= 0) || h > topy) {
-        c->point_hit[idx] = 0;
-        return;
+        return 0;
     }
 
     float best = topy - h;
-    V3 bn = wd > 0 ? wn : q.N;
+    V3 bn = wd > 0 ? wn : q->N;
     float pb = h + BODY_DEPTH;
 
     if (pb < best && !stp && wd <= 0) {
         best = pb;
-        bn = vmul(q.N, -1);
+        bn = vmul(q->N, -1);
     }
 
     float ps = ow - al;
 
     if (ps < best && wd <= 0) {
         best = ps;
-        bn = vmul(q.R, sg);
+        bn = vmul(q->R, sg);
     }
 
-    if (seg[(q.seg + nseg - 1) % nseg].gap) {
-        float pst = q.u * ds;
+    if (seg[(q->seg + nseg - 1) % nseg].gap) {
+        float pst = q->u * ds;
 
         if (pst < best) {
             best = pst;
-            bn = vmul(q.T, -1);
+            bn = vmul(q->T, -1);
         }
     }
 
-    if (seg[(q.seg + 1) % nseg].gap) {
-        float pe = (1 - q.u) * ds;
+    if (seg[(q->seg + 1) % nseg].gap) {
+        float pe = (1 - q->u) * ds;
 
         if (pe < best) {
             best = pe;
-            bn = q.T;
+            bn = q->T;
         }
+    }
+
+    *depth = best;
+    *normal = bn;
+    *solid = stp;
+    return 1;
+}
+
+/* penalty contact of one body point against the solid deck / barriers */
+static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
+{
+    V3 P = body_pt(c, lp);
+    Q q;
+    track_query(P, c->seg, 12, &q);
+    float best;
+    V3 bn;
+    int stp;
+
+    if (!q.valid || !q.road || !contact_depth(P, &q, &best, &bn, &stp)) {
+        c->point_hit[idx] = 0;
+        return;
     }
 
     V3 r = vsub(P, c->x), vp = vadd(c->v, vcross(c->w, r));
