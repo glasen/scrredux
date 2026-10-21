@@ -39,13 +39,13 @@ static SDL_Keycode pad_key(int b)
     int a = b == SDL_GAMEPAD_BUTTON_SOUTH, x = b == SDL_GAMEPAD_BUTTON_EAST, y = b == SDL_GAMEPAD_BUTTON_NORTH;
     int st = b == SDL_GAMEPAD_BUTTON_START, bk = b == SDL_GAMEPAD_BUTTON_BACK;
 
-    if (ask_quit) {
+    if (menu.confirm_quit) {
         return a ? SDLK_Y : x || bk ? SDLK_N : 0;
     }
 
     switch (state) {
         case ST_MENU:
-            if (ct_wait) {
+            if (menu.ctl_waiting) {
                 return x || bk ? SDLK_ESCAPE : 0;
             }
 
@@ -60,7 +60,7 @@ static SDL_Keycode pad_key(int b)
             return x || bk ? SDLK_ESCAPE : 0; /* the builder wants keys and mouse; B/Back at least gets out */
         case ST_COUNT:
         case ST_RACE:
-            if (pause_on) {
+            if (menu.pause_open) {
                 return a ? SDLK_RETURN : x || bk || st ? SDLK_ESCAPE : 0;
             }
 
@@ -78,7 +78,7 @@ static SDL_Keycode pad_nav(float dt)
     PadIn pi = pad_read();
     int d = pi.up ? 1 : pi.dn ? 2 : pi.lf ? 3 : pi.rt ? 4 : 0;
 
-    if ((state != ST_MENU && !pause_on) || ask_quit || ct_wait) {
+    if ((state != ST_MENU && !menu.pause_open) || menu.confirm_quit || menu.ctl_waiting) {
         was = d;
         return 0;
     }
@@ -99,8 +99,8 @@ static SDL_Keycode pad_nav(float dt)
 
 static void frame_timers(float frame)
 {
-    if (ms_note_t > 0) {
-        ms_note_t -= frame;
+    if (menu.note_time > 0) {
+        menu.note_time -= frame;
     }
 
     if (editor.message_time > 0) {

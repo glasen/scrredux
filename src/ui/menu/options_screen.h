@@ -11,7 +11,7 @@ static void draw_options(void)
 {
     hud_text_c(80, "OPTIONS", 1.5f, 0xF0C040);
     float W = panel_w() - 30, x = (HW - W) / 2, cw = 96, h = BAR_H;
-    int sel = msel[MS_OPT];
+    int sel = menu.cursor[MS_OPT];
 
     for (int r = 0; r < NOP; r++) {
         float y = 96 + r * BAR_GAP;

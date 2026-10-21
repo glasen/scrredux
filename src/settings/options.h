@@ -11,8 +11,8 @@ static Opt opt = {100, 100, 0, 1};
 
 static void opt_apply(void)
 {
-    snd_vol[0] = opt.fx / 100.f;
-    snd_vol[1] = opt.eng / 100.f;
+    mixer.volume[0] = opt.fx / 100.f;
+    mixer.volume[1] = opt.eng / 100.f;
 }
 
 static void opt_save(void)

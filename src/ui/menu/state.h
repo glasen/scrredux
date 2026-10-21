@@ -19,12 +19,23 @@ enum {
     MS_OPT
 };
 
-static int ms = MS_MAIN, msel[16], ms_save, ms_scroll, ask_quit, ct_col, ct_wait, pause_on, pause_sel;
-static char name_buf[16], ms_note[80];
-static float ms_note_t;
-static int rp_slot[RP_SLOTS], nrp_list;
-static RHead rp_list[RP_SLOTS];
-static int last_lap_rec, last_race_rec;
+/* the menus: everything they keep between frames */
+static struct {
+    int screen;       /* MS_* */
+    int cursor[16];   /* selected line on each screen */
+    int save_mode;    /* the saves screen saves (1) or loads (0) */
+    int scroll;       /* first line of a long list */
+    int confirm_quit; /* the "REALLY EXIT?" box is up */
+    int ctl_column;   /* controls screen: which of an action's two keys is selected */
+    int ctl_waiting;  /* controls screen: waiting for the new key */
+    int pause_open, pause_cursor;
+    char name_input[16]; /* the player's name being typed */
+    char note[80];
+    float note_time;
+    int replay_slots[RP_SLOTS], replay_count; /* the replays on the Load/Save/Replay screen */
+    RHead replay_heads[RP_SLOTS];
+    int last_lap_record, last_race_record; /* a Hall of Fame record was just set */
+} menu = {.screen = MS_MAIN};
 
 static float panel_w(void)
 {
@@ -33,8 +44,8 @@ static float panel_w(void)
 
 static void menu_note(const char *s)
 {
-    snprintf(ms_note, sizeof ms_note, "%s", s);
-    ms_note_t = 2.5f;
+    snprintf(menu.note, sizeof menu.note, "%s", s);
+    menu.note_time = 2.5f;
 }
 
 static void fmt_time2(char *b, size_t n, float t)

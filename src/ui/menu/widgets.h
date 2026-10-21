@@ -135,7 +135,7 @@ static void draw_bars(float y, const char *const *it, int n, int sel)
 /* the help line at the bottom; a note (Season saved, ...) takes its place while it shows */
 static void menu_help(const char *s)
 {
-    if (ms_note_t <= 0) {
+    if (menu.note_time <= 0) {
         hud_text_c(VH - 18, s, fminf(1.f, (panel_w() - 24) / text_width(s, 1)), 0xA8CCCC);
     }
 }

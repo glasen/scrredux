@@ -250,7 +250,7 @@ static void car_step(Car *c, float dt)
     float impact = ground_contact(c, &Fo, &To, &touch);
 
     if (touch && c == &cars[0]) {
-        snd_dirt = 1;
+        sfx.in_dirt = 1;
     }
 
     impact = fmaxf(impact, 0.5f * fence_contact(c, &Fo, &To, &net)); /* the net gives: a softer hit */
@@ -415,9 +415,9 @@ static void cars_interact(Car *a, Car *b, float dt)
             apply_ang(a, vcross(ra, vmul(f, -1)), dt);
             apply_ang(b, vcross(rb, f), dt);
 
-            if (-vn > 1.f && hitcar_cd <= 0 && (snd_live(a) || snd_live(b))) {
+            if (-vn > 1.f && sfx.hitcar_cooldown <= 0 && (snd_live(a) || snd_live(b))) {
                 snd_play(S_HITCAR, 238, 56);
-                hitcar_cd = 0.5f;
+                sfx.hitcar_cooldown = 0.5f;
             }
 
             if (-vn > 3.f) {

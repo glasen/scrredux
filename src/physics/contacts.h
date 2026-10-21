@@ -122,7 +122,7 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
     *F = vadd(*F, f);
     *Tq = vadd(*Tq, vcross(r, f));
     if (vts > 3.f && Fn > 1500.f && c == &cars[0]) {
-        snd_scrape = 1;
+        sfx.scraping = 1;
     }
 
     if (vts > 3.f && Fn > 1500.f && frand() < 0.35f) { /* steel on the deck: sparks */
@@ -199,7 +199,7 @@ static void edge_contact(Car *c, V3 *F, V3 *Tq)
             *F = vadd(*F, f);
             *Tq = vadd(*Tq, vcross(r, f));
             if (vts > 2.f && c == &cars[0]) {
-                snd_scrape = 1;
+                sfx.scraping = 1;
             }
 
             if (vts > 2.f && frand() < 0.5f) { /* frame grinding on the edge: sparks */

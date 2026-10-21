@@ -29,7 +29,7 @@ static void draw_pause(void)
     hud_text_c(y + 12, "PAUSED", 2, 0xF0C040);
 
     for (int i = 0; i < n; i++) {
-        draw_bar(x + 16, y + 36 + i * BAR_GAP, w - 32, it[i], i == pause_sel);
+        draw_bar(x + 16, y + 36 + i * BAR_GAP, w - 32, it[i], i == menu.pause_cursor);
     }
 
     hud_text_c(y + h + 8, "UP/DOWN SELECT   ENTER CHOOSE   ESC/P CONTINUE", 1, 0xE0E0E0);
@@ -52,25 +52,25 @@ static void race_hud_extra(void)
         hud_text_c(36, "TEST DRIVE - ESC: MENU", 1.5f, 0xFFE060);
     }
 
-    if (pause_on && !ask_quit) {
+    if (menu.pause_open && !menu.confirm_quit) {
         draw_pause();
     }
 
-    if (ask_quit) {
+    if (menu.confirm_quit) {
         ask_box("YOU RETIRE AND LOSE THE RACE");
     }
 }
 
 static void pause_set(int on)
 {
-    pause_on = paused = on;
-    pause_sel = 0;
+    menu.pause_open = paused = on;
+    menu.pause_cursor = 0;
 }
 
 static void pause_key(SDL_Keycode k)
 {
     const char *it[3];
-    int n = pause_items(it), *sel = &pause_sel;
+    int n = pause_items(it), *sel = &menu.pause_cursor;
 
     if (k == SDLK_UP) {
         *sel = (*sel + n - 1) % n;
@@ -96,7 +96,7 @@ static void pause_key(SDL_Keycode k)
         start_race();
     } /* Restart */
     else if (race_mode == RM_SEASON) {
-        ask_quit = 1; /* Retire: asks first */
+        menu.confirm_quit = 1; /* Retire: asks first */
     } else {
         pause_set(0);
         race_leave(1);
@@ -105,11 +105,11 @@ static void pause_key(SDL_Keycode k)
 
 static int race_key(SDL_Keycode k)
 {
-    if (ask_quit) { /* "Really exit?" over the pause menu */
+    if (menu.confirm_quit) { /* "Really exit?" over the pause menu */
         int a = ask_answer(k);
 
         if (a >= 0) {
-            ask_quit = 0;
+            menu.confirm_quit = 0;
         }
 
         if (a == 1) {
@@ -121,7 +121,7 @@ static int race_key(SDL_Keycode k)
         return 1;
     }
 
-    if (pause_on) {
+    if (menu.pause_open) {
         pause_key(k);
         return 1;
     }

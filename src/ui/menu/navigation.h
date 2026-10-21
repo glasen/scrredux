@@ -6,9 +6,9 @@ static void draw_menu(void)
     float x0 = menu_frame();
     const char *it[8];
 
-    switch (ms) {
+    switch (menu.screen) {
         case MS_MAIN:
-            draw_bars(96, it, main_items(it), msel[MS_MAIN]);
+            draw_bars(96, it, main_items(it), menu.cursor[MS_MAIN]);
             menu_help("UP/DOWN SELECT   ENTER CHOOSE   ESC QUIT");
             break;
         case MS_HOF:
@@ -31,7 +31,7 @@ static void draw_menu(void)
             break;
         case MS_LSR:
             hud_text_c(84, "LOAD / SAVE / REPLAY", 1.5f, 0xF0C040);
-            draw_bars(100, lsr_items, 4, msel[MS_LSR]);
+            draw_bars(100, lsr_items, 4, menu.cursor[MS_LSR]);
             menu_help("ENTER CHOOSE   ESC BACK");
             break;
         case MS_SLOTS:
@@ -48,11 +48,11 @@ static void draw_menu(void)
             break;
     }
 
-    if (ms_note_t > 0) {
-        hud_text_c(VH - 19.5f, ms_note, fminf(1.3f, (panel_w() - 24) / text_width(ms_note, 1)), 0x60FF60);
+    if (menu.note_time > 0) {
+        hud_text_c(VH - 19.5f, menu.note, fminf(1.3f, (panel_w() - 24) / text_width(menu.note, 1)), 0x60FF60);
     }
 
-    if (ask_quit) {
+    if (menu.confirm_quit) {
         ask_box(NULL);
     }
 }
@@ -62,13 +62,13 @@ static void ed_open(void);
 
 static void menu_go(int screen)
 {
-    ms = screen;
-    ms_scroll = 0;
-    ask_quit = 0;
-    ct_wait = 0;
+    menu.screen = screen;
+    menu.scroll = 0;
+    menu.confirm_quit = 0;
+    menu.ctl_waiting = 0;
 
     if (screen == MS_NAME) {
-        snprintf(name_buf, sizeof name_buf, "%s", sea.pname[0] ? sea.pname : "Player");
+        snprintf(menu.name_input, sizeof menu.name_input, "%s", sea.pname[0] ? sea.pname : "Player");
 
         if (win) {
             SDL_StartTextInput(win);
@@ -79,13 +79,13 @@ static void menu_go(int screen)
 
     if (screen == MS_REPLAYS) {
         rp_scan();
-        msel[MS_REPLAYS] = 0;
+        menu.cursor[MS_REPLAYS] = 0;
     }
 
     if (screen == MS_SEASON && sea.on && sea.race >= 6) { /* a finished season (also one loaded from a save) */
         season_end();
         season_write(0);
-        ms = MS_END;
+        menu.screen = MS_END;
     } else if (screen == MS_SEASON) { /* the menu shows the next race's track */
         const Race *r = player_race();
 
@@ -94,7 +94,7 @@ static void menu_go(int screen)
             setup_menu();
         }
 
-        msel[MS_SEASON] = r ? 0 : 1;
+        menu.cursor[MS_SEASON] = r ? 0 : 1;
     }
 
     if (state != ST_MENU) {

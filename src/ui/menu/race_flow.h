@@ -45,11 +45,11 @@ static void race_leave(int retired)
         race_score(r, win_p ? PLAYER : opp_drv, ta, tb, la, lb);
         last_res = *r;
         last_retired = retired;
-        last_lap_rec = last_race_rec = 0;
+        menu.last_lap_record = menu.last_race_record = 0;
         const char *tn = trk[r->track].name;
 
         if (tp > 0) {
-            last_race_rec |= hof_race(tn, player_name(), tp);
+            menu.last_race_record |= hof_race(tn, player_name(), tp);
         }
 
         if (to > 0) {
@@ -73,7 +73,7 @@ static void race_leave(int retired)
 
 static void replay_start(int i)
 {
-    if (rp_load(rp_slot[i])) {
+    if (rp_load(menu.replay_slots[i])) {
         menu_note("That replay cannot be read");
         return;
     }

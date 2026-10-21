@@ -28,7 +28,7 @@ static void draw_hof(float x0)
     static const float hat[3] = {0, 17, 36}, at[5] = {0, 17, -34, 36, -54};
     const char *head[3] = {"TRACK", "LAP RECORD", "RACE RECORD"};
     hud_row(x0 + 4, 96, 1, 0xF08A28, 3, hat, head);
-    int n = ntrk, vis = 15, first = clampf(ms_scroll, 0, fmaxf(0, n - vis));
+    int n = ntrk, vis = 15, first = clampf(menu.scroll, 0, fmaxf(0, n - vis));
 
     for (int r = 0; r < vis && first + r < n; r++) {
         const TrackDef *td = &trk[first + r];
@@ -48,20 +48,20 @@ static void draw_hof(float x0)
 static void draw_practice(void)
 {
     hud_text_c(80, "PRACTISE - choose a track", 1.5f, 0xF0C040);
-    int n = ntrk, vis = 9, sel = msel[MS_PRACTICE];
+    int n = ntrk, vis = 9, sel = menu.cursor[MS_PRACTICE];
 
-    if (sel < ms_scroll) {
-        ms_scroll = sel;
+    if (sel < menu.scroll) {
+        menu.scroll = sel;
     }
 
-    if (sel >= ms_scroll + vis) {
-        ms_scroll = sel - vis + 1;
+    if (sel >= menu.scroll + vis) {
+        menu.scroll = sel - vis + 1;
     }
 
     float W = panel_w() - 30, x = (HW - W) / 2;
 
-    for (int r = 0; r < vis && ms_scroll + r < n; r++) {
-        int i = ms_scroll + r;
+    for (int r = 0; r < vis && menu.scroll + r < n; r++) {
+        int i = menu.scroll + r;
         char b[64];
         snprintf(b, sizeof b, "%s%s", trk[i].name, i < SCR_NTRACKS ? "" : "  (own)");
         draw_bar(x, 96 + r * LIST_GAP, W, b, i == sel);
@@ -79,7 +79,7 @@ static void draw_name(void)
     hud_rect(x - 1.5f, 138.5f, W + 3, 23, 0xB4B4B4);
     plate(x, 140, W, 20, 0x2A2C30, 0x060608);
     char b[24];
-    snprintf(b, sizeof b, "%s%s", name_buf, (SDL_GetTicks() / 400) & 1 ? "_" : "");
+    snprintf(b, sizeof b, "%s%s", menu.name_input, (SDL_GetTicks() / 400) & 1 ? "_" : "");
     hud_text_raw(x + 6, 140 + (20 - 7 * 1.5f) / 2, b, 1.5f, 0xFFE060);
     hud_text_c(176, "You start in DIVISION 4 against", 1, 0xB0B0B8);
     hud_text_c(188, "Jumping Jack and Road Hog.", 1, 0xB0B0B8);
@@ -132,7 +132,7 @@ static void draw_season(float x0)
         fmt_time2(l, sizeof l, h ? h->lap : 0);
         snprintf(b, sizeof b, "%s - lap record %s, %s", t0, l, h && h->lap > 0 ? h->lapby : "-");
         hud_text_c(178, b, 1, 0xB0B0B8);
-        draw_bars(196, season_items, 2, msel[MS_SEASON]);
+        draw_bars(196, season_items, 2, menu.cursor[MS_SEASON]);
     } else {
         hud_text_c(170, "The season is over", 1.5f, 0xFFFFFF);
         draw_bars(196, season_items + 1, 1, 0);
@@ -186,8 +186,8 @@ static void draw_result(float x0)
         hud_text_c(170, b, 1, 0xE8E8EC);
     }
 
-    if (last_lap_rec || last_race_rec) {
-        hud_text_c(182, last_race_rec ? "New track record (race time)" : "New track record (lap)", 1, 0x60FF60);
+    if (menu.last_lap_record || menu.last_race_record) {
+        hud_text_c(182, menu.last_race_record ? "New track record (race time)" : "New track record (lap)", 1, 0x60FF60);
     }
 
     float y = 196;
@@ -247,7 +247,7 @@ static void slot_label(int k, char *b, size_t n)
 
 static void draw_slots(void)
 {
-    hud_text_c(80, ms_save ? "SAVE the season" : "LOAD a season", 1.5f, 0xF0C040);
+    hud_text_c(80, menu.save_mode ? "SAVE the season" : "LOAD a season", 1.5f, 0xF0C040);
     char lab[4][80];
     const char *it[5];
 
@@ -257,29 +257,29 @@ static void draw_slots(void)
     }
 
     it[4] = "Cancel";
-    draw_bars(98, it, 5, msel[MS_SLOTS]);
+    draw_bars(98, it, 5, menu.cursor[MS_SLOTS]);
     menu_help("ENTER CHOOSE   ESC BACK");
 }
 
 static void rp_scan(void)
 {
-    nrp_list = 0;
+    menu.replay_count = 0;
 
     for (int k = 1; k <= RP_SLOTS; k++) {
-        if (!rp_read_head(k, &rp_list[nrp_list])) {
-            rp_slot[nrp_list++] = k;
+        if (!rp_read_head(k, &menu.replay_heads[menu.replay_count])) {
+            menu.replay_slots[menu.replay_count++] = k;
         }
     }
 
-    for (int i = 0; i < nrp_list; i++) {
-        for (int j = i + 1; j < nrp_list; j++) {
-            if (rp_list[j].seq > rp_list[i].seq) {
-                RHead h = rp_list[i];
-                rp_list[i] = rp_list[j];
-                rp_list[j] = h;
-                int s = rp_slot[i];
-                rp_slot[i] = rp_slot[j];
-                rp_slot[j] = s;
+    for (int i = 0; i < menu.replay_count; i++) {
+        for (int j = i + 1; j < menu.replay_count; j++) {
+            if (menu.replay_heads[j].seq > menu.replay_heads[i].seq) {
+                RHead h = menu.replay_heads[i];
+                menu.replay_heads[i] = menu.replay_heads[j];
+                menu.replay_heads[j] = h;
+                int s = menu.replay_slots[i];
+                menu.replay_slots[i] = menu.replay_slots[j];
+                menu.replay_slots[j] = s;
             }
         }
     }
@@ -289,7 +289,7 @@ static void draw_replays(void)
 {
     hud_text_c(80, "REPLAY a race", 1.5f, 0xF0C040);
 
-    if (!nrp_list) {
+    if (!menu.replay_count) {
         hud_text_c(120, "No races recorded yet.", 1.5f, 0xE8E8EC);
         hud_text_c(140, "Season races are recorded, the last five are kept.", 1, 0xB0B0B8);
     }
@@ -297,13 +297,13 @@ static void draw_replays(void)
     char lab[RP_SLOTS][96];
     const char *it[RP_SLOTS + 1];
 
-    for (int i = 0; i < nrp_list; i++) {
-        snprintf(lab[i], sizeof lab[i], "%s", rp_list[i].title);
+    for (int i = 0; i < menu.replay_count; i++) {
+        snprintf(lab[i], sizeof lab[i], "%s", menu.replay_heads[i].title);
         it[i] = lab[i];
     }
 
-    it[nrp_list] = "Cancel";
-    draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS]);
+    it[menu.replay_count] = "Cancel";
+    draw_bars(menu.replay_count ? 98 : 170, it, menu.replay_count + 1, menu.cursor[MS_REPLAYS]);
     menu_help("ENTER WATCH   ESC BACK");
 }
 
@@ -319,7 +319,7 @@ static void draw_controls(void)
     hud_text_c(80, "CONTROLS", 1.5f, 0xF0C040);
     float W = panel_w() - 30, x = (HW - W) / 2, cw = 74, h = BAR_H;
     static const char *const tail[2] = {"Default keys", "Back"};
-    int sel = msel[MS_CTL];
+    int sel = menu.cursor[MS_CTL];
 
     for (int r = 0; r < CT_ROWS; r++) {
         float y = 94 + r * BAR_GAP;
@@ -331,11 +331,11 @@ static void draw_controls(void)
 
         for (int k = 0; k < 2; k++) {
             float cx = x + W - (2 - k) * (cw + 3) - 1;
-            int on = r == sel && k == ct_col;
+            int on = r == sel && k == menu.ctl_column;
             char b[48];
             key_label(b, sizeof b, ctl[r][k]);
 
-            if (on && ct_wait) {
+            if (on && menu.ctl_waiting) {
                 snprintf(b, sizeof b, "%s", (SDL_GetTicks() / 300) & 1 ? "PRESS A KEY" : "");
             }
 
@@ -343,7 +343,7 @@ static void draw_controls(void)
             plate(cx, y + 2, cw, h - 4, 0x2A2C30, 0x060608);
             float sc = fminf(1.f, (cw - 6) / fmaxf(text_width(b, 1), 1));
             hud_text_raw(cx + (cw - text_width(b, sc)) / 2, y + (h - 7 * sc) / 2, b, sc,
-                         on ? (ct_wait ? 0x60FF60 : 0xFFE060) : 0xE8ECEC);
+                         on ? (menu.ctl_waiting ? 0x60FF60 : 0xFFE060) : 0xE8ECEC);
         }
     }
 
@@ -354,5 +354,6 @@ static void draw_controls(void)
     const char *pl =
         "PAD: STICK/D-PAD STEER   RT/A/UP GAS   LT/X/DOWN BRAKE   RB/B BOOST   Y RESCUE   START/BACK PAUSE";
     hud_text_c(236, pl, fminf(0.8f, (panel_w() - 12) / text_width(pl, 1)), 0xB0B0B8);
-    menu_help(ct_wait ? "PRESS THE NEW KEY   ESC CANCEL" : "ENTER CHANGE   LEFT/RIGHT KEY 1/2   DEL CLEAR   ESC BACK");
+    menu_help(menu.ctl_waiting ? "PRESS THE NEW KEY   ESC CANCEL"
+                               : "ENTER CHANGE   LEFT/RIGHT KEY 1/2   DEL CLEAR   ESC BACK");
 }

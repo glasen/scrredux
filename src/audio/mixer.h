@@ -2,7 +2,7 @@
 #pragma once
 
 /* the original Amiga samples (the WAVs in sounds/, from StuntCarRacer-X) through a small mixer.
- * One voice per sample, like the 1998 PC port: a sound that is still playing is not restarted, only its pitch and
+ * One mixer.voices per sample, like the 1998 PC port: a sound that is still playing is not restarted, only its pitch and
  * volume follow. Pitch is given as an Amiga period (rate = 3546895 / period), volume as 0..64, both straight from
  * the original's tables. The Amiga panned engine and Smash hard left and the rest hard right; here only 30% apart.
  * When the triggers fire is decided in audio/sound_events.h. */
@@ -37,25 +37,29 @@ typedef struct {
     int on, loop;
 } Voice;
 
-static Smp smp[NSND];
-static Voice voice[S_ENGINE + 1]; /* one per effect, the last one is the engine */
-static SDL_AudioStream *snd_as;
-static int snd_count[S_ENGINE + 1], snd_log = -1, snd_eng_run;
-static float snd_vol[2] = {1, 1}; /* effects and engine, from the Options menu */
-static float *snd_dump;
-static int snd_dump_n, snd_dump_cap; /* --audio-dump: the mix, rendered without a device */
+static struct {
+    Smp samples[NSND];
+    Voice voices[S_ENGINE + 1]; /* one per effect, the last one is the engine */
+    SDL_AudioStream *stream;
+    int play_count[S_ENGINE + 1]; /* how often each effect started, for --sim's report */
+    int log_plays;                /* SCR_SND set: print every start; -1 until the environment was read */
+    int engine_running;
+    float volume[2]; /* effects and engine, from the Options menu */
+    float *dump;     /* --audio-dump: the mix, rendered without a device */
+    int dump_frames, dump_capacity;
+} mixer = {.log_plays = -1, .volume = {1, 1}};
 
 static void snd_lock(void)
 {
-    if (snd_as) {
-        SDL_LockAudioStream(snd_as);
+    if (mixer.stream) {
+        SDL_LockAudioStream(mixer.stream);
     }
 }
 
 static void snd_unlock(void)
 {
-    if (snd_as) {
-        SDL_UnlockAudioStream(snd_as);
+    if (mixer.stream) {
+        SDL_UnlockAudioStream(mixer.stream);
     }
 }
 
@@ -84,8 +88,8 @@ static void snd_load(void)
         SDL_AudioSpec fs = {SDL_AUDIO_F32, 1, sp.freq};
 
         if (SDL_ConvertAudioSamples(&sp, buf, (int)len, &fs, &cv, &cl) && cl >= 4) {
-            smp[i].d = (float *)cv;
-            smp[i].n = cl / 4;
+            mixer.samples[i].d = (float *)cv;
+            mixer.samples[i].n = cl / 4;
         } else {
             missing++;
         }
@@ -99,8 +103,8 @@ static void snd_load(void)
 
 static void snd_start(int v, int id, int period, int vol, int loop)
 {
-    Voice *o = &voice[v];
-    o->s = &smp[id];
+    Voice *o = &mixer.voices[v];
+    o->s = &mixer.samples[id];
     o->loop = loop;
     o->step = PAULA_HZ / (float)period / SND_RATE;
     float a = vol / 64.f;
@@ -112,25 +116,25 @@ static void snd_start(int v, int id, int period, int vol, int loop)
 static void snd_play(int id, int period, int vol)
 {
     snd_lock();
-    Voice *o = &voice[id];
+    Voice *o = &mixer.voices[id];
     int start = !o->on;
     snd_start(id, id, period, vol, 0);
 
     if (start) {
         o->pos = 0;
-        o->on = smp[id].n > 0;
+        o->on = mixer.samples[id].n > 0;
     }
 
     snd_unlock();
 
     if (start) {
-        snd_count[id]++;
+        mixer.play_count[id]++;
 
-        if (snd_log < 0) {
-            snd_log = getenv("SCR_SND") != NULL;
+        if (mixer.log_plays < 0) {
+            mixer.log_plays = getenv("SCR_SND") != NULL;
         }
 
-        if (snd_log) {
+        if (mixer.log_plays) {
             fprintf(stderr, "snd %-8s period %3d vol %2d\n", snd_file[id], period, vol);
         }
     }
@@ -140,8 +144,8 @@ static void snd_play(int id, int period, int vol)
 static void snd_engine(int k, int period)
 {
     snd_lock();
-    Voice *o = &voice[S_ENGINE];
-    const Smp *s = &smp[S_ENGINE + k];
+    Voice *o = &mixer.voices[S_ENGINE];
+    const Smp *s = &mixer.samples[S_ENGINE + k];
 
     if (o->on && o->s != s) {
         o->pos = ldexp(o->pos, (int)(o->s - s));
@@ -155,16 +159,16 @@ static void snd_engine(int k, int period)
         o->pos = 0;
     }
 
-    if (!snd_eng_run) {
-        snd_eng_run = 1;
-        snd_count[S_ENGINE]++;
+    if (!mixer.engine_running) {
+        mixer.engine_running = 1;
+        mixer.play_count[S_ENGINE]++;
     }
 
-    if (snd_log < 0) {
-        snd_log = getenv("SCR_SND") != NULL;
+    if (mixer.log_plays < 0) {
+        mixer.log_plays = getenv("SCR_SND") != NULL;
     }
 
-    if (snd_log && o->s != s) {
+    if (mixer.log_plays && o->s != s) {
         fprintf(stderr, "snd engine   %s period %3d (TickOver at %.0f Hz)\n", snd_file[S_ENGINE + k], period,
                 PAULA_HZ / period * (1 << k));
     }
@@ -179,7 +183,7 @@ static void snd_report(void)
     printf("SOUNDS");
 
     for (int v = 0; v <= S_ENGINE; v++) {
-        printf(" %s=%d", snd_file[v], snd_count[v]);
+        printf(" %s=%d", snd_file[v], mixer.play_count[v]);
     }
 
     printf("\n");
@@ -188,9 +192,9 @@ static void snd_report(void)
 static void snd_engine_stop(void)
 {
     snd_lock();
-    voice[S_ENGINE].on = 0;
+    mixer.voices[S_ENGINE].on = 0;
     snd_unlock();
-    snd_eng_run = 0;
+    mixer.engine_running = 0;
 }
 
 static void snd_stop_all(void)
@@ -198,11 +202,11 @@ static void snd_stop_all(void)
     snd_lock();
 
     for (int v = 0; v <= S_ENGINE; v++) {
-        voice[v].on = 0;
+        mixer.voices[v].on = 0;
     }
 
     snd_unlock();
-    snd_eng_run = 0;
+    mixer.engine_running = 0;
 }
 
 static void snd_mix(float *out, int frames)
@@ -214,7 +218,7 @@ static void snd_mix(float *out, int frames)
         float l = 0, r = 0;
 
         for (int v = 0; v <= S_ENGINE; v++) {
-            Voice *o = &voice[v];
+            Voice *o = &mixer.voices[v];
 
             if (!o->on) {
                 continue;
@@ -224,7 +228,7 @@ static void snd_mix(float *out, int frames)
             float t = (float)(o->pos - i);
             int j = i + 1 < n ? i + 1 : (o->loop ? 0 : i);
             float x = o->s->d[i] + (o->s->d[j] - o->s->d[i]) * t;
-            x *= snd_vol[v == S_ENGINE];
+            x *= mixer.volume[v == S_ENGINE];
             l += x * o->gl;
             r += x * o->gr;
             o->pos += o->step;
@@ -262,10 +266,10 @@ static void snd_open(void)
 {
     snd_load();
     SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, SND_RATE};
-    snd_as = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, snd_cb, NULL);
+    mixer.stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, snd_cb, NULL);
 
-    if (snd_as) {
-        SDL_ResumeAudioStreamDevice(snd_as);
+    if (mixer.stream) {
+        SDL_ResumeAudioStreamDevice(mixer.stream);
     } else {
         fprintf(stderr, "audio: %s\n", SDL_GetError());
     }
@@ -274,21 +278,21 @@ static void snd_open(void)
 /* --audio-dump: render dt seconds of the mix into memory, then write it as a 16-bit stereo WAV */
 static void snd_dump_begin(void)
 {
-    snd_dump_cap = SND_RATE * 60;
-    snd_dump = malloc((size_t)snd_dump_cap * 2 * sizeof(float));
+    mixer.dump_capacity = SND_RATE * 60;
+    mixer.dump = malloc((size_t)mixer.dump_capacity * 2 * sizeof(float));
 }
 
 static void snd_dump_frames(float dt)
 {
     int n = (int)(dt * SND_RATE + 0.5f);
 
-    if (snd_dump_n + n > snd_dump_cap) {
-        snd_dump_cap = (snd_dump_n + n) * 2;
-        snd_dump = realloc(snd_dump, (size_t)snd_dump_cap * 2 * sizeof(float));
+    if (mixer.dump_frames + n > mixer.dump_capacity) {
+        mixer.dump_capacity = (mixer.dump_frames + n) * 2;
+        mixer.dump = realloc(mixer.dump, (size_t)mixer.dump_capacity * 2 * sizeof(float));
     }
 
-    snd_mix(snd_dump + 2 * snd_dump_n, n);
-    snd_dump_n += n;
+    snd_mix(mixer.dump + 2 * mixer.dump_frames, n);
+    mixer.dump_frames += n;
 }
 
 static void snd_dump_write(const char *path)
@@ -300,7 +304,7 @@ static void snd_dump_write(const char *path)
         return;
     }
 
-    uint32_t data = (uint32_t)snd_dump_n * 4, u32;
+    uint32_t data = (uint32_t)mixer.dump_frames * 4, u32;
     uint16_t u16;
     fwrite("RIFF", 1, 4, f);
     u32 = 36 + data;
@@ -325,8 +329,8 @@ static void snd_dump_write(const char *path)
     float peak = 0;
     int clip = 0;
 
-    for (int i = 0; i < 2 * snd_dump_n; i++) {
-        float x = snd_dump[i];
+    for (int i = 0; i < 2 * mixer.dump_frames; i++) {
+        float x = mixer.dump[i];
         peak = fmaxf(peak, fabsf(x));
 
         if (fabsf(x) >= 1.f) {
@@ -338,5 +342,5 @@ static void snd_dump_write(const char *path)
     }
 
     fclose(f);
-    printf("AUDIO %s: %.1f s, peak %.2f, %d clipped samples\n", path, (float)snd_dump_n / SND_RATE, peak, clip);
+    printf("AUDIO %s: %.1f s, peak %.2f, %d clipped samples\n", path, (float)mixer.dump_frames / SND_RATE, peak, clip);
 }

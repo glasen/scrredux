@@ -3,16 +3,16 @@
 
 static void menu_text(const char *t)
 {
-    if (ms != MS_NAME) {
+    if (menu.screen != MS_NAME) {
         return;
     }
 
     for (; *t; t++) {
-        size_t n = strlen(name_buf);
+        size_t n = strlen(menu.name_input);
 
-        if (n + 1 < sizeof name_buf && (strchr(NAME_CHARS, *t) || (*t == ' ' && n))) {
-            name_buf[n] = *t;
-            name_buf[n + 1] = 0;
+        if (n + 1 < sizeof menu.name_input && (strchr(NAME_CHARS, *t) || (*t == ' ' && n))) {
+            menu.name_input[n] = *t;
+            menu.name_input[n + 1] = 0;
         }
     }
 }
@@ -20,21 +20,21 @@ static void menu_text(const char *t)
 /* returns 0 to quit the game */
 static int menu_key(SDL_Keycode k)
 {
-    if (ask_quit) {
+    if (menu.confirm_quit) {
         int a = ask_answer(k);
 
         if (a >= 0) {
-            ask_quit = 0;
+            menu.confirm_quit = 0;
         }
 
         return a != 1;
     }
 
-    int *sel = &msel[ms], up = k == SDLK_UP, dn = k == SDLK_DOWN, ok = k == SDLK_RETURN || k == SDLK_KP_ENTER,
-        back = k == SDLK_ESCAPE;
+    int *sel = &menu.cursor[menu.screen], up = k == SDLK_UP, dn = k == SDLK_DOWN,
+        ok = k == SDLK_RETURN || k == SDLK_KP_ENTER, back = k == SDLK_ESCAPE;
     const char *it[8];
 
-    switch (ms) {
+    switch (menu.screen) {
         case MS_MAIN: {
             int n = main_items(it);
 
@@ -52,7 +52,7 @@ static int menu_key(SDL_Keycode k)
             }
 
             if (back) {
-                ask_quit = 1;
+                menu.confirm_quit = 1;
                 break;
             }
 
@@ -64,7 +64,7 @@ static int menu_key(SDL_Keycode k)
                 hof_load();
                 menu_go(MS_HOF);
             } else if (*sel == 1) {
-                msel[MS_PRACTICE] = sel_track < ntrk ? sel_track : 0;
+                menu.cursor[MS_PRACTICE] = sel_track < ntrk ? sel_track : 0;
                 menu_go(MS_PRACTICE);
             } else if (*sel == 2) {
                 menu_go(sea.on ? MS_SEASON : MS_NAME);
@@ -73,18 +73,18 @@ static int menu_key(SDL_Keycode k)
             } else if (*sel == 4) {
                 ed_open();
             } else {
-                msel[MS_OPT] = 0;
+                menu.cursor[MS_OPT] = 0;
                 menu_go(MS_OPT);
             }
             break;
         }
         case MS_HOF:
             if (up) {
-                ms_scroll = ms_scroll > 0 ? ms_scroll - 1 : 0;
+                menu.scroll = menu.scroll > 0 ? menu.scroll - 1 : 0;
             }
 
-            if (dn && ms_scroll + 15 < ntrk) {
-                ms_scroll++;
+            if (dn && menu.scroll + 15 < ntrk) {
+                menu.scroll++;
             }
 
             if (back || ok) {
@@ -119,16 +119,16 @@ static int menu_key(SDL_Keycode k)
 
             break;
         case MS_NAME:
-            if (k == SDLK_BACKSPACE && name_buf[0]) {
-                name_buf[strlen(name_buf) - 1] = 0;
+            if (k == SDLK_BACKSPACE && menu.name_input[0]) {
+                menu.name_input[strlen(menu.name_input) - 1] = 0;
             }
 
             if (back) {
                 menu_go(MS_MAIN);
             }
 
-            if (ok && name_buf[0]) {
-                season_new(name_buf);
+            if (ok && menu.name_input[0]) {
+                season_new(menu.name_input);
                 season_write(0);
                 menu_go(MS_SEASON);
             }
@@ -185,8 +185,8 @@ static int menu_key(SDL_Keycode k)
                     break;
                 }
 
-                ms_save = *sel == 1;
-                msel[MS_SLOTS] = 0;
+                menu.save_mode = *sel == 1;
+                menu.cursor[MS_SLOTS] = 0;
                 menu_go(MS_SLOTS);
             }
             break;
@@ -201,7 +201,7 @@ static int menu_key(SDL_Keycode k)
 
             if (back || (ok && *sel == 4)) {
                 menu_go(MS_LSR);
-            } else if (ok && ms_save) {
+            } else if (ok && menu.save_mode) {
                 menu_note(season_write(*sel + 1) ? "Could not save" : "Season saved");
             } else if (ok) {
                 if (season_read(*sel + 1)) {
@@ -214,7 +214,7 @@ static int menu_key(SDL_Keycode k)
             }
             break;
         case MS_REPLAYS: {
-            int n = nrp_list + 1;
+            int n = menu.replay_count + 1;
 
             if (up) {
                 *sel = (*sel + n - 1) % n;
@@ -224,7 +224,7 @@ static int menu_key(SDL_Keycode k)
                 *sel = (*sel + 1) % n;
             }
 
-            if (back || (ok && *sel == nrp_list)) {
+            if (back || (ok && *sel == menu.replay_count)) {
                 menu_go(MS_LSR);
             } else if (ok) {
                 replay_start(*sel);
@@ -232,16 +232,16 @@ static int menu_key(SDL_Keycode k)
             break;
         }
         case MS_CTL: {
-            if (ct_wait) { /* the next key is the new one; P, R and F11 stay with pause, rescue and fullscreen */
+            if (menu.ctl_waiting) { /* the next key is the new one; P, R and F11 stay with pause, rescue and fullscreen */
                 SDL_Scancode sc = SDL_GetScancodeFromKey(k, NULL);
 
                 if (back) {
-                    ct_wait = 0;
+                    menu.ctl_waiting = 0;
                 } else if (k == SDLK_P || k == SDLK_R || !sc) {
                     menu_note("P and R are taken");
                 } else {
-                    ctl_bind(*sel, ct_col, sc);
-                    ct_wait = 0;
+                    ctl_bind(*sel, menu.ctl_column, sc);
+                    menu.ctl_waiting = 0;
                 }
                 break;
             }
@@ -255,7 +255,7 @@ static int menu_key(SDL_Keycode k)
             }
 
             if (k == SDLK_LEFT || k == SDLK_RIGHT) {
-                ct_col ^= 1;
+                menu.ctl_column ^= 1;
             }
 
             if (back || (ok && *sel == NCT + 1)) {
@@ -265,9 +265,9 @@ static int menu_key(SDL_Keycode k)
                 ctl_save();
                 menu_note("Default keys restored");
             } else if (ok) {
-                ct_wait = 1;
+                menu.ctl_waiting = 1;
             } else if ((k == SDLK_DELETE || k == SDLK_BACKSPACE) && *sel < NCT) {
-                ctl[*sel][ct_col] = SDL_SCANCODE_UNKNOWN;
+                ctl[*sel][menu.ctl_column] = SDL_SCANCODE_UNKNOWN;
                 ctl_save();
             }
             break;
@@ -289,7 +289,7 @@ static int menu_key(SDL_Keycode k)
             }
 
             if (ok && *sel == OP_KEYS) {
-                msel[MS_CTL] = ct_col = 0;
+                menu.cursor[MS_CTL] = menu.ctl_column = 0;
                 menu_go(MS_CTL);
                 break;
             }

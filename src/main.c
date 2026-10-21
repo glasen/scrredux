@@ -314,7 +314,7 @@ int main(int argc, char **argv)
                 }
             } else if (e.type == SDL_EVENT_KEY_DOWN &&
                        (!e.key.repeat ||
-                        ((state == ST_EDIT || (state == ST_MENU && ms != MS_CTL)) && e.key.key != SDLK_RETURN &&
+                        ((state == ST_EDIT || (state == ST_MENU && menu.screen != MS_CTL)) && e.key.key != SDLK_RETURN &&
                          e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C && e.key.key != SDLK_T))) {
                 if (!handle_key(e.key.key, e.key.mod)) {
                     running = 0;
