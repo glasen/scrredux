@@ -7,12 +7,13 @@ enum { MAXX = MAXPC * 13 + 1, PER = 24 };
 static float tx_ex[MAXX][2], tx_ez[MAXX][2];
 static int tx_ey[MAXX][2], tx_sec[MAXX];
 
-static int track_xsecs(const TrackDef *td)
+/* the cross-sections of the pieces round the loop from the start line (the end of the start piece); a piece's last
+ * one is the next one's first. Also marks which sections the crane may set a car down on. Returns their number */
+static int xsecs_from_pieces(const TrackDef *td)
 {
     float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez;
     int (*ey)[2] = tx_ey, *xsec = tx_sec;
     int np = td->np, start = td->start, orig = td->orig;
-    /* cross-sections round the loop from the start line (the end of the start piece); a piece's last one is the next one's first */
     int nx = 0;
     nsec = np;
 
@@ -56,183 +57,241 @@ static int track_xsecs(const TrackDef *td)
         xsec[nx++] = start;
     }
 
-    /* the jump edits, m metres each (a sheer face is a step of 640 units or more between cross-sections) */
-    const float U = 0.25f * SCR_U;
+    return nx;
+}
+
+/* a step between two cross-sections of 640 height units or more is a sheer face */
+static int is_sheer_step_down(int k)
+{
+    return tx_ey[k + 1][0] - tx_ey[k][0] <= -640 || tx_ey[k + 1][1] - tx_ey[k][1] <= -640;
+}
+
+/* a pit filled from this section on, up to its far face's top (sloping down by M units to it) */
+static void edit_fill(int i0, int nx, int M)
+{
+    int (*ey)[2] = tx_ey, i;
+
+    for (i = i0; i + 1 < nx && ey[i + 1][0] - ey[i][0] < 640 && ey[i + 1][1] - ey[i][1] < 640; i++) {
+    }
+
+    if (i + 2 >= nx) {
+        return;
+    }
+
+    for (int ed = 0; ed < 2; ed++) {
+        int H = ey[i + 2][ed] > ey[i + 1][ed] ? ey[i + 2][ed] : ey[i + 1][ed]; /* a crest just past the face */
+        ey[i + 1][ed] = H;
+
+        for (int k = i0; k <= i; k++) {
+            ey[k][ed] = H + M * (i + 1 - k) / (i + 1 - i0);
+        }
+    }
+}
+
+/* a ramp's lip raised by M units, from nothing at the section start (the lip may be the next one's first) */
+static void edit_lift(int i0, int nx, int M)
+{
+    int (*ey)[2] = tx_ey, *xsec = tx_sec, i;
+
+    for (i = i0; i + 1 < nx && xsec[i] == xsec[i0] && !is_sheer_step_down(i); i++) {
+    }
+
+    for (int k = i0 + 1; k <= i; k++) {
+        for (int ed = 0; ed < 2; ed++) {
+            ey[k][ed] += M * (k - i0) / (i - i0);
+        }
+    }
+}
+
+/* a step down onto a climb made shallower: the climb raised by M units, tapering out at the crest */
+static void edit_step(int i0, int nx, int M)
+{
+    int (*ey)[2] = tx_ey, i;
+
+    for (i = i0; i + 1 < nx && !is_sheer_step_down(i); i++) {
+    }
+
+    int kc = i + 1;
+
+    for (int k = i + 1; k < nx && k < i + 40; k++) {
+        if (ey[k][0] + ey[k][1] > ey[kc][0] + ey[kc][1]) {
+            kc = k;
+        }
+    }
+
+    for (int k = i + 1; k < kc; k++) {
+        for (int ed = 0; ed < 2; ed++) {
+            ey[k][ed] += M * (kc - k) / (kc - i - 1);
+        }
+    }
+}
+
+/* a tower between two pits taken down to their floor: one gap */
+static void edit_flatten(int i0, int nx)
+{
+    int (*ey)[2] = tx_ey, *xsec = tx_sec;
+
+    for (int ed = 0; ed < 2; ed++) {
+        int lo = 1 << 30;
+
+        for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) {
+            lo = ey[k][ed] < lo ? ey[k][ed] : lo;
+        }
+
+        for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) {
+            ey[k][ed] = lo;
+        }
+    }
+}
+
+/* the jump edits of an original track (TRACK_EDIT), each in metres */
+static void apply_jump_edits(int orig, int nx)
+{
+    const float U = 0.25f * SCR_U; /* metres per height unit */
 
     for (int e = 0; e < (int)(sizeof TRACK_EDIT / sizeof TRACK_EDIT[0]); e++) {
         if (TRACK_EDIT[e].track != orig) {
             continue;
         }
 
-        int i0 = 0, i, M = (int)(TRACK_EDIT[e].m / U);
+        int i0 = 0, M = (int)(TRACK_EDIT[e].m / U);
 
-        while (i0 < nx && xsec[i0] != TRACK_EDIT[e].sec) {
+        while (i0 < nx && tx_sec[i0] != TRACK_EDIT[e].sec) {
             i0++;
         }
 
         switch (TRACK_EDIT[e].kind) {
-            case ED_FILL: /* a pit filled from this section on, up to its far face's top (sloping down by m to it) */
-                for (i = i0; i + 1 < nx && ey[i + 1][0] - ey[i][0] < 640 && ey[i + 1][1] - ey[i][1] < 640; i++) {
-                }
-
-                if (i + 2 >= nx) {
-                    break;
-                }
-
-                for (int ed = 0; ed < 2; ed++) {
-                    int H =
-                        ey[i + 2][ed] > ey[i + 1][ed] ? ey[i + 2][ed] : ey[i + 1][ed]; /* a crest just past the face */
-                    ey[i + 1][ed] = H;
-
-                    for (int k = i0; k <= i; k++) {
-                        ey[k][ed] = H + M * (i + 1 - k) / (i + 1 - i0);
-                    }
-                }
-
+            case ED_FILL:
+                edit_fill(i0, nx, M);
                 break;
-            case ED_LIFT: /* a ramp's lip raised by m, from nothing at the section start (the lip may be the next one's first) */
-                for (i = i0; i + 1 < nx && xsec[i] == xsec[i0] && ey[i + 1][0] - ey[i][0] > -640 &&
-                             ey[i + 1][1] - ey[i][1] > -640;
-                     i++) {
-                }
-
-                for (int k = i0 + 1; k <= i; k++) {
-                    for (int ed = 0; ed < 2; ed++) {
-                        ey[k][ed] += M * (k - i0) / (i - i0);
-                    }
-                }
-
+            case ED_LIFT:
+                edit_lift(i0, nx, M);
                 break;
-            case ED_STEP: { /* a step down onto a climb made shallower: the climb raised by m, tapering out at the crest */
-                for (i = i0; i + 1 < nx && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640; i++) {
-                }
-
-                int kc = i + 1;
-
-                for (int k = i + 1; k < nx && k < i + 40; k++) {
-                    if (ey[k][0] + ey[k][1] > ey[kc][0] + ey[kc][1]) {
-                        kc = k;
-                    }
-                }
-
-                for (int k = i + 1; k < kc; k++) {
-                    for (int ed = 0; ed < 2; ed++) {
-                        ey[k][ed] += M * (kc - k) / (kc - i - 1);
-                    }
-                }
-
+            case ED_STEP:
+                edit_step(i0, nx, M);
                 break;
-            }
-            case ED_FLAT: /* a tower between two pits taken down to their floor: one gap */
-                for (int ed = 0; ed < 2; ed++) {
-                    int lo = 1 << 30;
-
-                    for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) {
-                        lo = ey[k][ed] < lo ? ey[k][ed] : lo;
-                    }
-
-                    for (int k = i0; k < nx && xsec[k] == xsec[i0]; k++) {
-                        ey[k][ed] = lo;
-                    }
-                }
-
+            case ED_FLAT:
+                edit_flatten(i0, nx);
                 break;
         }
     }
-    /* a drop too deep to land flat after at our speeds becomes a landing hill: a sheer step of c metres at the lip, then a
-     * knoll the car follows up to vd m/s, steepening to a straight slope smax and curving out (radius ~R) onto the floor */
-    for (int e = 0; e < (int)(sizeof TRACK_HILL / sizeof TRACK_HILL[0]); e++) {
-        if (TRACK_HILL[e].track != orig) {
+}
+
+/* the flight from a lip at speed vd along a slope th, with the car's drag: tj[x] is the height at x metres on */
+static void landing_flight(float vd, float th, float *tj)
+{
+    enum { N = 700 };
+
+    float px = 0, py = 0, vx = vd / sqrtf(1 + th * th), vy = vx * th;
+    int n = 0;
+
+    for (int it = 0; it < 6000 && n < N; it++) {
+        float sp = hypotf(vx, vy), dt = 0.005f;
+        vx -= phys.drag / phys.mass * sp * vx * dt;
+        vy -= (GRAV + phys.drag / phys.mass * sp * vy) * dt;
+        px += vx * dt;
+        py += vy * dt;
+
+        while (n < N && n <= px) {
+            tj[n++] = py;
+        }
+    }
+
+    while (n < N) {
+        tj[n] = n ? tj[n - 1] - 10.f : py;
+        n++;
+    }
+}
+
+/* a drop too deep to land flat after at our speeds becomes a landing hill (TRACK_HILL[e]): a sheer step of c metres at
+ * the lip, then a knoll the car follows up to vd m/s, steepening to a straight slope smax and curving out (radius ~R)
+ * onto the floor */
+static void apply_landing_hill(int e, int nx)
+{
+    float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez;
+    int (*ey)[2] = tx_ey, *xsec = tx_sec;
+    const float U = 0.25f * SCR_U;
+    int i0 = 0;
+
+    while (i0 < nx && xsec[i0] != TRACK_HILL[e].sec) {
+        i0++;
+    }
+
+    int i = i0;
+
+    while (i + 1 < nx && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640) {
+        i++;
+    }
+
+    const float vd = TRACK_HILL[e].vd, sm = TRACK_HILL[e].smax, c = TRACK_HILL[e].c,
+                D = TRACK_HILL[e].R * sm * sm * 0.5f;
+    float H = (ey[i][0] + ey[i][1]) * 0.5f * U, fl = 1e9f, d = 0;
+    int kf = i + 1; /* the hill starts after the lip, or across a pit */
+
+    if (TRACK_HILL[e].from >= 0) {
+        while (kf < nx && xsec[kf] != TRACK_HILL[e].from) {
+            kf++;
+        }
+    }
+
+    for (int k = kf; k < nx && k < kf + 80; k++) { /* the floor: where the track first stops going down */
+        float y = (ey[k][0] + ey[k][1]) * 0.5f * U;
+
+        if (y > fl + 0.5f) {
+            break;
+        }
+
+        fl = fminf(fl, y);
+    }
+
+    float th = ((ey[i][0] + ey[i][1]) - (ey[i - 1][0] + ey[i - 1][1])) * 0.5f * U /
+               hypotf((ex[i][0] + ex[i][1] - ex[i - 1][0] - ex[i - 1][1]) * 0.5f,
+                      (ez[i][0] + ez[i][1] - ez[i - 1][0] - ez[i - 1][1]) * 0.5f);
+    static float tj[700];
+    landing_flight(vd, th, tj);
+    float xk = 699, yk;
+
+    for (int x = 1; x < 699; x++) {
+        if (tj[x + 1] - tj[x] < -sm) {
+            xk = (float)x;
+            break;
+        }
+    }
+
+    yk = tj[(int)xk] - c;
+
+    for (int k = i + 1; k < nx; k++) {
+        d += hypotf((ex[k][0] + ex[k][1] - ex[k - 1][0] - ex[k - 1][1]) * 0.5f,
+                    (ez[k][0] + ez[k][1] - ez[k - 1][0] - ez[k - 1][1]) * 0.5f);
+        float y = d < xk ? tj[(int)d] + (tj[(int)d + 1] - tj[(int)d]) * (d - (int)d) - c : yk - sm * (d - xk),
+              r = y - (fl - H);
+        y = r > D ? y : r > -D ? fl - H + (r + D) * (r + D) / (4 * D) : fl - H; /* smooth max onto the floor */
+        float yo = (ey[k][0] + ey[k][1]) * 0.5f * U - H;
+
+        if (r < -D && yo <= fl - H + 0.05f) {
+            break; /* down: the rest is the original's */
+        }
+
+        if (k < kf) {
             continue;
         }
 
-        int i0 = 0;
-
-        while (i0 < nx && xsec[i0] != TRACK_HILL[e].sec) {
-            i0++;
+        for (int ed = 0; ed < 2; ed++) {
+            ey[k][ed] = ey[i][ed] + (int)(y / U);
         }
+    }
+}
 
-        int i = i0;
+/* the track's cross-sections in driving order from the start line, with the jump edits */
+static int track_xsecs(const TrackDef *td)
+{
+    int orig = td->orig;
+    int nx = xsecs_from_pieces(td);
+    apply_jump_edits(orig, nx);
 
-        while (i + 1 < nx && ey[i + 1][0] - ey[i][0] > -640 && ey[i + 1][1] - ey[i][1] > -640) {
-            i++;
-        }
-
-        const float vd = TRACK_HILL[e].vd, sm = TRACK_HILL[e].smax, c = TRACK_HILL[e].c,
-                    D = TRACK_HILL[e].R * sm * sm * 0.5f;
-        float H = (ey[i][0] + ey[i][1]) * 0.5f * U, fl = 1e9f, d = 0;
-        int kf = i + 1; /* the hill starts after the lip, or across a pit */
-        if (TRACK_HILL[e].from >= 0) {
-            while (kf < nx && xsec[kf] != TRACK_HILL[e].from) {
-                kf++;
-            }
-        }
-
-        for (int k = kf; k < nx && k < kf + 80; k++) { /* the floor: where the track first stops going down */
-            float y = (ey[k][0] + ey[k][1]) * 0.5f * U;
-
-            if (y > fl + 0.5f) {
-                break;
-            }
-
-            fl = fminf(fl, y);
-        }
-
-        float th = ((ey[i][0] + ey[i][1]) - (ey[i - 1][0] + ey[i - 1][1])) * 0.5f * U /
-                   hypotf((ex[i][0] + ex[i][1] - ex[i - 1][0] - ex[i - 1][1]) * 0.5f,
-                          (ez[i][0] + ez[i][1] - ez[i - 1][0] - ez[i - 1][1]) * 0.5f);
-        static float tj[700]; /* the flight from the lip at vd, with the car's drag */
-        {
-            float px = 0, py = 0, vx = vd / sqrtf(1 + th * th), vy = vx * th;
-            int n = 0;
-
-            for (int it = 0; it < 6000 && n < 700; it++) {
-                float sp = hypotf(vx, vy), dt = 0.005f;
-                vx -= phys.drag / phys.mass * sp * vx * dt;
-                vy -= (GRAV + phys.drag / phys.mass * sp * vy) * dt;
-                px += vx * dt;
-                py += vy * dt;
-
-                while (n < 700 && n <= px) {
-                    tj[n++] = py;
-                }
-            }
-
-            while (n < 700) {
-                tj[n] = n ? tj[n - 1] - 10.f : py;
-                n++;
-            }
-        }
-        float xk = 699, yk;
-
-        for (int x = 1; x < 699; x++) {
-            if (tj[x + 1] - tj[x] < -sm) {
-                xk = (float)x;
-                break;
-            }
-        }
-
-        yk = tj[(int)xk] - c;
-
-        for (int k = i + 1; k < nx; k++) {
-            d += hypotf((ex[k][0] + ex[k][1] - ex[k - 1][0] - ex[k - 1][1]) * 0.5f,
-                        (ez[k][0] + ez[k][1] - ez[k - 1][0] - ez[k - 1][1]) * 0.5f);
-            float y = d < xk ? tj[(int)d] + (tj[(int)d + 1] - tj[(int)d]) * (d - (int)d) - c : yk - sm * (d - xk),
-                  r = y - (fl - H);
-            y = r > D ? y : r > -D ? fl - H + (r + D) * (r + D) / (4 * D) : fl - H; /* smooth max onto the floor */
-            float yo = (ey[k][0] + ey[k][1]) * 0.5f * U - H;
-
-            if (r < -D && yo <= fl - H + 0.05f) {
-                break; /* down: the rest is the original's */
-            }
-
-            if (k < kf) {
-                continue;
-            }
-
-            for (int ed = 0; ed < 2; ed++) {
-                ey[k][ed] = ey[i][ed] + (int)(y / U);
-            }
+    for (int e = 0; e < (int)(sizeof TRACK_HILL / sizeof TRACK_HILL[0]); e++) {
+        if (TRACK_HILL[e].track == orig) {
+            apply_landing_hill(e, nx);
         }
     }
 
