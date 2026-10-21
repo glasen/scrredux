@@ -148,7 +148,7 @@ static int car_model_load(void)
 
     uint32_t ng = rd_u32(&r);
 
-    if (r.bad || ng > (uint32_t)(sizeof mdl_g / sizeof mdl_g[0])) {
+    if (r.bad || ng > (uint32_t)(sizeof car_mesh.groups / sizeof car_mesh.groups[0])) {
         fprintf(stderr, "stuntcar.scm: bad rig\n");
         SDL_free(buf);
         return 0;
@@ -160,14 +160,14 @@ static int car_model_load(void)
             break;
         }
 
-        memcpy(mdl_g[i].name, r.p, 8);
-        mdl_g[i].name[7] = 0;
+        memcpy(car_mesh.groups[i].name, r.p, 8);
+        car_mesh.groups[i].name[7] = 0;
         r.p += 8;
-        mdl_g[i].role = (int)rd_u32(&r);
-        mdl_g[i].corner = (int)rd_u32(&r);
-        mdl_g[i].link = (int)rd_u32(&r);
-        mdl_g[i].first = rd_u32(&r);
-        mdl_g[i].count = rd_u32(&r);
+        car_mesh.groups[i].role = (int)rd_u32(&r);
+        car_mesh.groups[i].corner = (int)rd_u32(&r);
+        car_mesh.groups[i].link = (int)rd_u32(&r);
+        car_mesh.groups[i].first = rd_u32(&r);
+        car_mesh.groups[i].count = rd_u32(&r);
     }
 
     uint32_t nv = rd_u32(&r);
@@ -179,17 +179,18 @@ static int car_model_load(void)
     }
 
     for (uint32_t i = 0; i < ng; i++) {
-        if (mdl_g[i].first + mdl_g[i].count > nv || mdl_g[i].corner > 3 || mdl_g[i].link > 1) {
+        if (car_mesh.groups[i].first + car_mesh.groups[i].count > nv || car_mesh.groups[i].corner > 3 ||
+            car_mesh.groups[i].link > 1) {
             fprintf(stderr, "stuntcar.scm: bad group\n");
             SDL_free(buf);
             return 0;
         }
     }
 
-    mdl_v = malloc((size_t)nv * sizeof(Vtx));
-    memcpy(mdl_v, r.p, (size_t)nv * sizeof(Vtx));
-    mdl_nv = (int)nv;
-    mdl_ng = (int)ng;
+    car_mesh.vertices = malloc((size_t)nv * sizeof(Vtx));
+    memcpy(car_mesh.vertices, r.p, (size_t)nv * sizeof(Vtx));
+    car_mesh.vertex_count = (int)nv;
+    car_mesh.group_count = (int)ng;
     SDL_free(buf);
     return 1;
 }

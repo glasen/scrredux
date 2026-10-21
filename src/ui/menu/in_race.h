@@ -148,18 +148,18 @@ static void draw_replay_hud(void)
 {
     char b[128], t[16];
     hud_text(8, 8, "REPLAY", 2, 0xFF5050);
-    hud_text(8, 26, rp_head.title, 1, 0xE8E8EC);
+    hud_text(8, 26, replay.head.title, 1, 0xE8E8EC);
     fmt_time(t, sizeof t, racetime);
-    int lp = cars[0].lap < 1 ? 1 : SDL_min(cars[0].lap, rp_head.laps);
-    snprintf(b, sizeof b, "LAP %d/%d  %s", lp, rp_head.laps, t);
+    int lp = cars[0].lap < 1 ? 1 : SDL_min(cars[0].lap, replay.head.laps);
+    snprintf(b, sizeof b, "LAP %d/%d  %s", lp, replay.head.laps, t);
     hud_text(HW - 8 - text_width(b, 1.5f), 8, b, 1.5f, 0xFFE060);
-    snprintf(b, sizeof b, "CAMERA: %s%s", RC_NAME[rp_cam],
-             rp_paused      ? "   PAUSED"
-             : rp_speed > 1 ? "   >>"
-             : rp_speed < 0 ? "   <<"
-                            : "");
+    snprintf(b, sizeof b, "CAMERA: %s%s", RC_NAME[replay.camera],
+             replay.paused      ? "   PAUSED"
+             : replay.speed > 1 ? "   >>"
+             : replay.speed < 0 ? "   <<"
+                                : "");
     hud_text(HW - 8 - text_width(b, 1), 26, b, 1, 0xE8E8EC);
-    float W = HW - 40, f = nrp > 1 ? rp_t / ((nrp - 1) / (float)RP_HZ) : 0;
+    float W = HW - 40, f = replay.count > 1 ? replay.time / ((replay.count - 1) / (float)RP_HZ) : 0;
     hud_rect(20, VH - 22, W, 4, 0x303036);
     hud_rect(20, VH - 22, W * f, 4, 0xF08C1C);
     hud_text_c(VH - 12, "C CAMERA   SPACE PAUSE   LEFT/RIGHT REWIND/FAST   HOME START   ESC BACK", 1, 0xC0C0C8);
@@ -170,31 +170,31 @@ static void replay_key(SDL_Keycode k)
     if (k == SDLK_ESCAPE) {
         replay_leave();
     } else if (k == SDLK_C) {
-        rp_cam = (rp_cam + 1) % NRC;
+        replay.camera = (replay.camera + 1) % NRC;
 
-        if (!cars[1].active && (rp_cam == RC_OPP_COCKPIT || rp_cam == RC_OPP_CHASE)) {
-            rp_cam = RC_COCKPIT;
+        if (!cars[1].active && (replay.camera == RC_OPP_COCKPIT || replay.camera == RC_OPP_CHASE)) {
+            replay.camera = RC_COCKPIT;
         }
 
         update_camera(&cars[cam_car()], 0.016f, 1);
     } else if (k == SDLK_SPACE) {
-        rp_paused = !rp_paused;
+        replay.paused = !replay.paused;
     } else if (k == SDLK_HOME) {
-        rp_t = 0;
+        replay.time = 0;
         npart = 0;
     }
 }
 
 static void replay_hold(void) /* held keys: wind back or forward at four times the speed */
 {
-    rp_speed = 1;
+    replay.speed = 1;
     PadIn pi = pad_read();
 
     if ((keys && keys[SDL_SCANCODE_RIGHT]) || pi.rt) {
-        rp_speed = 4;
+        replay.speed = 4;
     }
 
     if ((keys && keys[SDL_SCANCODE_LEFT]) || pi.lf) {
-        rp_speed = -4;
+        replay.speed = -4;
     }
 }

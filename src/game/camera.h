@@ -53,7 +53,8 @@ static void update_camera(const Car *c, float dt, int snap)
               m[8] * EYE.x + m[9] * EYE.y + m[10] * EYE.z + m[11]);
         cam.fwd = vnorm(vsub(cam_f, vmul(cam_u, 0.04f)));
         up_ref = cam_u;
-    } else if (state == ST_REPLAY && rp_cam == RC_TV) { /* replay: trackside cameras, each takes the car past it */
+    } else if (state == ST_REPLAY &&
+               replay.camera == RC_TV) { /* replay: trackside cameras, each takes the car past it */
         int k = ((c->seg / 120 + 1) * 120) % nseg;
         const Seg *s = &seg[k];
         V3 Rh = vnorm(V(s->R.x, 0, s->R.z));

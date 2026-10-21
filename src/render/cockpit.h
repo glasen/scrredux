@@ -81,7 +81,7 @@ static void gauge(V3 C, float r, float frac, int nmaj, const char **lab, const c
 static void draw_crack(const Car *c)
 {
     const V3 C0 = V(0, 1.0405f, -0.2627f), T = vnorm(V(0, 0.028f, -0.012f)), N = V(0, -0.38f, -0.92f);
-    const float X1 = fminf(0.60f, 0.93f * (C0.z - EYE.z) * rtw / rth / FOCAL_Y), X0 = -X1;
+    const float X1 = fminf(0.60f, 0.93f * (C0.z - EYE.z) * gpu.target_w / gpu.target_h / FOCAL_Y), X0 = -X1;
     uint32_t r = 12345;
     float s = 0, x = X0, xe = X0 + (X1 - X0) * clampf(c->damage / 100.f, 0, 1);
     V3 prev = vadd(vadd(C0, V(x, 0, 0)), vmul(N, 0.0015f)), w = vmul(T, 0.0021f), lo = vmul(T, -0.0026f),

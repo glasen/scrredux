@@ -86,7 +86,7 @@ static void snd_tick(float dt)
     sfx.grounded_cooldown -= dt;
     sfx.hitcar_cooldown -= dt;
     if (state == ST_MENU || state == ST_VIEW || state == ST_EDIT || state == ST_PREVIEW ||
-        (state == ST_REPLAY && (rp_paused || rp_speed != 1))) {
+        (state == ST_REPLAY && (replay.paused || replay.speed != 1))) {
         if (!quiet) {
             snd_stop_all();
         }

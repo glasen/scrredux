@@ -2,7 +2,6 @@
 #pragma once
 
 /* ------------------------------------------------------------- HUD (2D) */
-static int mdl_nv;
 static float HW = 480;      /* HUD virtual width (height is VH) */
 static uint8_t hud_a = 255; /* opacity of what the HUD draws next */
 

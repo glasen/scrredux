@@ -14,8 +14,8 @@ static float drawn_tyre_gap(const Car *c, int g)
         return 1e9f;
     }
 
-    for (uint32_t k = 0; k < mdl_g[g].count; k++) {
-        const Vtx *v = &mdl_v[mdl_g[g].first + k];
+    for (uint32_t k = 0; k < car_mesh.groups[g].count; k++) {
+        const Vtx *v = &car_mesh.vertices[car_mesh.groups[g].first + k];
         Q q;
         track_query(m34_apply(m, V(v->x, v->y, v->z)), c->seg, 12, &q);
 
@@ -29,12 +29,12 @@ static float drawn_tyre_gap(const Car *c, int g)
 
 static void wheel_gap_sample(const Car *c)
 {
-    for (int g = 0; g < mdl_ng; g++) {
-        if (mdl_g[g].role != R_WHEEL) {
+    for (int g = 0; g < car_mesh.group_count; g++) {
+        if (car_mesh.groups[g].role != R_WHEEL) {
             continue;
         }
 
-        int i = mdl_g[g].corner;
+        int i = car_mesh.groups[g].corner;
 
         if (c->suspension_len[i] >= WLF[i] - 1e-3f || car_out(c)) {
             continue; /* wheel in the air */
@@ -182,8 +182,8 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
     if (getenv("SCR_WHEELS")) { /* debug: how far each drawn tyre's lowest point sits above the road */
         const Car *c = &cars[0];
 
-        for (int g = 0; g < mdl_ng; g++) {
-            if (mdl_g[g].role != R_WHEEL) {
+        for (int g = 0; g < car_mesh.group_count; g++) {
+            if (car_mesh.groups[g].role != R_WHEEL) {
                 continue;
             }
 
@@ -195,8 +195,8 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
 
             float lo = 1e9f;
 
-            for (uint32_t k = 0; k < mdl_g[g].count; k++) {
-                const Vtx *v = &mdl_v[mdl_g[g].first + k];
+            for (uint32_t k = 0; k < car_mesh.groups[g].count; k++) {
+                const Vtx *v = &car_mesh.vertices[car_mesh.groups[g].first + k];
                 Q q;
                 track_query(m34_apply(m, V(v->x, v->y, v->z)), c->seg, 12, &q);
 
@@ -205,12 +205,12 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
                 }
             }
 
-            int i = mdl_g[g].corner;
+            int i = car_mesh.groups[g].corner;
             Q hq;
             track_query(car_hub(c, i), c->seg, 12, &hq);
             printf(
                 "WHEEL %s: drawn tyre bottom %+.3f m above road, physics hub %.3f above road (radius %.3f), wl %.3f\n",
-                mdl_g[g].name, lo, hq.h, WRAD[i], c->suspension_len[i]);
+                car_mesh.groups[g].name, lo, hq.h, WRAD[i], c->suspension_len[i]);
         }
     }
 

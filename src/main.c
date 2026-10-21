@@ -38,6 +38,7 @@
 #include "core/matrix34.h"
 #include "core/vertex_buffer.h"
 #include "core/shapes.h"
+#include "render/car_mesh.h"
 #include "physics/params.h"
 #include "physics/steering.h"
 
@@ -313,9 +314,9 @@ int main(int argc, char **argv)
                     running = 0;
                 }
             } else if (e.type == SDL_EVENT_KEY_DOWN &&
-                       (!e.key.repeat ||
-                        ((state == ST_EDIT || (state == ST_MENU && menu.screen != MS_CTL)) && e.key.key != SDLK_RETURN &&
-                         e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C && e.key.key != SDLK_T))) {
+                       (!e.key.repeat || ((state == ST_EDIT || (state == ST_MENU && menu.screen != MS_CTL)) &&
+                                          e.key.key != SDLK_RETURN && e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C &&
+                                          e.key.key != SDLK_T))) {
                 if (!handle_key(e.key.key, e.key.mod)) {
                     running = 0;
                 }

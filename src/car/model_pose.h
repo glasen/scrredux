@@ -55,7 +55,7 @@ static void corner_pose(const Car *c, int i, const float body[12], CornerPose *P
 /* world rows of model group g on car c; 0 = do not draw */
 static int car_group_rows(const Car *c, int g, float m[12], int first_person, int hide)
 {
-    const MGroup *G = &mdl_g[g];
+    const MGroup *G = &car_mesh.groups[g];
     float body[12];
     car_body_rows(c, body);
 

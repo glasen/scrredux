@@ -19,9 +19,9 @@ static int rp_read_head(int slot, RHead *h)
 /* the race just driven goes over the oldest of the five */
 static void rec_save(const char *title, const char *n0, const char *n1, int result)
 {
-    rec_on = 0;
+    recorder.active = 0;
 
-    if (nrec < RP_HZ * 5) {
+    if (recorder.count < RP_HZ * 5) {
         return;
     }
 
@@ -55,7 +55,7 @@ static void rec_save(const char *title, const char *n0, const char *n1, int resu
     h.magic = RP_MAGIC;
     h.ver = 1;
     h.seq = seq + 1;
-    h.nt = (uint32_t)nrec;
+    h.nt = (uint32_t)recorder.count;
     h.result = result;
     h.laps = laps;
     snprintf(h.title, sizeof h.title, "%s", title);
@@ -77,7 +77,7 @@ static void rec_save(const char *title, const char *n0, const char *n1, int resu
     }
 
     fwrite(&h, sizeof h, 1, f);
-    fwrite(rec, sizeof *rec, (size_t)nrec, f);
+    fwrite(recorder.ticks, sizeof *recorder.ticks, (size_t)recorder.count, f);
     fclose(f);
 }
 
@@ -91,14 +91,14 @@ static int rp_load(int slot)
         return -1;
     }
 
-    int ok =
-        fread(&rp_head, sizeof rp_head, 1, f) == 1 && rp_head.magic == RP_MAGIC && rp_head.ver == 1 && rp_head.nt > 0;
+    int ok = fread(&replay.head, sizeof replay.head, 1, f) == 1 && replay.head.magic == RP_MAGIC &&
+             replay.head.ver == 1 && replay.head.nt > 0;
 
     if (ok) {
-        free(rpb);
-        rpb = malloc((size_t)rp_head.nt * sizeof *rpb);
-        ok = rpb && fread(rpb, sizeof *rpb, rp_head.nt, f) == rp_head.nt;
-        nrp = ok ? (int)rp_head.nt : 0;
+        free(replay.ticks);
+        replay.ticks = malloc((size_t)replay.head.nt * sizeof *replay.ticks);
+        ok = replay.ticks && fread(replay.ticks, sizeof *replay.ticks, replay.head.nt, f) == replay.head.nt;
+        replay.count = ok ? (int)replay.head.nt : 0;
     }
 
     fclose(f);

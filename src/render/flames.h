@@ -36,8 +36,8 @@ static void draw_flames(void)
                 V3 lp = FLAMEP[(sd + 1) / 2 * 4 + k], ld = FLAMED[(sd + 1) / 2 * 4 + k];
                 V3 base = vadd(T, vadd(vmul(R, lp.x), vadd(vmul(U, lp.y), vmul(F, lp.z))));
                 V3 D = vnorm(vadd(vmul(R, ld.x), vadd(vmul(U, ld.y), vmul(F, ld.z)))); /* out of the pipe */
-                float rnd = (float)(hash2(frame_no * 13 + ci * 7 + k + (sd + 1) * 5, 99) & 1023) / 1023.f;
-                float rn2 = (float)(hash2(frame_no * 7 + ci * 11 + k * 3 + (sd + 1) * 2, 17) & 1023) / 1023.f;
+                float rnd = (float)(hash2(gpu.frame_no * 13 + ci * 7 + k + (sd + 1) * 5, 99) & 1023) / 1023.f;
+                float rn2 = (float)(hash2(gpu.frame_no * 7 + ci * 11 + k * 3 + (sd + 1) * 2, 17) & 1023) / 1023.f;
                 float fs = ci == fp_car() ? 0.75f : 1.f; /* smaller when seen from the driver's eye */
                 float h = fs * (0.07f + 0.40f * c->flame) * (0.55f + 0.9f * rnd),
                       w = fs * 0.058f * (0.85f + 0.25f * c->flame); /* base just fills the 12 cm zoomie mouth */

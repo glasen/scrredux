@@ -26,7 +26,7 @@ static void ed_return(void);
 
 static void race_leave(int retired)
 {
-    rec_on = rec_on && race_mode == RM_SEASON;
+    recorder.active = recorder.active && race_mode == RM_SEASON;
 
     if (race_mode == RM_SEASON) {
         Race *r = player_race();
@@ -78,7 +78,7 @@ static void replay_start(int i)
         return;
     }
 
-    RHead *h = &rp_head;
+    RHead *h = &replay.head;
 
     if (h->td.orig >= 0 && h->td.orig < SCR_NTRACKS) {
         if (cur_track != h->td.orig) {
@@ -96,10 +96,10 @@ static void replay_start(int i)
 
     laps = h->laps;
     npart = 0;
-    rp_t = 0;
-    rp_speed = 1;
-    rp_paused = 0;
-    rp_cam = RC_COCKPIT;
+    replay.time = 0;
+    replay.speed = 1;
+    replay.paused = 0;
+    replay.camera = RC_COCKPIT;
     paused = 0;
     state = ST_REPLAY;
     rp_step(0);
@@ -108,9 +108,9 @@ static void replay_start(int i)
 
 static void replay_leave(void)
 {
-    free(rpb);
-    rpb = NULL;
-    nrp = 0;
+    free(replay.ticks);
+    replay.ticks = NULL;
+    replay.count = 0;
     sel_track = sel_track < ntrk ? sel_track : 0;
     menu_go(MS_REPLAYS);
 }

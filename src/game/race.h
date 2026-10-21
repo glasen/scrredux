@@ -51,7 +51,7 @@ static void start_race(void)
     if (race_mode == RM_SEASON) {
         rec_begin();
     } else {
-        rec_on = 0;
+        recorder.active = 0;
     }
 }
 
@@ -72,26 +72,26 @@ static void lap_done(Car *c)
 /* replay: the recorded cars at the replay clock; crashes smoke again */
 static void rp_step(float dt)
 {
-    if (!rp_paused) {
-        rp_t += dt * rp_speed;
+    if (!replay.paused) {
+        replay.time += dt * replay.speed;
     }
 
-    float tmax = (nrp - 1) / (float)RP_HZ;
-    rp_t = clampf(rp_t, 0, tmax);
-    int k = (int)(rp_t * RP_HZ);
+    float tmax = (replay.count - 1) / (float)RP_HZ;
+    replay.time = clampf(replay.time, 0, tmax);
+    int k = (int)(replay.time * RP_HZ);
 
-    if (k >= nrp) {
-        k = nrp - 1;
+    if (k >= replay.count) {
+        k = replay.count - 1;
     }
 
-    const RTick *t = &rpb[k];
+    const RTick *t = &replay.ticks[k];
 
     for (int i = 0; i < 2; i++) {
         Car *c = &cars[i];
         float was = c->crash_time;
         rec_unpack(c, &t->c[i]);
 
-        if (rp_paused || rp_speed < 0) {
+        if (replay.paused || replay.speed < 0) {
             continue;
         }
 
@@ -99,8 +99,8 @@ static void rp_step(float dt)
             dust_burst(c->x, 36, 4.f);
         }
 
-        if (c->crash_time > 0 && (rp_smoke[i] -= dt) <= 0) {
-            rp_smoke[i] = 0.12f;
+        if (c->crash_time > 0 && (replay.smoke[i] -= dt) <= 0) {
+            replay.smoke[i] = 0.12f;
             crash_smoke(c);
         }
     }
@@ -116,7 +116,7 @@ static int fp_car(void)
     }
 
     if (state == ST_REPLAY) {
-        return rp_cam == RC_COCKPIT ? 0 : rp_cam == RC_OPP_COCKPIT && cars[1].active ? 1 : -1;
+        return replay.camera == RC_COCKPIT ? 0 : replay.camera == RC_OPP_COCKPIT && cars[1].active ? 1 : -1;
     }
 
     return -1;
@@ -124,5 +124,7 @@ static int fp_car(void)
 
 static int cam_car(void)
 {
-    return state == ST_REPLAY && (rp_cam == RC_OPP_COCKPIT || rp_cam == RC_OPP_CHASE) && cars[1].active ? 1 : 0;
+    return state == ST_REPLAY && (replay.camera == RC_OPP_COCKPIT || replay.camera == RC_OPP_CHASE) && cars[1].active
+               ? 1
+               : 0;
 }

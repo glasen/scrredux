@@ -7,7 +7,7 @@ static void draw_hud_base(void)
 
     if (state == ST_VIEW) {
         hud_text_c(8, "MODEL VIEWER", 3, 0xFFD030);
-        snprintf(b, sizeof b, "%d TRIANGLES PER CAR", mdl_nv / 3);
+        snprintf(b, sizeof b, "%d TRIANGLES PER CAR", car_mesh.vertex_count / 3);
         hud_text_c(36, b, 1, 0xE0E0E0);
         hud_text_c(226, "DRAG/ARROWS: ROTATE   WHEEL/+-: ZOOM   HOME: RESET   SPACE: TURNTABLE", 1, 0xE0E0E0);
         snprintf(b, sizeof b, "N: PAINT  Z: ANIMATION %s  F: FLAMES %s  R: CAGE %s  E: INTAKE %s  ESC: QUIT",

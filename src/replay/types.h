@@ -30,18 +30,31 @@ typedef struct {
 enum { RC_COCKPIT, RC_CHASE, RC_TV, RC_OPP_COCKPIT, RC_OPP_CHASE, NRC };
 
 static const char *const RC_NAME[NRC] = {"COCKPIT", "CHASE", "TV", "OPPONENT COCKPIT", "OPPONENT CHASE"};
-static RTick *rec;
-static int nrec, caprec, rec_on, rec_k;
-static RHead rp_head;
-static RTick *rpb;
-static int nrp, rp_cam, rp_paused;
-static float rp_t, rp_speed = 1, rp_smoke[2];
+
+/* recording a race */
+static struct {
+    RTick *ticks;
+    int count, capacity;
+    int active;
+    int sample; /* physics ticks since the start: every 4th is kept (60 Hz) */
+} recorder;
+
+/* playing one back */
+static struct {
+    RHead head;
+    RTick *ticks;
+    int count;
+    int camera; /* RC_* */
+    int paused;
+    float time, speed;
+    float smoke[2]; /* crash smoke timers of the two cars */
+} replay = {.speed = 1};
 
 static void rec_begin(void)
 {
-    nrec = 0;
-    rec_k = 0;
-    rec_on = 1;
+    recorder.count = 0;
+    recorder.sample = 0;
+    recorder.active = 1;
 }
 
 static void rec_pack(const Car *c, RCar *r)
@@ -102,16 +115,17 @@ static void rec_unpack(Car *c, const RCar *r)
 /* every 4th physics tick of a race, and for a few seconds after it */
 static void rec_tick(void)
 {
-    if (!rec_on || (rec_k++ & 3) || (state == ST_DONE && state_t > 5.f) || nrec >= RP_HZ * 60 * 30) {
+    if (!recorder.active || (recorder.sample++ & 3) || (state == ST_DONE && state_t > 5.f) ||
+        recorder.count >= RP_HZ * 60 * 30) {
         return;
     }
 
-    if (nrec == caprec) {
-        caprec = caprec ? caprec * 2 : 8192;
-        rec = realloc(rec, (size_t)caprec * sizeof *rec);
+    if (recorder.count == recorder.capacity) {
+        recorder.capacity = recorder.capacity ? recorder.capacity * 2 : 8192;
+        recorder.ticks = realloc(recorder.ticks, (size_t)recorder.capacity * sizeof *recorder.ticks);
     }
 
-    RTick *t = &rec[nrec++];
+    RTick *t = &recorder.ticks[recorder.count++];
     t->t = racetime;
     t->st = state;
 

@@ -7,7 +7,7 @@ static void build_frame(void)
     hb.n = 0;
     cur = &db;
     draw_sky();
-    sky_n = db.n;
+    gpu.sky_vertices = db.n;
 
     if (state == ST_VIEW) { /* plain checkered floor for the model viewer */
         for (int iz = -16; iz < 16; iz++) {
@@ -25,7 +25,7 @@ static void build_frame(void)
         }
     }
 
-    dyn_shadow_end = db.n; /* everything after this (flames, effects) is unlit and casts no shadow */
+    gpu.dynamic_shadow_end = db.n; /* everything after this (flames, effects) is unlit and casts no shadow */
     if (state == ST_EDIT) {
         ed_draw3d(); /* the builder's ghost pieces, selection and handles */
     }
@@ -33,8 +33,8 @@ static void build_frame(void)
     draw_cockpit();
     draw_flames();
     draw_parts();
-    frame_no++;
-    HW = VH * (float)rtw / (float)rth;
+    gpu.frame_no++;
+    HW = VH * (float)gpu.target_w / (float)gpu.target_h;
 
     if (!getenv("SCR_NOHUD")) {
         draw_hud();
@@ -48,7 +48,7 @@ static const float IDENT_ROWS[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
 /* draw both cars from the shared model; the body leans, the wheels follow the suspension */
 static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int shadow, float *fu)
 {
-    SDL_GPUBufferBinding mb = {vbuf_m, 0};
+    SDL_GPUBufferBinding mb = {car_mesh.vbuf, 0};
     SDL_BindGPUVertexBuffers(rp, 0, &mb, 1);
 
     for (int ci = 0; ci < 2; ci++) {
@@ -69,7 +69,7 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
             SDL_PushGPUFragmentUniformData(cmd, 0, fu, 56 * 4);
         }
 
-        for (int g = 0; g < mdl_ng; g++) { /* the engine top stays visible in the cockpit */
+        for (int g = 0; g < car_mesh.group_count; g++) { /* the engine top stays visible in the cockpit */
             float m[12];
 
             if (!car_group_rows(c, g, m, first_person, vw ? view_hide : 0)) {
@@ -77,7 +77,7 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
             }
 
             SDL_PushGPUVertexUniformData(cmd, 1, m, sizeof m);
-            SDL_DrawGPUPrimitives(rp, mdl_g[g].count, 1, mdl_g[g].first, 0);
+            SDL_DrawGPUPrimitives(rp, car_mesh.groups[g].count, 1, car_mesh.groups[g].first, 0);
         }
     }
 
