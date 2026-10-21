@@ -21,7 +21,7 @@ Everything is under `src/`, one directory per concern:
 | Directory | Contents |
 | --- | --- |
 | `main.c` | The include list (dependency order) and `main()` |
-| `config/` | Constants by topic: `render`, `physics`, `track`, `palette`, `game`, `audio`, `ui` |
+| `config/` | Constants by topic: `render`, `physics` (tyres, suspension, contacts, crashes), `ai`, `camera`, `track`, `palette`, `game`, `audio`, `ui` |
 | `core/` | Vectors and maths, colour mixing, 3x4 matrices, vertex buffers and triangle emitters, boxes and cylinders |
 | `physics/` | Tunable vehicle parameters and their defaults (`phys_defaults()`), steering, contacts, `car_step()` |
 | `car/` | The `Car` type, damage, placement, pose; `model_*` load `models/stuntcar.scm` and pose suspension and steering |

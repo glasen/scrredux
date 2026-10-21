@@ -31,6 +31,8 @@
 #include "config/game.h"
 #include "config/audio.h"
 #include "config/ui.h"
+#include "config/ai.h"
+#include "config/camera.h"
 
 /* ---- Core: maths, colour, vertex buffers, shapes ---- */
 #include "core/math.h"

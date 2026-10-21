@@ -4,7 +4,9 @@
 /* ---- AI jump planning: a scratch car tries each jump with the real physics, so bounces off a far face count too ---- */
 static float bend_hold(int k)
 {
-    return seg[k].curv > 0.004f ? sqrtf(fmaxf(RUN_ALAT + GRAV * seg[k].bin, 3.f) / seg[k].curv) : 1e9f;
+    return seg[k].curv > JUMP_BEND_MIN_CURVATURE
+               ? sqrtf(fmaxf(RUN_ALAT + GRAV * seg[k].bin, AI_MIN_BEND_ACCEL) / seg[k].curv)
+               : 1e9f;
 }
 
 /* fastest the AI goes at seg k, q segments before a take-off: bends near the limit, no flying off a crest on the way */
@@ -12,8 +14,8 @@ static float run_cap(int k, int q)
 {
     float v = bend_hold(k);
 
-    if (q > (int)(40 / ds) && seg[k].vcurv > 0.002f) {
-        v = fminf(v, 1.2f * sqrtf(GRAV / seg[k].vcurv));
+    if (q > (int)(JUMP_CREST_FREE_DISTANCE / ds) && seg[k].vcurv > JUMP_CREST_MIN_CURVATURE) {
+        v = fminf(v, JUMP_CREST_FACTOR * sqrtf(GRAV / seg[k].vcurv));
     }
 
     return v;
@@ -25,7 +27,7 @@ static void run_up(int L, float vt, int b)
 {
     int inb = 0;
 
-    for (int q = 0; q < (int)(700 / ds); q++) {
+    for (int q = 0; q < (int)(JUMP_RUNUP_LENGTH / ds); q++) {
         int si = (L - q + nseg) % nseg;
 
         if (seg[si].steep) {
@@ -37,7 +39,7 @@ static void run_up(int L, float vt, int b)
         } else if (inb) {
             break;
         }
-        float v = fminf(run_cap(si, q), sqrtf(vt * vt + 2 * 6.f * q * ds));
+        float v = fminf(run_cap(si, q), sqrtf(vt * vt + 2 * JUMP_RUNUP_BRAKING * q * ds));
 
         if (v >= jump_v[si]) {
             jump_v[si] = v;
@@ -57,12 +59,12 @@ static float scratch_run(int s, float v0, int mark, int goal, float lane, int bo
     car_place(&t, s, lane, v0);
     int dm = (mark - s + nseg) % nseg, dg = (goal - s + nseg) % nseg, seen = 0;
 
-    for (int i = 0; i < 240 * 20; i++) {
+    for (int i = 0; i < 240 * JUMP_SCRATCH_SECONDS; i++) {
         ai_drive(&t, lane, skill_vcap[1], skill_alat[1], NULL);
         car_step(&t, 1.f / 240);
 
         if (t.crash_time > 0 || t.crane_time > 0 || t.wrecked) {
-            return 1000;
+            return JUMP_FAILED;
         }
 
         float d = t.progress - s;
@@ -80,7 +82,7 @@ static float scratch_run(int s, float v0, int mark, int goal, float lane, int bo
         }
     }
 
-    return 1000;
+    return JUMP_FAILED;
 }
 
 /* the scratch car over a chain of n jumps (lips l[], -1 = no run-up of its own), all taken off at v, from seg s
@@ -131,7 +133,7 @@ static int find_jumps(int *lip, int *end, int *back)
                 e = (e + 1) % nseg;
             }
 
-            int m = 1, lim = (int)(300 / ds);
+            int m = 1, lim = (int)(JUMP_LANDING_SEARCH / ds);
 
             while (m < lim && !seg[(e + m) % nseg].steep) {
                 m++;
@@ -148,7 +150,7 @@ static int find_jumps(int *lip, int *end, int *back)
                 hi = fmaxf(hi, seg[(e + q) % nseg].c.y);
             }
 
-            if (!(hi < ylip - 2.f || lo > ylip + 2.f)) {
+            if (!(hi < ylip - JUMP_LANDING_TOLERANCE || lo > ylip + JUMP_LANDING_TOLERANCE)) {
                 break;
             }
 
@@ -157,7 +159,7 @@ static int find_jumps(int *lip, int *end, int *back)
 
         int bk = 0;
 
-        while (bk < (int)(700 / ds) && !seg[(l - bk - 1 + nseg) % nseg].steep) {
+        while (bk < (int)(JUMP_RUNUP_LENGTH / ds) && !seg[(l - bk - 1 + nseg) % nseg].steep) {
             bk++;
         }
 
@@ -176,25 +178,29 @@ static int find_jumps(int *lip, int *end, int *back)
  * gets over it */
 static int best_takeoff_speed(const int *l, int n, int ts, int goal, const float vr[2], float *best)
 {
-    enum { V0 = 20, NV = 92 };
+    enum { V0 = JUMP_MIN_SPEED, NV = JUMP_SPEED_COUNT };
 
     float score[NV], lowest = 1e9f;
     int chosen = 0;
-    int vtop = (int)fminf(vr[1] + 3, V0 + NV - 1);
+    int vtop = (int)fminf(vr[1] + JUMP_REACH_MARGIN, V0 + NV - 1);
 
     for (int v = V0; v < V0 + NV; v++) {
-        score[v - V0] = v <= vtop ? try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 0, NULL) : 1000;
+        score[v - V0] =
+            v <= vtop ? try_jumps(l, n, (float)v, 1, ts, JUMP_SCRATCH_START_SPEED, goal, 0, NULL) : JUMP_FAILED;
     }
 
     for (int pass = 0; pass < 2; pass++) { /* pass 1: the best few again from either side of the deck */
         for (int v = V0 + 1; v < V0 + NV - 1; v++) {
             float r = fmaxf(score[v - V0], fmaxf(score[v - V0 - 1], score[v - V0 + 1]));
-            float cost = r + (v > vr[0] - 1.5f ? 3.f : 0.f) + 20.f * fmaxf(v - (vr[1] - 1.5f), 0.f) -
-                         0.05f * v; /* clean, then fast */
+            float cost = r + (v > vr[0] - JUMP_SAFE_MARGIN ? JUMP_BOOST_PENALTY : 0.f) +
+                         JUMP_OVERREACH_PENALTY * fmaxf(v - (vr[1] - JUMP_SAFE_MARGIN), 0.f) -
+                         JUMP_SPEED_BONUS * v; /* clean, then fast */
 
-            if (pass == 1 && cost < lowest + 5.f) {
+            if (pass == 1 && cost < lowest + JUMP_RETRY_WINDOW) {
                 for (int side = -1; side <= 1; side += 2) {
-                    cost += fmaxf(0.f, try_jumps(l, n, (float)v, 1, ts, 200.f, goal, 2.f * side, NULL) - r);
+                    cost += fmaxf(0.f, try_jumps(l, n, (float)v, 1, ts, JUMP_SCRATCH_START_SPEED, goal,
+                                                 JUMP_SIDE_OFFSET * side, NULL) -
+                                           r);
                 }
 
                 if (cost < lowest) {
@@ -221,7 +227,7 @@ static void plan_jumps(void)
 
     nj = find_jumps(lip, end, back);
 
-    const int CHAIN = (int)(150 / ds);
+    const int CHAIN = (int)(JUMP_CHAIN_GAP / ds);
     int h0 = 0;
 
     while (h0 < nj && back[h0] < CHAIN) {
@@ -245,12 +251,12 @@ static void plan_jumps(void)
         int *l = cl[nc], n = 0, J = j % nj;
 
         do {
-            l[n++] = back[j % nj] < (int)(40 / ds) ? -1 : lip[j % nj];
+            l[n++] = back[j % nj] < (int)(JUMP_NO_RUNUP_GAP / ds) ? -1 : lip[j % nj];
             j++;
         } while (j < h0 + nj && back[j % nj] < CHAIN);
         int L = lip[J], E = end[(j - 1) % nj], bk = back[J], nxt = lip[j % nj];
-        int dgo = (int)(200 / ds), dnx = (nxt - E + nseg) % nseg - (int)(30 / ds);
-        int goal = (E + (nj > 1 && dnx < dgo ? (dnx > 2 ? dnx : 2) : dgo)) % nseg;
+        int dgo = (int)(JUMP_GOAL_DISTANCE / ds), dnx = (nxt - E + nseg) % nseg - (int)(JUMP_NEXT_MARGIN / ds);
+        int goal = (E + (nj > 1 && dnx < dgo ? (dnx > JUMP_MIN_GOAL_GAP ? dnx : JUMP_MIN_GOAL_GAP) : dgo)) % nseg;
         /* fastest take-off: flat out from the start of the last bend, the bend at the limit */
         int q0 = 0;
 
@@ -262,22 +268,23 @@ static void plan_jumps(void)
             q0++;
         }
 
-        q0 = q0 + (int)(10 / ds) < bk ? q0 + (int)(10 / ds) : bk - (int)(5 / ds);
+        q0 = q0 + (int)(JUMP_RUNUP_TRIM / ds) < bk ? q0 + (int)(JUMP_RUNUP_TRIM / ds)
+                                                   : bk - (int)(JUMP_RUNUP_EARLY / ds);
         int rs = (L - q0 + nseg) % nseg;
         float vr[2] = {0, 0};
 
         for (int b = 0; b < 2; b++) {
-            try_jumps(l, 1, 200.f, b, rs, 55.f, L, 0, &vr[b]);
+            try_jumps(l, 1, JUMP_SCRATCH_START_SPEED, b, rs, JUMP_LIP_RUN_START_SPEED, L, 0, &vr[b]);
         }
 
         float best;
-        int ts = (L - (bk < CHAIN ? bk - (int)(5 / ds) : CHAIN) + nseg) % nseg;
+        int ts = (L - (bk < CHAIN ? bk - (int)(JUMP_RUNUP_EARLY / ds) : CHAIN) + nseg) % nseg;
         int bv = best_takeoff_speed(l, n, ts, goal, vr, &best);
         cv[nc] = (float)bv;
-        cb[nc] = bv > vr[0] - 1.5f;
+        cb[nc] = bv > vr[0] - JUMP_SAFE_MARGIN;
         cn[nc] = n;
 
-        if (nbadj < NJ && best >= 500.f) {
+        if (nbadj < NJ && best >= JUMP_UNREACHABLE) {
             badj[nbadj++] = L; /* no take-off speed gets over it: the builder says so */
         }
 
