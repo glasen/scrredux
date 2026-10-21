@@ -9,10 +9,12 @@ static void draw_sky(void)
     enum { NB = 9, NS = 32 };
 
     const float R = 5800;
+
     for (int b = 0; b < NB; b++) {
         float t = b < 2 ? 0.f : clampf((el[b] - 2) / 62.f, 0, 1);
         uint32_t col = mixcol(FOGCOL, ZENCOL, sqrtf(t));
         float e0 = el[b] * PI_F / 180, e1 = el[b + 1] * PI_F / 180;
+
         for (int s = 0; s < NS; s++) {
             float a0 = s * 2 * PI_F / NS, a1 = (s + 1) * 2 * PI_F / NS;
             V3 p00 = vadd(cam.pos, V(R * cosf(e0) * cosf(a0), R * sinf(e0), R * cosf(e0) * sinf(a0)));
@@ -23,6 +25,7 @@ static void draw_sky(void)
             draw_tri_unlit(p00, p11, p10, col);
         }
     }
+
     /* fair-weather cumulus behind the mountains: clusters of flat puffs facing the camera, white with grey undersides.
      * Every puff sits on its own depth layer (neighbouring clusters too), so overlapping puffs never z-fight. */
     for (int c = 0; c < 22; c++) {
@@ -32,6 +35,7 @@ static void draw_sky(void)
         V3 dir = V(cosf(el) * cosf(az), sinf(el), cosf(el) * sinf(az));
         V3 rt = vnorm(V(-sinf(az), 0, cosf(az))), up = UP;
         float w = (160 + (float)((h >> 16) & 255) * 1.2f) * 1.4f;
+
         for (int k = 0; k < 7; k++) {
             uint32_t hk = hash2(c * 13 + k, 77);
             float dist = 5000.f + (c & 1) * 300.f - k * 40.f, sc = dist / 5000.f;
@@ -40,6 +44,7 @@ static void draw_sky(void)
                   oy = (float)((hk >> 8) & 255) / 255.f * w * 0.28f * sc;
             float r = w * sc * (0.30f + 0.25f * (float)((hk >> 16) & 255) / 255.f);
             V3 pc = vadd(ctr, vadd(vmul(rt, ox), vmul(up, oy)));
+
             for (int q = 0; q < 10; q++) {
                 float a0 = q * 2 * PI_F / 10, a1 = (q + 1) * 2 * PI_F / 10;
                 V3 e0 = vadd(pc, vadd(vmul(rt, cosf(a0) * r), vmul(up, fmaxf(sinf(a0), -0.35f) * r * 0.62f)));

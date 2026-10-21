@@ -7,14 +7,17 @@ static SDL_GPUShader *load_shader(const char *file, SDL_GPUShaderStage stage, in
     size_t sz;
     snprintf(path, sizeof path, "%s%s", SDL_GetBasePath(), file);
     void *code = SDL_LoadFile(path, &sz);
+
     if (!code) {
         snprintf(path, sizeof path, "%s", file);
         code = SDL_LoadFile(path, &sz);
     }
+
     if (!code) {
         fprintf(stderr, "cannot load shader %s (run make)\n", file);
         return NULL;
     }
+
     SDL_GPUShaderCreateInfo ci;
     SDL_zero(ci);
     ci.code_size = sz;
@@ -26,9 +29,11 @@ static SDL_GPUShader *load_shader(const char *file, SDL_GPUShaderStage stage, in
     ci.num_samplers = nsamp;
     SDL_GPUShader *s = SDL_CreateGPUShader(dev, &ci);
     SDL_free(code);
+
     if (!s) {
         fprintf(stderr, "shader %s: %s\n", file, SDL_GetError());
     }
+
     return s;
 }
 
@@ -37,15 +42,19 @@ static int ensure_targets(int w, int h)
     if (w == rtw && h == rth && rt_res) {
         return 0;
     }
+
     if (rt_ms) {
         SDL_ReleaseGPUTexture(dev, rt_ms);
     }
+
     if (rt_res) {
         SDL_ReleaseGPUTexture(dev, rt_res);
     }
+
     if (depthtex) {
         SDL_ReleaseGPUTexture(dev, depthtex);
     }
+
     rt_ms = rt_res = depthtex = NULL;
     SDL_GPUTextureCreateInfo ti;
     SDL_zero(ti);
@@ -59,23 +68,29 @@ static int ensure_targets(int w, int h)
     ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     rt_res = SDL_CreateGPUTexture(dev, &ti);
     ti.sample_count = msaa > 1 ? SDL_GPU_SAMPLECOUNT_4 : SDL_GPU_SAMPLECOUNT_1;
+
     if (msaa > 1) {
         ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
         rt_ms = SDL_CreateGPUTexture(dev, &ti);
     }
+
     ti.format = dfmt;
     ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
     depthtex = SDL_CreateGPUTexture(dev, &ti);
+
     if (!rt_res || !depthtex || (msaa > 1 && !rt_ms)) {
         fprintf(stderr, "targets: %s\n", SDL_GetError());
         return -1;
     }
+
     rtw = w;
     rth = h;
+
     if ((size_t)w * h * 4 != dlsize) {
         if (dlbuf) {
             SDL_ReleaseGPUTransferBuffer(dev, dlbuf);
         }
+
         SDL_GPUTransferBufferCreateInfo tb;
         SDL_zero(tb);
         tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
@@ -83,29 +98,36 @@ static int ensure_targets(int w, int h)
         dlbuf = SDL_CreateGPUTransferBuffer(dev, &tb);
         dlsize = (size_t)w * h * 4;
     }
+
     return 0;
 }
 
 static int gpu_init(void)
 {
     dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL);
+
     if (!dev) {
         fprintf(stderr, "GPU device: %s\n", SDL_GetError());
         return -1;
     }
+
     if (win) {
         if (!SDL_ClaimWindowForGPUDevice(dev, win)) {
             fprintf(stderr, "claim: %s\n", SDL_GetError());
             return -1;
         }
+
         SDL_SetGPUSwapchainParameters(dev, win, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
     }
+
     SDL_GPUShader *vs = load_shader("game.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 2, 0);
     SDL_GPUShader *fs = load_shader("game.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
     SDL_GPUShader *hfs = load_shader("hud.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+
     if (!vs || !fs || !hfs) {
         return -1;
     }
+
     dfmt = SDL_GPUTextureSupportsFormat(dev, SDL_GPU_TEXTUREFORMAT_D32_FLOAT, SDL_GPU_TEXTURETYPE_2D,
                                         SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)
                ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT
@@ -130,6 +152,7 @@ static int gpu_init(void)
     SDL_GPUColorTargetDescription ctd;
     SDL_zero(ctd);
     ctd.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
     for (int pass = 0; pass < 2; pass++) {
         SDL_GPUGraphicsPipelineCreateInfo pi;
         SDL_zero(pi);
@@ -159,10 +182,12 @@ static int gpu_init(void)
         pi.target_info.depth_stencil_format = dfmt;
         pi.target_info.has_depth_stencil_target = true;
         SDL_GPUGraphicsPipeline *pl = SDL_CreateGPUGraphicsPipeline(dev, &pi);
+
         if (!pl) {
             fprintf(stderr, "pipeline: %s\n", SDL_GetError());
             return -1;
         }
+
         if (pass == 0) {
             pipe3 = pl;
         } else {
@@ -172,9 +197,11 @@ static int gpu_init(void)
     /* shadow mapping: two cascades (D16), depth-only pipeline, comparison sampler */
     {
         SDL_GPUShader *sfs = load_shader("shadow.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+
         if (!sfs) {
             return -1;
         }
+
         SDL_GPUGraphicsPipelineCreateInfo pi;
         SDL_zero(pi);
         pi.vertex_shader = vs;
@@ -197,10 +224,12 @@ static int gpu_init(void)
         pi.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
         pi.target_info.has_depth_stencil_target = true;
         pipe_sh = SDL_CreateGPUGraphicsPipeline(dev, &pi);
+
         if (!pipe_sh) {
             fprintf(stderr, "shadow pipeline: %s\n", SDL_GetError());
             return -1;
         }
+
         for (int i = 0; i < 2; i++) {
             SDL_GPUTextureCreateInfo ti;
             SDL_zero(ti);
@@ -212,11 +241,13 @@ static int gpu_init(void)
             ti.num_levels = 1;
             ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
             sh_tex[i] = SDL_CreateGPUTexture(dev, &ti);
+
             if (!sh_tex[i]) {
                 fprintf(stderr, "shadow texture: %s\n", SDL_GetError());
                 return -1;
             }
         }
+
         SDL_GPUSamplerCreateInfo sc;
         SDL_zero(sc);
         sc.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -226,6 +257,7 @@ static int gpu_init(void)
         sc.enable_compare = true;
         sc.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
         sh_samp = SDL_CreateGPUSampler(dev, &sc);
+
         if (!sh_samp) {
             fprintf(stderr, "shadow sampler: %s\n", SDL_GetError());
             return -1;
@@ -241,10 +273,12 @@ static int gpu_init(void)
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = (DYN_CAP + HUD_CAP) * sizeof(Vtx);
     tbuf = SDL_CreateGPUTransferBuffer(dev, &tb);
+
     if (!vbuf_d || !tbuf) {
         fprintf(stderr, "buffers: %s\n", SDL_GetError());
         return -1;
     }
+
     {
         SDL_GPUBufferCreateInfo mb;
         SDL_zero(mb);

@@ -5,10 +5,12 @@
 static void flame_cone(V3 base, V3 ax1, V3 ax2, V3 apex, float r, uint32_t col)
 {
     V3 ring[6];
+
     for (int k = 0; k < 6; k++) {
         float an = k * PI_F / 3;
         ring[k] = vadd(base, vadd(vmul(ax1, cosf(an) * r), vmul(ax2, sinf(an) * r)));
     }
+
     for (int k = 0; k < 6; k++) {
         draw_tri_unlit(ring[k], ring[(k + 1) % 6], apex, col);
     }
@@ -19,13 +21,16 @@ static void draw_flames(void)
 {
     for (int ci = 0; ci < 2; ci++) {
         const Car *c = &cars[ci];
+
         if (!c->active || c->flame < 0.03f) {
             continue;
         }
+
         float m[12];
         car_body_rows(c, m);
         V3 R = V(m[0], m[4], m[8]), U = V(m[1], m[5], m[9]), F = V(m[2], m[6], m[10]), T = V(m[3], m[7], m[11]);
         float spd = clampf(vdot(c->v, c->F) / 40.f, 0, 1.5f);
+
         for (int sd = -1; sd <= 1; sd += 2) {
             for (int k = 0; k < 4; k++) {
                 V3 lp = FLAMEP[(sd + 1) / 2 * 4 + k], ld = FLAMED[(sd + 1) / 2 * 4 + k];

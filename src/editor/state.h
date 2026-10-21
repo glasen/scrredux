@@ -45,6 +45,7 @@ static int ed_hi(void)
 static void ed_select(int p, int extend)
 {
     ed_sel = p;
+
     if (!extend) {
         ed_anchor = p;
     }

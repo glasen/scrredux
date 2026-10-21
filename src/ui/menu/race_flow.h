@@ -4,15 +4,19 @@
 static void season_race(void)
 {
     Race *r = player_race();
+
     if (!r) {
         return;
     }
+
     race_mode = RM_SEASON;
     set_opponent(r->a == PLAYER ? r->b : r->a);
     sel_track = r->track;
+
     if (cur_track != sel_track) {
         build_track(sel_track);
     }
+
     cockpit = 1;
     preview_start();
 }
@@ -23,12 +27,15 @@ static void ed_return(void);
 static void race_leave(int retired)
 {
     rec_on = rec_on && race_mode == RM_SEASON;
+
     if (race_mode == RM_SEASON) {
         Race *r = player_race();
+
         if (!r) {
             menu_go(MS_SEASON);
             return;
         }
+
         const Car *p = &cars[0], *o = &cars[1];
         float tp = !retired && p->finished && !p->wrecked ? p->ftime : -1,
               to = !retired && o->finished && !o->wrecked ? o->ftime : -1;
@@ -40,12 +47,15 @@ static void race_leave(int retired)
         last_retired = retired;
         last_lap_rec = last_race_rec = 0;
         const char *tn = trk[r->track].name;
+
         if (tp > 0) {
             last_race_rec |= hof_race(tn, player_name(), tp);
         }
+
         if (to > 0) {
             hof_race(tn, drv_name(opp_drv), to);
         }
+
         sea.nholes = p->nholes;
         char title[64];
         snprintf(title, sizeof title, "%s - %s v %s - %s", tn, player_name(), drv_name(opp_drv),
@@ -67,7 +77,9 @@ static void replay_start(int i)
         menu_note("That replay cannot be read");
         return;
     }
+
     RHead *h = &rp_head;
+
     if (h->td.orig >= 0 && h->td.orig < SCR_NTRACKS) {
         if (cur_track != h->td.orig) {
             build_track(h->td.orig);
@@ -77,9 +89,11 @@ static void replay_start(int i)
         build_track(ED_SLOT);
     }
     memset(cars, 0, sizeof cars);
+
     for (int k = 0; k < 2; k++) {
         cars[k].col = h->col[k];
     }
+
     laps = h->laps;
     npart = 0;
     rp_t = 0;

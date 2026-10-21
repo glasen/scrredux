@@ -18,9 +18,11 @@ static void start_view(void)
     c->F = V(0, 0, 1);
     c->U = V(0, 1, 0);
     c->R = vcross(c->F, c->U);
+
     for (int i = 0; i < 4; i++) {
         c->wl[i] = WREST[i];
     }
+
     state = ST_VIEW;
 }
 

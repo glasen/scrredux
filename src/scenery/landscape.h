@@ -10,6 +10,7 @@ static void big_top(float x, float z, float R, float wallh, float peak)
     enum { NS = 28 };
 
     float g = ground_h(x, z);
+
     for (int k = 0; k < NS; k++) {
         float a0 = k * 2 * PI_F / NS, a1 = (k + 1) * 2 * PI_F / NS;
         V3 b0 = V(x + cosf(a0) * R, g, z + sinf(a0) * R), b1 = V(x + cosf(a1) * R, g, z + sinf(a1) * R);
@@ -21,6 +22,7 @@ static void big_top(float x, float z, float R, float wallh, float peak)
         draw_quad(t0, t1, e1, e0, c);
         draw_tri(e0, e1, V(x, g + peak, z), c); /* roof gore */
     }
+
     cyl(V(x, g + peak - 0.5f, z), V(x, g + peak + 7, z), 0.25f, 0.18f, 6, 0xD8D8E0, 3);
     draw_tri(V(x, g + peak + 7, z), V(x, g + peak + 5.4f, z), V(x + 4.5f, g + peak + 6.2f, z), 0xF0D020);
 }
@@ -45,15 +47,19 @@ static void build_mountains(void)
         float an = (m + frand() * 0.8f) * 2 * PI_F / NM;
         float dist = rad + 1500 + frand() * 1300;
         float R = 500 + frand() * 600, H = 110 + frand() * 240;
+
         if (m % 5 == 0) {
             H *= 1.5f;
         }
+
         float px = cx + cosf(an) * dist, pz = cz + sinf(an) * dist;
         static V3 pt[NR + 1][NA];
         float hz[NR + 1];
+
         for (int r = 0; r <= NR; r++) {
             float t = (float)r / NR;
             hz[r] = H * (1.f - powf(1.f - t, 1.7f));
+
             for (int a = 0; a < NA; a++) {
                 float aa = 2 * PI_F * a / NA;
                 float j1 = (float)(hash2(m * 131 + r, a * 17 + 3) & 255) / 255.f,
@@ -63,6 +69,7 @@ static void build_mountains(void)
                 pt[r][a] = V(px + cosf(aa) * rr, hh, pz + sinf(aa) * rr);
             }
         }
+
         for (int r = 0; r < NR; r++) {
             for (int a = 0; a < NA; a++) {
                 int a2 = (a + 1) % NA;

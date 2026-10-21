@@ -105,13 +105,16 @@ static void rec_tick(void)
     if (!rec_on || (rec_k++ & 3) || (state == ST_DONE && state_t > 5.f) || nrec >= RP_HZ * 60 * 30) {
         return;
     }
+
     if (nrec == caprec) {
         caprec = caprec ? caprec * 2 : 8192;
         rec = realloc(rec, (size_t)caprec * sizeof *rec);
     }
+
     RTick *t = &rec[nrec++];
     t->t = racetime;
     t->st = state;
+
     for (int i = 0; i < 2; i++) {
         rec_pack(&cars[i], &t->c[i]);
     }

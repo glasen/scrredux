@@ -6,8 +6,10 @@ static void menu_text(const char *t)
     if (ms != MS_NAME) {
         return;
     }
+
     for (; *t; t++) {
         size_t n = strlen(name_buf);
+
         if (n + 1 < sizeof name_buf && (strchr(NAME_CHARS, *t) || (*t == ' ' && n))) {
             name_buf[n] = *t;
             name_buf[n + 1] = 0;
@@ -20,34 +22,44 @@ static int menu_key(SDL_Keycode k)
 {
     if (ask_quit) {
         int a = ask_answer(k);
+
         if (a >= 0) {
             ask_quit = 0;
         }
+
         return a != 1;
     }
+
     int *sel = &msel[ms], up = k == SDLK_UP, dn = k == SDLK_DOWN, ok = k == SDLK_RETURN || k == SDLK_KP_ENTER,
         back = k == SDLK_ESCAPE;
     const char *it[8];
+
     switch (ms) {
         case MS_MAIN: {
             int n = main_items(it);
+
             if (k >= SDLK_1 && k < SDLK_1 + n) {
                 *sel = (int)(k - SDLK_1);
                 ok = 1;
             }
+
             if (up) {
                 *sel = (*sel + n - 1) % n;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % n;
             }
+
             if (back) {
                 ask_quit = 1;
                 break;
             }
+
             if (!ok) {
                 break;
             }
+
             if (*sel == 0) {
                 hof_load();
                 menu_go(MS_HOF);
@@ -70,53 +82,67 @@ static int menu_key(SDL_Keycode k)
             if (up) {
                 ms_scroll = ms_scroll > 0 ? ms_scroll - 1 : 0;
             }
+
             if (dn && ms_scroll + 15 < ntrk) {
                 ms_scroll++;
             }
+
             if (back || ok) {
                 menu_go(MS_MAIN);
             }
+
             break;
         case MS_PRACTICE:
             if (up) {
                 *sel = (*sel + ntrk - 1) % ntrk;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % ntrk;
             }
+
             if (back) {
                 menu_go(MS_MAIN);
             }
+
             if (ok) {
                 sel_track = *sel;
+
                 if (cur_track != sel_track) {
                     build_track(sel_track);
                 }
+
                 race_mode = RM_PRACTICE;
                 cockpit = 1;
                 preview_start();
             }
+
             break;
         case MS_NAME:
             if (k == SDLK_BACKSPACE && name_buf[0]) {
                 name_buf[strlen(name_buf) - 1] = 0;
             }
+
             if (back) {
                 menu_go(MS_MAIN);
             }
+
             if (ok && name_buf[0]) {
                 season_new(name_buf);
                 season_write(0);
                 menu_go(MS_SEASON);
             }
+
             break;
         case MS_SEASON:
             if (up || dn) {
                 *sel ^= 1;
             }
+
             if (!player_race()) {
                 *sel = 1;
             }
+
             if (back || (ok && *sel == 1)) {
                 menu_go(MS_MAIN);
             } else if (ok) {
@@ -127,23 +153,28 @@ static int menu_key(SDL_Keycode k)
             if (ok || back) {
                 menu_go(MS_SEASON);
             }
+
             break;
         case MS_END:
             if (ok || back) {
                 menu_go(MS_SEASON);
             }
+
             break;
         case MS_LSR:
             if (k >= SDLK_1 && k <= SDLK_4) {
                 *sel = (int)(k - SDLK_1);
                 ok = 1;
             }
+
             if (up) {
                 *sel = (*sel + 3) % 4;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % 4;
             }
+
             if (back || (ok && *sel == 3)) {
                 menu_go(MS_MAIN);
             } else if (ok && *sel == 2) {
@@ -153,6 +184,7 @@ static int menu_key(SDL_Keycode k)
                     menu_note("No season to save yet");
                     break;
                 }
+
                 ms_save = *sel == 1;
                 msel[MS_SLOTS] = 0;
                 menu_go(MS_SLOTS);
@@ -162,9 +194,11 @@ static int menu_key(SDL_Keycode k)
             if (up) {
                 *sel = (*sel + 4) % 5;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % 5;
             }
+
             if (back || (ok && *sel == 4)) {
                 menu_go(MS_LSR);
             } else if (ok && ms_save) {
@@ -181,12 +215,15 @@ static int menu_key(SDL_Keycode k)
             break;
         case MS_REPLAYS: {
             int n = nrp_list + 1;
+
             if (up) {
                 *sel = (*sel + n - 1) % n;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % n;
             }
+
             if (back || (ok && *sel == nrp_list)) {
                 menu_go(MS_LSR);
             } else if (ok) {
@@ -197,6 +234,7 @@ static int menu_key(SDL_Keycode k)
         case MS_CTL: {
             if (ct_wait) { /* the next key is the new one; P, R and F11 stay with pause, rescue and fullscreen */
                 SDL_Scancode sc = SDL_GetScancodeFromKey(k, NULL);
+
                 if (back) {
                     ct_wait = 0;
                 } else if (k == SDLK_P || k == SDLK_R || !sc) {
@@ -207,15 +245,19 @@ static int menu_key(SDL_Keycode k)
                 }
                 break;
             }
+
             if (up) {
                 *sel = (*sel + CT_ROWS - 1) % CT_ROWS;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % CT_ROWS;
             }
+
             if (k == SDLK_LEFT || k == SDLK_RIGHT) {
                 ct_col ^= 1;
             }
+
             if (back || (ok && *sel == NCT + 1)) {
                 menu_go(MS_OPT);
             } else if (ok && *sel == NCT) {
@@ -232,38 +274,47 @@ static int menu_key(SDL_Keycode k)
         }
         case MS_OPT: {
             int d = (k == SDLK_RIGHT) - (k == SDLK_LEFT);
+
             if (up) {
                 *sel = (*sel + NOP - 1) % NOP;
             }
+
             if (dn) {
                 *sel = (*sel + 1) % NOP;
             }
+
             if (back || (ok && *sel == OP_BACK)) {
                 menu_go(MS_MAIN);
                 break;
             }
+
             if (ok && *sel == OP_KEYS) {
                 msel[MS_CTL] = ct_col = 0;
                 menu_go(MS_CTL);
                 break;
             }
+
             if (*sel <= OP_FX && d) {
                 int *v = *sel == OP_ENG ? &opt.eng : &opt.fx;
                 *v = (int)clampf(*v + d * 10, 0, 100);
                 opt_apply();
                 opt_save();
+
                 if (*sel == OP_FX) {
                     snd_play(S_CHIME, 150, 40); /* hear the new level */
                 }
             }
+
             if (*sel == OP_FULL && (d || ok)) {
                 set_fullscreen(!opt.full);
             }
+
             if (*sel == OP_RUMBLE && (d || ok)) {
                 opt.rumble = !opt.rumble;
                 opt_save();
                 pad_rumble(0.5f, 250);
             }
+
             break;
         }
     }

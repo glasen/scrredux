@@ -5,10 +5,12 @@
 static void soft_shadow(float x, float y, float w, float h, float r)
 {
     hud_a = 22;
+
     for (int i = 1; i <= 6; i++) {
         float e = r * i / 6.f;
         hud_rect(x - e + r * 0.4f, y - e + r * 0.6f, w + 2 * e, h + 2 * e, 0x000000);
     }
+
     hud_a = 255;
 }
 
@@ -27,14 +29,17 @@ static void chq_border(float x0, float y0, float x1, float y1, float q)
 {
     int n = (int)roundf((x1 - x0) / q), m = (int)roundf((y1 - y0) / q);
     float w = (x1 - x0) / n, h = (y1 - y0) / m;
+
     for (int j = 0; j < m; j++) {
         hud_rect(x0, y0 + j * h, q, h, j & 1 ? 0xD8D8D8 : 0x0C0C0C);
         hud_rect(x1 - q, y0 + j * h, q, h, (n - 1 + j) & 1 ? 0xD8D8D8 : 0x0C0C0C);
     }
+
     for (int i = 0; i < n; i++) {
         hud_rect(x0 + i * w, y0, w, q, i & 1 ? 0xD8D8D8 : 0x0C0C0C);
         hud_rect(x0 + i * w, y1 - q, w, q, (i + m - 1) & 1 ? 0xD8D8D8 : 0x0C0C0C);
     }
+
     hud_rect(x0 + q, y0 + q, x1 - x0 - 2 * q, 1, 0xF4F4F4);
     hud_rect(x0 + q, y1 - q - 1, x1 - x0 - 2 * q, 1, 0xF4F4F4);
     hud_rect(x0 + q, y0 + q, 1, y1 - y0 - 2 * q, 0xF4F4F4);
@@ -86,22 +91,27 @@ static void draw_bar(float x, float y, float w, const char *s, int on)
     char b[96];
     float tx = x + 9 + h * 0.5f + 2, room = x + w - 6 - tx;
     snprintf(b, sizeof b, "%s", s);
+
     if (text_width(b, sc) > room) { /* too long: cut short, never smaller */
         for (size_t n = strlen(b); n > 0 && text_width(b, sc) > room;) {
             b[--n] = 0;
+
             if (n >= 3) {
                 memcpy(b + n - 3, "...", 3);
             }
         }
     }
+
     soft_shadow(x, y, w, h, 2);
     hud_rect(x - 1, y - 1, w + 2, h + 2, on ? 0xFFE0A0 : 0x0A2426);
+
     if (on) {
         plate(x, y, w, h, 0xFFC860, 0xE07818);
     } else {
         plate(x, y, w, h, 0x1C2224, 0x0A0C0E);
     }
     float fx = x + 4, q = h / 4.f;
+
     if (on) {
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < 2; i++) {
@@ -109,12 +119,14 @@ static void draw_bar(float x, float y, float w, const char *s, int on)
             }
         }
     }
+
     hud_text_raw(tx, y + (h - 7 * sc) / 2, b, sc, on ? 0x201008 : 0xE8ECEC);
 }
 
 static void draw_bars(float y, const char *const *it, int n, int sel)
 {
     float W = panel_w() - 30, x = (HW - W) / 2;
+
     for (int i = 0; i < n; i++) {
         draw_bar(x, y + i * BAR_GAP, W, it[i], i == sel);
     }
@@ -136,6 +148,7 @@ static void ask_box(const char *sub)
     chq_border(x, y, x + w, y + h, 4);
     plate(x + 5, y + 5, w - 10, h - 10, 0x2A2C30, 0x060608);
     hud_text_c(y + 13, "REALLY EXIT?  Y/N", 2, 0xFFFFFF);
+
     if (sub) {
         hud_text_c(y + 35, sub, 1, 0xFF8070);
     }

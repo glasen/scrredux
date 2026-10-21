@@ -25,23 +25,30 @@ static void gpu_render(const char *shot_path)
     if (win) {
         int w, h;
         SDL_GetWindowSizeInPixels(win, &w, &h);
+
         if (w < 64) {
             w = 64;
         }
+
         if (h < 64) {
             h = 64;
         }
+
         if (ensure_targets(w, h)) {
             return;
         }
     }
+
     if (state == ST_PREVIEW || state == ST_MENU) {
         preview_cam((float)rtw / rth);
     }
+
     upload_static();
+
     if (state == ST_EDIT) {
         upload_track();
     }
+
     build_frame();
     int nd = db.n > DYN_CAP ? DYN_CAP : db.n, nhud = hb.n > HUD_CAP ? HUD_CAP : hb.n;
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(dev);
@@ -60,15 +67,18 @@ static void gpu_render(const char *shot_path)
     float Ef = 0.5f * sqrtf(sq(ar_x1 - ar_x0) + sq(ar_z1 - ar_z0)) + 80.f, Df = 0.7f * Ef + 160.f, En = 70.f,
           Dn = 250.f;
     int vwm = state == ST_VIEW;
+
     if (vwm) {
         En = 6.f;
         Dn = 24.f;
         Ef = 24.f;
         Df = 50.f;
     }
+
     make_cascade(vwm ? V(0, 0.6f, 0) : vadd(cam.pos, vmul(cam.fwd, 40.f)), En, Dn, SH_SIZE[0], nrows);
     make_cascade(vwm ? V(0, 0, 0) : V((ar_x0 + ar_x1) / 2, 20.f, (ar_z0 + ar_z1) / 2), Ef, Df, SH_SIZE[1], frows);
     int sn = vwm ? 0 : static_n, tn = state == ST_EDIT ? tkb_n : 0;
+
     for (int ci = 0; ci < 2; ci++) {
         SDL_GPUDepthStencilTargetInfo sd;
         SDL_zero(sd);
@@ -82,22 +92,27 @@ static void gpu_render(const char *shot_path)
         SDL_BindGPUGraphicsPipeline(sp_, pipe_sh);
         SDL_PushGPUVertexUniformData(cmd, 0, ci ? frows : nrows, 64);
         SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+
         if (sn) {
             SDL_GPUBufferBinding b0 = {vbuf_s, 0};
             SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
             SDL_DrawGPUPrimitives(sp_, sn, 1, 0, 0);
         }
+
         if (tn) {
             SDL_GPUBufferBinding b0 = {vbuf_t, 0};
             SDL_BindGPUVertexBuffers(sp_, 0, &b0, 1);
             SDL_DrawGPUPrimitives(sp_, tn, 1, 0, 0);
         }
+
         int she = dyn_shadow_end < nd ? dyn_shadow_end : nd;
+
         if (she > sky_n) {
             SDL_GPUBufferBinding b1 = {vbuf_d, (Uint32)((size_t)sky_n * sizeof(Vtx))};
             SDL_BindGPUVertexBuffers(sp_, 0, &b1, 1);
             SDL_DrawGPUPrimitives(sp_, she - sky_n, 1, 0, 0);
         }
+
         draw_cars_gpu(sp_, cmd, 1, NULL);
         SDL_EndGPURenderPass(sp_);
     }
@@ -107,6 +122,7 @@ static void gpu_render(const char *shot_path)
     SDL_zero(ct);
     ct.texture = msaa > 1 ? rt_ms : rt_res;
     ct.load_op = SDL_GPU_LOADOP_CLEAR;
+
     if (msaa > 1) {
         ct.resolve_texture = rt_res;
         ct.store_op = SDL_GPU_STOREOP_RESOLVE;
@@ -160,22 +176,28 @@ static void gpu_render(const char *shot_path)
     SDL_BindGPUFragmentSamplers(rp_, 0, shb, 2);
     SDL_PushGPUVertexUniformData(cmd, 0, pr, sizeof pr);
     SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
+
     if (sn) {
         SDL_GPUBufferBinding vbs = {vbuf_s, 0};
         SDL_BindGPUVertexBuffers(rp_, 0, &vbs, 1);
         SDL_DrawGPUPrimitives(rp_, sn, 1, 0, 0);
     }
+
     if (tn) {
         SDL_GPUBufferBinding vbt = {vbuf_t, 0};
         SDL_BindGPUVertexBuffers(rp_, 0, &vbt, 1);
         SDL_DrawGPUPrimitives(rp_, tn, 1, 0, 0);
     }
+
     SDL_GPUBufferBinding vbd_ = {vbuf_d, 0};
     SDL_BindGPUVertexBuffers(rp_, 0, &vbd_, 1);
+
     if (nd) {
         SDL_DrawGPUPrimitives(rp_, nd, 1, 0, 0);
     }
+
     draw_cars_gpu(rp_, cmd, 0, fu);
+
     if (nhud) {
         SDL_BindGPUGraphicsPipeline(rp_, pipe2);
         SDL_PushGPUVertexUniformData(cmd, 0, ident, sizeof ident);
@@ -184,6 +206,7 @@ static void gpu_render(const char *shot_path)
         SDL_BindGPUVertexBuffers(rp_, 0, &vb2, 1);
         SDL_DrawGPUPrimitives(rp_, nhud, 1, 0, 0);
     }
+
     SDL_EndGPURenderPass(rp_);
 
     if (shot_path) {
@@ -209,8 +232,10 @@ static void gpu_render(const char *shot_path)
         SDL_UnmapGPUTransferBuffer(dev, dlbuf);
         return;
     }
+
     SDL_GPUTexture *sw = NULL;
     Uint32 w = 0, h = 0;
+
     if (SDL_WaitAndAcquireGPUSwapchainTexture(cmd, win, &sw, &w, &h) && sw) {
         SDL_GPUBlitInfo bl;
         SDL_zero(bl);
@@ -224,5 +249,6 @@ static void gpu_render(const char *shot_path)
         bl.filter = SDL_GPU_FILTER_NEAREST;
         SDL_BlitGPUTexture(cmd, &bl);
     }
+
     SDL_SubmitGPUCommandBuffer(cmd);
 }

@@ -14,8 +14,10 @@ static void corner_pose(const Car *c, int i, const float body[12], CornerPose *P
     float dz = clampf(WREST[i] - c->wl[i] - vdot(c->U, vsub(lm, pm)), -WDROOP[i], WBUMP[i]);
     const float *t = g->tab;
     int lo = 0, hi = g->ntab - 1;
+
     while (hi - lo > 1) {
         int mid = (lo + hi) / 2;
+
         if (t[mid * 3] <= dz) {
             lo = mid;
         } else {
@@ -30,6 +32,7 @@ static void corner_pose(const Car *c, int i, const float body[12], CornerPose *P
     V3 L = m34_apply(P->la, g->L0), U = m34_apply(P->ua, g->U0);
     m34_aim(g->L0, vsub(g->U0, g->L0), vsub(U, L), 0, P->up); /* upright follows its two ball joints */
     m34_shift(P->up, vsub(L, g->L0));
+
     if (i < 2) {
         float st[12];
         m34_rot(KP_P[i], KP_A[i], c->delta, st);
@@ -55,6 +58,7 @@ static int car_group_rows(const Car *c, int g, float m[12], int first_person, in
     const MGroup *G = &mdl_g[g];
     float body[12];
     car_body_rows(c, body);
+
     switch (G->role) {
         case R_BODY:
             memcpy(m, body, sizeof body);
@@ -63,18 +67,21 @@ static int car_group_rows(const Car *c, int g, float m[12], int first_person, in
             if (hide & 4) {
                 return 0;
             }
+
             memcpy(m, body, sizeof body);
             return 1;
         case R_ROOF:
             if (hide & 1) {
                 return 0;
             }
+
             memcpy(m, body, sizeof body);
             return 1;
         case R_DRIVER:
             if (first_person) {
                 return 0;
             }
+
             memcpy(m, body, sizeof body);
             return 1;
         case R_STWHL: {
@@ -84,12 +91,15 @@ static int car_group_rows(const Car *c, int g, float m[12], int first_person, in
             return 1;
         }
     }
+
     if (G->corner < 0) {
         return 0;
     }
+
     CornerPose P;
     corner_pose(c, G->corner, body, &P);
     const float *l;
+
     switch (G->role) {
         case R_WHEEL:
             l = P.wheel;
@@ -116,11 +126,13 @@ static int car_group_rows(const Car *c, int g, float m[12], int first_person, in
             if (G->link < 0 || G->link >= rig[G->corner].nlink) {
                 return 0;
             }
+
             l = P.link[G->link];
             break;
         default:
             return 0;
     }
+
     m34_mul(body, l, m);
     return 1;
 }

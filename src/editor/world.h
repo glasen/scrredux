@@ -12,6 +12,7 @@ static void piece_world(const TPiece *pc, int p, int i, V3 o[2])
 {
     int a[2][2];
     pc_xs(pc, i, a);
+
     for (int e = 0; e < 2; e++) {
         int h = p < 0 ? ed_endh[e] : i < pc_ns(pc) ? pc->h[e][i] : *joint_ptr(p + 1, e);
         o[e] = V(-(a[e][0] - 8 * 2048) * SCR_U, ed_wy(h), (a[e][1] - 8 * 2048) * SCR_U);
@@ -28,6 +29,7 @@ static V3 piece_mid(const TPiece *pc, int p)
 static V3 joint_world(int j)
 {
     V3 o[2];
+
     if (j < ed.np) {
         piece_world(&ed.p[j], j, 0, o);
     } else {
@@ -42,14 +44,17 @@ static int ed_ghosts(Move *mv)
     if (!ed.np || ed_closed()) {
         return 0;
     }
+
     int e[2][2], cl, n = 0;
     open_end(e);
     Move all[8];
     int na = moves(e, all);
+
     for (int k = 0; k < na; k++) {
         if (move_ok(&all[k], &cl)) {
             mv[n++] = all[k];
         }
     }
+
     return n;
 }

@@ -11,12 +11,14 @@ static V3 m34_apply(const float m[12], V3 p)
 static void m34_mul(const float a[12], const float b[12], float o[12]) /* o = a after b */
 {
     float r[12];
+
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 4; j++) {
             r[i * 4 + j] =
                 a[i * 4] * b[j] + a[i * 4 + 1] * b[4 + j] + a[i * 4 + 2] * b[8 + j] + (j == 3 ? a[i * 4 + 3] : 0);
         }
     }
+
     memcpy(o, r, sizeof r);
 }
 
@@ -27,6 +29,7 @@ static void m34_set3(float m[12], const float R[9], V3 p) /* linear part R about
         m[i * 4 + 1] = R[i * 3 + 1];
         m[i * 4 + 2] = R[i * 3 + 2];
     }
+
     V3 q = V(R[0] * p.x + R[1] * p.y + R[2] * p.z, R[3] * p.x + R[4] * p.y + R[5] * p.z,
              R[6] * p.x + R[7] * p.y + R[8] * p.z);
     m[3] = p.x - q.x;
@@ -56,23 +59,29 @@ static void m34_aim(V3 p, V3 d0, V3 d1, int stretch, float m[12])
 {
     V3 a = vnorm(d0), b = vnorm(d1), ax = vcross(a, b);
     float s = vlen(ax), R[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
     if (s > 1e-7f) {
         rot3(ax, atan2f(s, vdot(a, b)), R);
     }
+
     if (stretch) {
         float k = vlen(d1) / fmaxf(vlen(d0), 1e-6f) - 1, S[9], RS[9], av[3] = {a.x, a.y, a.z};
+
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 S[i * 3 + j] = (i == j) + k * av[i] * av[j];
             }
         }
+
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 RS[i * 3 + j] = R[i * 3] * S[j] + R[i * 3 + 1] * S[3 + j] + R[i * 3 + 2] * S[6 + j];
             }
         }
+
         memcpy(R, RS, sizeof R);
     }
+
     m34_set3(m, R, p);
 }
 

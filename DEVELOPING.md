@@ -179,3 +179,14 @@ screen each ghost is.
 | `SCR_NOHUD=1` | Hides the HUD (`--menu-frames`) |
 | `SCR_AUTO=1` | Autopilot drives (`--ui-shot`) |
 | `SCR_OVERVIEW=1` | Looks at the whole track from above (`--ui-shot`) |
+
+## Formatting
+
+Style is in `.clang-format` (braces on every `if`/`for`/`while`, 4 spaces, 120 columns). After editing, format in this order:
+
+```bash
+find src -name '*.[ch]' ! -name font_vec.h ! -name scr_tracks.h | xargs clang-format -i
+find src -name '*.[ch]' ! -name font_vec.h ! -name scr_tracks.h | xargs tools/space_blocks.py
+```
+
+`tools/space_blocks.py` adds the blank line before and after control blocks that clang-format cannot add.

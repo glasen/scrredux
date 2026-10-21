@@ -8,6 +8,7 @@ static void build_frame(void)
     cur = &db;
     draw_sky();
     sky_n = db.n;
+
     if (state == ST_VIEW) { /* plain checkered floor for the model viewer */
         for (int iz = -16; iz < 16; iz++) {
             for (int ix = -16; ix < 16; ix++) {
@@ -17,23 +18,28 @@ static void build_frame(void)
             }
         }
     }
+
     if (state != ST_VIEW && state != ST_EDIT) {
         for (int i = 0; i < 2; i++) {
             draw_crane(&cars[i]);
         }
     }
+
     dyn_shadow_end = db.n; /* everything after this (flames, effects) is unlit and casts no shadow */
     if (state == ST_EDIT) {
         ed_draw3d(); /* the builder's ghost pieces, selection and handles */
     }
+
     draw_cockpit();
     draw_flames();
     draw_parts();
     frame_no++;
     HW = VH * (float)rtw / (float)rth;
+
     if (!getenv("SCR_NOHUD")) {
         draw_hud();
     }
+
     cur = &db;
 }
 
@@ -44,13 +50,17 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
 {
     SDL_GPUBufferBinding mb = {vbuf_m, 0};
     SDL_BindGPUVertexBuffers(rp, 0, &mb, 1);
+
     for (int ci = 0; ci < 2; ci++) {
         const Car *c = &cars[ci];
+
         if (!c->active) {
             continue;
         }
+
         int first_person = ci == fp_car();
         int vw = state == ST_VIEW;
+
         if (!shadow) {
             fu[52] = ((c->col >> 16) & 255) / 255.f * 1.25f;
             fu[53] = ((c->col >> 8) & 255) / 255.f * 1.25f;
@@ -58,14 +68,18 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
             fu[55] = 0;
             SDL_PushGPUFragmentUniformData(cmd, 0, fu, 56 * 4);
         }
+
         for (int g = 0; g < mdl_ng; g++) { /* the engine top stays visible in the cockpit */
             float m[12];
+
             if (!car_group_rows(c, g, m, first_person, vw ? view_hide : 0)) {
                 continue;
             }
+
             SDL_PushGPUVertexUniformData(cmd, 1, m, sizeof m);
             SDL_DrawGPUPrimitives(rp, mdl_g[g].count, 1, mdl_g[g].first, 0);
         }
     }
+
     SDL_PushGPUVertexUniformData(cmd, 1, IDENT_ROWS, sizeof IDENT_ROWS);
 }

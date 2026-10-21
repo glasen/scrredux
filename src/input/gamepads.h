@@ -12,7 +12,9 @@ static void pad_added(SDL_JoystickID id)
         if (gpad[i] || gjoy[i]) {
             continue;
         }
+
         gcen[i] = 0;
+
         if (SDL_IsGamepad(id)) {
             gpad[i] = SDL_OpenGamepad(id);
         } else {
@@ -29,6 +31,7 @@ static void pad_removed(SDL_JoystickID id)
             SDL_CloseGamepad(gpad[i]);
             gpad[i] = NULL;
         }
+
         if (gjoy[i] && SDL_GetJoystickID(gjoy[i]) == id) {
             SDL_CloseJoystick(gjoy[i]);
             gjoy[i] = NULL;
@@ -40,10 +43,12 @@ static const char *pad_name(void)
 {
     for (int i = 0; i < NPAD; i++) {
         const char *s = gpad[i] ? SDL_GetGamepadName(gpad[i]) : gjoy[i] ? SDL_GetJoystickName(gjoy[i]) : NULL;
+
         if (gpad[i] || gjoy[i]) {
             return s ? s : "Unnamed controller";
         }
     }
+
     return NULL;
 }
 
@@ -63,9 +68,11 @@ static float pad_dz(float v)
 static float pad_stick(int i, int a, Sint16 v)
 {
     float f = pad_axis(v);
+
     if (fabsf(f) < 0.2f) {
         gcen[i] |= 1 << a;
     }
+
     return gcen[i] & (1 << a) ? pad_dz(f) : 0;
 }
 
@@ -78,9 +85,11 @@ typedef struct {
 static PadIn pad_read(void)
 {
     PadIn r = {0};
+
     for (int i = 0; i < NPAD; i++) {
         float sx, sy, steer, gas, brk;
         int u, d, l, rr, bst;
+
         if (gpad[i]) { /* stick or D-pad steer, RT/A/up accelerate, LT/X/down brake, RB/B boost */
             SDL_Gamepad *g = gpad[i];
             sx = pad_stick(i, 0, SDL_GetGamepadAxis(g, SDL_GAMEPAD_AXIS_LEFTX));
@@ -113,9 +122,11 @@ static PadIn pad_read(void)
         } else {
             continue;
         }
+
         if (fabsf(steer) > fabsf(r.steer)) {
             r.steer = steer;
         }
+
         r.thr = fmaxf(r.thr, gas);
         r.brk = fmaxf(r.brk, brk);
         r.bst |= bst;
@@ -124,6 +135,7 @@ static PadIn pad_read(void)
         r.lf |= l || sx < -0.5f;
         r.rt |= rr || sx > 0.5f;
     }
+
     return r;
 }
 
@@ -133,7 +145,9 @@ static void pad_rumble(float strength, int ms)
     if (!opt.rumble || strength <= 0) {
         return;
     }
+
     Uint16 lo = (Uint16)(clampf(strength, 0, 1) * 0xFFFF), hi = (Uint16)(lo * 0.6f);
+
     for (int i = 0; i < NPAD; i++) {
         if (gpad[i]) {
             SDL_RumbleGamepad(gpad[i], lo, hi, (Uint32)ms);

@@ -20,9 +20,11 @@ static void spawn(int kind, V3 p, V3 v, float life, float size, uint32_t col)
     if (kind == P_SPARK) {
         stat_sparks++;
     }
+
     if (npart >= MAXPART) {
         return;
     }
+
     Part *q = &parts[npart++];
     q->p = p;
     q->v = v;
@@ -53,12 +55,15 @@ static void parts_step(float dt)
     for (int i = 0; i < npart; i++) {
         Part *q = &parts[i];
         q->t += dt;
+
         if (q->t >= q->life) {
             parts[i--] = parts[--npart];
             continue;
         }
+
         if (q->kind == P_SPARK) {
             q->v.y -= GRAV * dt;
+
             if (q->p.y < ground_h(q->p.x, q->p.z)) {
                 parts[i--] = parts[--npart];
                 continue;

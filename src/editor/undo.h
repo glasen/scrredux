@@ -39,16 +39,20 @@ static void ed_push(int kind)
     ed_dirty = 1;
     ed_gen++;
     ed_gen_t = 0;
+
     if (kind > 0 && kind == ed_tweak && ed_sel * 128 + ed_anchor == ed_tweak_sel) {
         return;
     }
+
     ed_tweak = kind;
     ed_tweak_sel = ed_sel * 128 + ed_anchor;
     snap_take(&ed_un[ed_un_top]);
     ed_un_top = (ed_un_top + 1) % UNDO_N;
+
     if (ed_un_n < UNDO_N) {
         ed_un_n++;
     }
+
     ed_re_n = 0;
 }
 
@@ -58,6 +62,7 @@ static void ed_undo(int redo)
         ed_note(redo ? "Nothing to redo" : "Nothing to undo");
         return;
     }
+
     if (redo) {
         snap_take(&ed_un[ed_un_top]);
         ed_un_top = (ed_un_top + 1) % UNDO_N;

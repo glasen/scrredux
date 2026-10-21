@@ -26,10 +26,13 @@ static void vb_reserve(VB *b, int add)
     if (b->n + add <= b->cap) {
         return;
     }
+
     int nc = b->cap ? b->cap : 1 << 16;
+
     while (nc < b->n + add) {
         nc *= 2;
     }
+
     b->v = realloc(b->v, (size_t)nc * sizeof(Vtx));
     b->cap = nc;
 }

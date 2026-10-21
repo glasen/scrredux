@@ -63,6 +63,7 @@ static void snd_load(void)
 {
     const char *base = SDL_GetBasePath();
     int missing = 0;
+
     for (int i = 0; i < NSND; i++) {
         char path[1024];
         SDL_AudioSpec sp;
@@ -70,14 +71,18 @@ static void snd_load(void)
         Uint32 len = 0;
         int cl = 0;
         snprintf(path, sizeof path, "%ssounds/%s.wav", base ? base : "", snd_file[i]);
+
         if (!SDL_LoadWAV(path, &sp, &buf, &len)) {
             snprintf(path, sizeof path, "sounds/%s.wav", snd_file[i]);
+
             if (!SDL_LoadWAV(path, &sp, &buf, &len)) {
                 missing++;
                 continue;
             }
         }
+
         SDL_AudioSpec fs = {SDL_AUDIO_F32, 1, sp.freq};
+
         if (SDL_ConvertAudioSamples(&sp, buf, (int)len, &fs, &cv, &cl) && cl >= 4) {
             smp[i].d = (float *)cv;
             smp[i].n = cl / 4;
@@ -86,6 +91,7 @@ static void snd_load(void)
         }
         SDL_free(buf);
     }
+
     if (missing) {
         fprintf(stderr, "sounds/: %d of %d samples missing, playing without them\n", missing, NSND);
     }
@@ -109,16 +115,21 @@ static void snd_play(int id, int period, int vol)
     Voice *o = &voice[id];
     int start = !o->on;
     snd_start(id, id, period, vol, 0);
+
     if (start) {
         o->pos = 0;
         o->on = smp[id].n > 0;
     }
+
     snd_unlock();
+
     if (start) {
         snd_count[id]++;
+
         if (snd_log < 0) {
             snd_log = getenv("SCR_SND") != NULL;
         }
+
         if (snd_log) {
             fprintf(stderr, "snd %-8s period %3d vol %2d\n", snd_file[id], period, vol);
         }
@@ -131,26 +142,33 @@ static void snd_engine(int k, int period)
     snd_lock();
     Voice *o = &voice[S_ENGINE];
     const Smp *s = &smp[S_ENGINE + k];
+
     if (o->on && o->s != s) {
         o->pos = ldexp(o->pos, (int)(o->s - s));
+
         if (s->n > 0) {
             o->pos = fmod(o->pos, s->n);
         }
     }
+
     if (!o->on) {
         o->pos = 0;
     }
+
     if (!snd_eng_run) {
         snd_eng_run = 1;
         snd_count[S_ENGINE]++;
     }
+
     if (snd_log < 0) {
         snd_log = getenv("SCR_SND") != NULL;
     }
+
     if (snd_log && o->s != s) {
         fprintf(stderr, "snd engine   %s period %3d (TickOver at %.0f Hz)\n", snd_file[S_ENGINE + k], period,
                 PAULA_HZ / period * (1 << k));
     }
+
     snd_start(S_ENGINE, S_ENGINE + k, period, 48, 1);
     o->on = s->n > 0;
     snd_unlock();
@@ -159,9 +177,11 @@ static void snd_engine(int k, int period)
 static void snd_report(void)
 {
     printf("SOUNDS");
+
     for (int v = 0; v <= S_ENGINE; v++) {
         printf(" %s=%d", snd_file[v], snd_count[v]);
     }
+
     printf("\n");
 }
 
@@ -176,9 +196,11 @@ static void snd_engine_stop(void)
 static void snd_stop_all(void)
 {
     snd_lock();
+
     for (int v = 0; v <= S_ENGINE; v++) {
         voice[v].on = 0;
     }
+
     snd_unlock();
     snd_eng_run = 0;
 }
@@ -190,11 +212,14 @@ static void snd_mix(float *out, int frames)
         1.f - expf(-2.f * 3.14159265f * 4500.f / SND_RATE); /* the Amiga's fixed output RC filter (~4.5 kHz) */
     for (int f = 0; f < frames; f++) {
         float l = 0, r = 0;
+
         for (int v = 0; v <= S_ENGINE; v++) {
             Voice *o = &voice[v];
+
             if (!o->on) {
                 continue;
             }
+
             int i = (int)o->pos, n = o->s->n;
             float t = (float)(o->pos - i);
             int j = i + 1 < n ? i + 1 : (o->loop ? 0 : i);
@@ -203,6 +228,7 @@ static void snd_mix(float *out, int frames)
             l += x * o->gl;
             r += x * o->gr;
             o->pos += o->step;
+
             if (o->pos >= n) {
                 if (o->loop) {
                     o->pos = fmod(o->pos, n);
@@ -223,6 +249,7 @@ static void SDLCALL snd_cb(void *ud, SDL_AudioStream *st, int add, int total)
     (void)ud;
     (void)total;
     float buf[2 * 512];
+
     for (int n = add / 8; n > 0;) {
         int m = n > 512 ? 512 : n;
         snd_mix(buf, m);
@@ -236,6 +263,7 @@ static void snd_open(void)
     snd_load();
     SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, SND_RATE};
     snd_as = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, snd_cb, NULL);
+
     if (snd_as) {
         SDL_ResumeAudioStreamDevice(snd_as);
     } else {
@@ -253,10 +281,12 @@ static void snd_dump_begin(void)
 static void snd_dump_frames(float dt)
 {
     int n = (int)(dt * SND_RATE + 0.5f);
+
     if (snd_dump_n + n > snd_dump_cap) {
         snd_dump_cap = (snd_dump_n + n) * 2;
         snd_dump = realloc(snd_dump, (size_t)snd_dump_cap * 2 * sizeof(float));
     }
+
     snd_mix(snd_dump + 2 * snd_dump_n, n);
     snd_dump_n += n;
 }
@@ -264,10 +294,12 @@ static void snd_dump_frames(float dt)
 static void snd_dump_write(const char *path)
 {
     FILE *f = fopen(path, "wb");
+
     if (!f) {
         fprintf(stderr, "%s: cannot write\n", path);
         return;
     }
+
     uint32_t data = (uint32_t)snd_dump_n * 4, u32;
     uint16_t u16;
     fwrite("RIFF", 1, 4, f);
@@ -292,15 +324,19 @@ static void snd_dump_write(const char *path)
     fwrite(&data, 4, 1, f);
     float peak = 0;
     int clip = 0;
+
     for (int i = 0; i < 2 * snd_dump_n; i++) {
         float x = snd_dump[i];
         peak = fmaxf(peak, fabsf(x));
+
         if (fabsf(x) >= 1.f) {
             clip++;
         }
+
         int16_t s = (int16_t)(x * 32767.f);
         fwrite(&s, 2, 1, f);
     }
+
     fclose(f);
     printf("AUDIO %s: %.1f s, peak %.2f, %d clipped samples\n", path, (float)snd_dump_n / SND_RATE, peak, clip);
 }

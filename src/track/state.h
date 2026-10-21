@@ -27,10 +27,12 @@ static float smooth01(float t)
 static void smooth_circ(float *a, int passes)
 {
     static float tmp[MAXSEG];
+
     for (int p = 0; p < passes; p++) {
         for (int i = 0; i < nseg; i++) {
             tmp[i] = (a[(i + nseg - 1) % nseg] + 2 * a[i] + a[(i + 1) % nseg]) * 0.25f;
         }
+
         memcpy(a, tmp, sizeof(float) * nseg);
     }
 }

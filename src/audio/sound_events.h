@@ -23,6 +23,7 @@ static void snd_grounded(const Car *c, float rate)
     if (!snd_live(c) || grounded_cd > 0) {
         return;
     }
+
     snd_play(S_GROUNDED, 400, (int)clampf(28 + (rate - 3.f) * 8, 28, 64));
     grounded_cd = 0.5f;
     pad_rumble(clampf((rate - 3.f) * 0.06f, 0.1f, 0.5f), 90);
@@ -49,23 +50,31 @@ static void engine_revs(int touch, int input, int zs)
 static void engine_frame(void)
 {
     eng_revs += eng_chg;
+
     if (eng_revs < 0) {
         eng_revs = 0;
     }
+
     int period = 4800000 / (eng_revs + 378), k = 6;
+
     if (period >= 0x3fff) {
         period = 0x3ffe;
     }
+
     period |= eng_fluct;
+
     if (period < 124) {
         period = 124;
     }
+
     while (period >= 256) {
         period >>= 1;
+
         if (--k < 0) {
             k = 0;
         }
     }
+
     snd_engine(k, period);
 }
 
@@ -80,21 +89,25 @@ static void snd_tick(float dt)
         if (!quiet) {
             snd_stop_all();
         }
+
         quiet = 1;
         eng_on = eng_revs = eng_chg = 0;
         return;
     }
     quiet = 0;
+
     if (p->crane > 0) { /* on the crane all is quiet, the engine starts again from a standstill */
         if (eng_on) {
             snd_engine_stop();
         }
+
         eng_on = eng_revs = eng_chg = 0;
         snd_scrape = snd_dirt = 0;
     } else {
         if ((snd_t10 += dt) >= 0.1f) {
             snd_t10 -= 0.1f;
             int zs = (int)(fabsf(vdot(p->v, p->F)) * AMI_V), fer = zs >> 8 < 50 ? zs >> 8 : 50;
+
             if (state == ST_DONE) {
                 eng_chg = -8; /* race over: the revs wind down to nothing */
             } else {
@@ -103,19 +116,24 @@ static void snd_tick(float dt)
                                 (p->thr > 0 || p->brk > 0),
                             zs);
             }
+
             if (snd_scrape && p->crash <= 0 && fer >= 1) {
                 snd_play(S_WRECK, (31 - (fer >> 1)) * 4 + 170, 64);
             }
+
             if (snd_dirt && vlen(p->v) > 1.5f) {
                 snd_play(S_OFFROAD, 450 + (snd_rand() & 0x1c), 64);
             }
+
             snd_scrape = snd_dirt = 0;
         }
+
         for (snd_t50 += dt; snd_t50 >= 0.02f; snd_t50 -= 0.02f) {
             if (state == ST_DONE && eng_revs <= 0) {
                 if (eng_on) {
                     snd_engine_stop();
                 }
+
                 eng_on = 0;
             } else {
                 engine_frame();
@@ -123,6 +141,7 @@ static void snd_tick(float dt)
             }
         }
     }
+
     if (snd_dump) {
         snd_dump_frames(dt);
     }

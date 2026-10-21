@@ -10,6 +10,7 @@ static void update_camera(const Car *c, float dt, int snap)
     if (state == ST_PREVIEW || state == ST_MENU) {
         return; /* set by preview_cam */
     }
+
     if (state == ST_EDIT) {
         ed_cam(dt);
         return;
@@ -24,16 +25,20 @@ static void update_camera(const Car *c, float dt, int snap)
         cam.up = vcross(cam.right, cam.fwd);
         return;
     }
+
     V3 up_ref, Rv, Uv, Fv;
     body_frame(c, &Rv, &Uv, &Fv);
+
     if (snap) {
         cam_f = Fv;
         cam_u = Uv;
     }
+
     float ks = 1.f - expf(-40.f * dt);
     cam_f = vnorm(vlerp(cam_f, Fv, ks));
     cam_u = vnorm(vlerp(cam_u, Uv, ks));
     cam_u = vnorm(vsub(cam_u, vmul(cam_f, vdot(cam_u, cam_f))));
+
     if (c->crash > 0 && state != ST_MENU) { /* crash: look at the wreck from outside */
         float a = atan2f(c->F.z, c->F.x) + 2.2f + 0.25f * c->crash;
         cam.pos = vadd(c->x, V(cosf(a) * 14.f, 6.f, sinf(a) * 14.f));
@@ -58,14 +63,18 @@ static void update_camera(const Car *c, float dt, int snap)
         up_ref = UP;
     } else {
         V3 fh = vnorm(V(c->F.x, c->F.y * 0.3f, c->F.z));
+
         if (snap) {
             cam_dir = fh;
         }
+
         cam_dir = vnorm(vlerp(cam_dir, fh, 1.f - expf(-5.f * dt)));
         V3 des = vadd(vsub(c->x, vmul(cam_dir, 10.0f)), V(0, 3.6f, 0));
+
         if (snap) {
             cam_pos_s = des;
         }
+
         cam_pos_s = vlerp(cam_pos_s, des, 1.f - expf(-9.f * dt));
         cam.pos = cam_pos_s;
         V3 target = vadd(c->x, vadd(vmul(c->U, 0.6f), vmul(cam_dir, 3.f)));

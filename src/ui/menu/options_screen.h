@@ -12,13 +12,17 @@ static void draw_options(void)
     hud_text_c(80, "OPTIONS", 1.5f, 0xF0C040);
     float W = panel_w() - 30, x = (HW - W) / 2, cw = 96, h = BAR_H;
     int sel = msel[MS_OPT];
+
     for (int r = 0; r < NOP; r++) {
         float y = 96 + r * BAR_GAP;
         draw_bar(x, y, W, OP_NAME[r], r == sel);
+
         if (r > OP_RUMBLE) {
             continue;
         }
+
         char b[32], v[16];
+
         if (r <= OP_FX) {
             snprintf(v, sizeof v, "%d%%", r == OP_ENG ? opt.eng : opt.fx);
         } else {
@@ -28,8 +32,10 @@ static void draw_options(void)
         float cx = x + W - cw - 4;
         hud_rect(cx - 1, y + 1, cw + 2, h - 2, r == sel ? 0xFFFFFF : 0x0A2426);
         plate(cx, y + 2, cw, h - 4, 0x2A2C30, 0x060608);
+
         if (r <= OP_FX) {
             float f = (r == OP_ENG ? opt.eng : opt.fx) / 100.f;
+
             if (f > 0) {
                 plate(cx + 1, y + 3, (cw - 2) * f, h - 6, 0x3AA4A8, 0x1A6468);
             }
@@ -43,8 +49,10 @@ static void draw_options(void)
 static void set_fullscreen(int on)
 {
     opt.full = on;
+
     if (win) {
         SDL_SetWindowFullscreen(win, on);
     }
+
     opt_save();
 }

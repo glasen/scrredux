@@ -29,6 +29,7 @@ static void draw_hof(float x0)
     const char *head[3] = {"TRACK", "LAP RECORD", "RACE RECORD"};
     hud_row(x0 + 4, 96, 1, 0xF08A28, 3, hat, head);
     int n = ntrk, vis = 15, first = clampf(ms_scroll, 0, fmaxf(0, n - vis));
+
     for (int r = 0; r < vis && first + r < n; r++) {
         const TrackDef *td = &trk[first + r];
         const Hof *h = hof_get(td->name);
@@ -40,6 +41,7 @@ static void draw_hof(float x0)
         const char *cell[5] = {td->name, lb, l, rb, rr};
         hud_row(x0 + 4, 108 + r * 10, 1, first + r < SCR_NTRACKS ? 0xE8E8EC : 0xA0D0FF, 5, at, cell);
     }
+
     menu_help("UP/DOWN SCROLL   ESC BACK");
 }
 
@@ -47,19 +49,24 @@ static void draw_practice(void)
 {
     hud_text_c(80, "PRACTISE - choose a track", 1.5f, 0xF0C040);
     int n = ntrk, vis = 9, sel = msel[MS_PRACTICE];
+
     if (sel < ms_scroll) {
         ms_scroll = sel;
     }
+
     if (sel >= ms_scroll + vis) {
         ms_scroll = sel - vis + 1;
     }
+
     float W = panel_w() - 30, x = (HW - W) / 2;
+
     for (int r = 0; r < vis && ms_scroll + r < n; r++) {
         int i = ms_scroll + r;
         char b[64];
         snprintf(b, sizeof b, "%s%s", trk[i].name, i < SCR_NTRACKS ? "" : "  (own)");
         draw_bar(x, 96 + r * LIST_GAP, W, b, i == sel);
     }
+
     menu_help("ENTER DRIVE   ESC BACK   (ESC IN THE CAR ENDS PRACTISE)");
 }
 
@@ -86,6 +93,7 @@ static void div_rows(const Season *s, int d, float x, float y, float sc, int hl)
     const float at[5] = {0, -(w + 6.f), -(w + 10.f), -(w + 14.f), -(w + 18.f)};
     const char *head[5] = {"DRIVER", "RACED", "WIN", "LAP", "PTS"};
     hud_row(x, y, sc, 0xF08A28, 5, at, head);
+
     for (int r = 0; r < 3; r++) {
         int i = tab[r];
         char nm[16], c[4][8];
@@ -113,6 +121,7 @@ static void draw_season(float x0)
     snprintf(b, sizeof b, "Tracks in DIVISION %s: %s, %s", ROMAN[d], t0, t1);
     hud_text_c(146, b, 1, 0xB0B0B8);
     const Race *r = player_race();
+
     if (r) {
         int o = r->a == PLAYER ? r->b : r->a;
         snprintf(b, sizeof b, "Race %d of 4:  %s  v  %s", player_races_done() + 1, sea.pname, DRV_NAME[o]);
@@ -134,6 +143,7 @@ static void draw_season(float x0)
 static void result_line(float x, float y, int drv, float t, float lap, int pts, const char *why)
 {
     char nm[16], tt[16], ll[16], p[8];
+
     if (t > 0) {
         fmt_time(tt, sizeof tt, t);
     } else {
@@ -157,6 +167,7 @@ static void draw_result(float x0)
     static const float hat[4] = {0, -23, -33, 36};
     const char *head[4] = {"DRIVER", "RACE-TIME", "BEST-LAP", "POINTS"};
     hud_row(x0 + 16, 110, 1.2f, 0xF08A28, 4, hat, head);
+
     for (int k = 0; k < 2; k++) {
         int dv = k ? r->b : r->a;
         float tm = k ? r->tb : r->ta, lp = k ? r->lb : r->la;
@@ -166,16 +177,21 @@ static void draw_result(float x0)
                                                                         : "-";
         result_line(x0 + 16, 124 + k * 13, dv, tm, lp, pts, why);
     }
+
     snprintf(b, sizeof b, "%s wins the race%s", drv_name(r->winner >= 0 ? r->winner : r->b), r->fast >= 0 ? "" : "");
     hud_text_c(156, b, 1.5f, r->winner == PLAYER ? 0x60FF60 : 0xFF8070);
+
     if (r->fast >= 0) {
         snprintf(b, sizeof b, "Fastest lap: %s", drv_name(r->fast));
         hud_text_c(170, b, 1, 0xE8E8EC);
     }
+
     if (last_lap_rec || last_race_rec) {
         hud_text_c(182, last_race_rec ? "New track record (race time)" : "New track record (lap)", 1, 0x60FF60);
     }
+
     float y = 196;
+
     for (int k = 0; k < nlast_sim; k++) {
         const Race *o = &sea.sched[player_div()][last_sim[k]];
         snprintf(b, sizeof b, "%s beat %s%s%s", drv_name(o->winner), drv_name(o->winner == o->a ? o->b : o->a),
@@ -183,9 +199,11 @@ static void draw_result(float x0)
         hud_text_c(y, b, 1, 0xB0B0B8);
         y += 11;
     }
+
     if (nlast_sim) {
         hud_text_c(196 - 12, "Also raced in your division:", 1, 0x9C9CA4);
     }
+
     menu_help("ENTER CONTINUE");
 }
 
@@ -195,12 +213,14 @@ static void draw_end(float x0)
     snprintf(b, sizeof b, "Final tables, season %d", sea_end.season);
     hud_text_c(80, b, 1.5f, 0xF0C040);
     float W = panel_w(), cw = (W - 12) / 2;
+
     for (int d = 0; d < 4; d++) {
         float x = x0 + 4 + (d & 1) * cw, y = 96 + (d >> 1) * 52;
         snprintf(b, sizeof b, "DIVISION %s", ROMAN[d]);
         hud_text(x, y, b, 1, 0xF0C040);
         div_rows(&sea_end, d, x, y + 9, 0.8f, 1);
     }
+
     const char *m = sea_moved == 2  ? "EXCELLENT DRIVING - WELL DONE"
                     : sea_moved < 0 ? "PROMOTED!"
                     : sea_moved > 0 ? "RELEGATED"
@@ -216,10 +236,12 @@ static const char *lsr_items[4] = {"Load", "Save", "Replay", "Cancel"};
 static void slot_label(int k, char *b, size_t n)
 {
     Season s;
+
     if (season_peek(k, &s)) {
         snprintf(b, n, "-- empty --");
         return;
     }
+
     snprintf(b, n, "%s, season %d, Division %s", s.pname, s.season, ROMAN[s.div[PLAYER]]);
 }
 
@@ -228,10 +250,12 @@ static void draw_slots(void)
     hud_text_c(80, ms_save ? "SAVE the season" : "LOAD a season", 1.5f, 0xF0C040);
     char lab[4][80];
     const char *it[5];
+
     for (int k = 0; k < 4; k++) {
         slot_label(k + 1, lab[k], sizeof lab[k]);
         it[k] = lab[k];
     }
+
     it[4] = "Cancel";
     draw_bars(98, it, 5, msel[MS_SLOTS]);
     menu_help("ENTER CHOOSE   ESC BACK");
@@ -240,11 +264,13 @@ static void draw_slots(void)
 static void rp_scan(void)
 {
     nrp_list = 0;
+
     for (int k = 1; k <= RP_SLOTS; k++) {
         if (!rp_read_head(k, &rp_list[nrp_list])) {
             rp_slot[nrp_list++] = k;
         }
     }
+
     for (int i = 0; i < nrp_list; i++) {
         for (int j = i + 1; j < nrp_list; j++) {
             if (rp_list[j].seq > rp_list[i].seq) {
@@ -262,16 +288,20 @@ static void rp_scan(void)
 static void draw_replays(void)
 {
     hud_text_c(80, "REPLAY a race", 1.5f, 0xF0C040);
+
     if (!nrp_list) {
         hud_text_c(120, "No races recorded yet.", 1.5f, 0xE8E8EC);
         hud_text_c(140, "Season races are recorded, the last five are kept.", 1, 0xB0B0B8);
     }
+
     char lab[RP_SLOTS][96];
     const char *it[RP_SLOTS + 1];
+
     for (int i = 0; i < nrp_list; i++) {
         snprintf(lab[i], sizeof lab[i], "%s", rp_list[i].title);
         it[i] = lab[i];
     }
+
     it[nrp_list] = "Cancel";
     draw_bars(nrp_list ? 98 : 170, it, nrp_list + 1, msel[MS_REPLAYS]);
     menu_help("ENTER WATCH   ESC BACK");
@@ -290,20 +320,25 @@ static void draw_controls(void)
     float W = panel_w() - 30, x = (HW - W) / 2, cw = 74, h = BAR_H;
     static const char *const tail[2] = {"Default keys", "Back"};
     int sel = msel[MS_CTL];
+
     for (int r = 0; r < CT_ROWS; r++) {
         float y = 94 + r * BAR_GAP;
         draw_bar(x, y, W, r < NCT ? CT_NAME[r] : tail[r - NCT], r == sel);
+
         if (r >= NCT) {
             continue;
         }
+
         for (int k = 0; k < 2; k++) {
             float cx = x + W - (2 - k) * (cw + 3) - 1;
             int on = r == sel && k == ct_col;
             char b[48];
             key_label(b, sizeof b, ctl[r][k]);
+
             if (on && ct_wait) {
                 snprintf(b, sizeof b, "%s", (SDL_GetTicks() / 300) & 1 ? "PRESS A KEY" : "");
             }
+
             hud_rect(cx - 1, y + 1, cw + 2, h - 2, on ? 0xFFFFFF : 0x0A2426);
             plate(cx, y + 2, cw, h - 4, 0x2A2C30, 0x060608);
             float sc = fminf(1.f, (cw - 6) / fmaxf(text_width(b, 1), 1));
@@ -311,6 +346,7 @@ static void draw_controls(void)
                          on ? (ct_wait ? 0x60FF60 : 0xFFE060) : 0xE8ECEC);
         }
     }
+
     const char *pad = pad_name();
     char b[96];
     snprintf(b, sizeof b, "%.60s", pad ? pad : "No gamepad or joystick connected");

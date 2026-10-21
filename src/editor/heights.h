@@ -17,20 +17,26 @@ static int *joint_ptr(int j, int e)
     if (j >= ed.np) {
         return ed_closed() ? &ed.p[0].h[e][0] : &ed_endh[e];
     }
+
     return &ed.p[j].h[e][0];
 }
 
 static void regen(int p)
 {
     TPiece *pc = &ed.p[p];
+
     if (pc->shape == SH_RAW) {
         return;
     }
+
     int ns = pc_ns(pc);
+
     for (int e = 0; e < 2; e++) {
         float hs = (float)pc->h[e][0], he = (float)*joint_ptr(p + 1, e), A = pc->amp * U_PER_M;
+
         for (int i = 1; i < ns; i++) {
             float f = (float)i / ns, g = (float)i / (ns - 1), h;
+
             switch (pc->shape) {
                 case SH_LINEAR:
                     h = hs + (he - hs) * f;
@@ -51,6 +57,7 @@ static void regen(int p)
                     h = hs + (he - hs) * smooth01(f);
                     break;
             }
+
             pc->h[e][i] = (int)lroundf(clampf(h, 0, 250 * U_PER_M));
         }
     }
@@ -77,9 +84,11 @@ static void joint_set(int j, float c, float b)
         regen(0);
     }
     int pj = j - 1 < 0 && cl ? ed.np - 1 : j - 1;
+
     if (pj >= 0) {
         regen(pj);
     }
+
     ed_dirty = 1;
 }
 
@@ -88,15 +97,18 @@ static void joint_set(int j, float c, float b)
 static int ed_joints(int *j)
 {
     int a = ed_lo(), b = ed_hi(), n = 0;
+
     if (a == b) {
         j[0] = a + 1;
         return 1;
     }
+
     for (int k = a; k <= b + 1; k++) {
         if (!(k == ed.np && a == 0 && ed_closed())) {
             j[n++] = k; /* a whole closed loop: its end is its start */
         }
     }
+
     return n;
 }
 
@@ -104,6 +116,7 @@ static void ed_tweak_joints(int kind, float dh, float db)
 {
     int jl[MAXPC + 1], nj = ed_joints(jl);
     ed_push(kind);
+
     for (int k = 0; k < nj; k++) {
         float c, bk;
         joint_get(jl[k], &c, &bk);

@@ -25,11 +25,13 @@ static void ed_build_mesh(void)
     int tg = track_gen;
     trk[ED_SLOT] = ed;
     trk[ED_SLOT].orig = -1;
+
     if (!ed_closed()) {
         trk[ED_SLOT].start = ed.np - 1;
         trk_open = 1;
         memcpy(trk_endh, ed_endh, sizeof trk_endh);
     }
+
     build_track_geometry(ED_SLOT);
     ar_x0 = keep[0];
     ar_x1 = keep[1];
@@ -40,14 +42,17 @@ static void ed_build_mesh(void)
     VB *was = cur;
     cur = &tkb;
     tkb.n = 0;
+
     for (int i = 0; i < nseg; i++) {
         build_seg_mesh(i);
     }
+
     for (int i = 10; i < nseg; i += 30) {
         if (!seg[i].gap) {
             build_tower(i);
         }
     }
+
     cur = was;
     trk_open = 0;
     tkb_gen++;

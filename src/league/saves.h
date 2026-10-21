@@ -17,13 +17,17 @@ static int season_write(int slot)
     save_path(p, sizeof p, "season%d.txt", slot);
     save_path(tmp, sizeof tmp, "season%d.tmp", slot);
     FILE *f = fopen(tmp, "w");
+
     if (!f) {
         return -1;
     }
+
     fprintf(f, "%s\nname %s\nseason %d\nrace %d\nholes %d\n", SEA_HEAD, sea.pname, sea.season, sea.race, sea.nholes);
+
     for (int i = 0; i < NDRV; i++) {
         fprintf(f, "driver %d %d %d %d %d %d\n", i, sea.div[i], sea.pts[i], sea.raced[i], sea.wins[i], sea.lapp[i]);
     }
+
     for (int d = 0; d < 4; d++) {
         for (int k = 0; k < 6; k++) {
             const Race *r = &sea.sched[d][k];
@@ -31,7 +35,9 @@ static int season_write(int slot)
                     r->winner, r->fast, r->ta, r->tb, r->la, r->lb);
         }
     }
+
     int ok = !ferror(f);
+
     if (fclose(f) || !ok || !SDL_RenamePath(tmp, p)) {
         remove(tmp);
         return -1;
@@ -49,15 +55,19 @@ static int season_peek(int slot, Season *s)
     char p[1024], line[256];
     save_path(p, sizeof p, "season%d.txt", slot);
     FILE *f = fopen(p, "r");
+
     if (!f) {
         return -1;
     }
+
     memset(s, 0, sizeof *s);
     int ok = fgets(line, sizeof line, f) && !strncmp(line, SEA_HEAD, strlen(SEA_HEAD)), drv = 0, fix = 0;
+
     while (ok && fgets(line, sizeof line, f)) {
         line[strcspn(line, "\r\n")] = 0;
         int i, d, k, v[6];
         Race r;
+
         if (!strncmp(line, "name ", 5)) {
             SDL_strlcpy(s->pname, line + 5, sizeof s->pname);
         } else if (sscanf(line, "season %d", &v[0]) == 1) {
@@ -71,6 +81,7 @@ static int season_peek(int slot, Season *s)
                 ok = 0;
                 break;
             }
+
             s->div[i] = v[0];
             s->pts[i] = v[1];
             s->raced[i] = v[2];
@@ -90,12 +101,15 @@ static int season_peek(int slot, Season *s)
         }
     }
     fclose(f);
+
     if (!ok || drv != (1 << NDRV) - 1 || fix != (1 << 24) - 1 || s->season < 1 || !in_rng(s->race, 0, 6)) {
         return -1;
     }
+
     if (!s->pname[0]) {
         snprintf(s->pname, sizeof s->pname, "Player");
     }
+
     s->nholes = s->nholes < 0 ? 0 : s->nholes > NHOLE ? NHOLE : s->nholes;
     s->on = 1;
     return 0;
@@ -104,9 +118,11 @@ static int season_peek(int slot, Season *s)
 static int season_read(int slot)
 {
     Season s;
+
     if (season_peek(slot, &s)) {
         return -1;
     }
+
     sea = s;
     return 0;
 }

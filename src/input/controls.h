@@ -26,12 +26,15 @@ static void ctl_save(void)
     char p[1024];
     save_path(p, sizeof p, "controls.txt", 0);
     FILE *f = fopen(p, "w");
+
     if (!f) {
         return;
     }
+
     for (int a = 0; a < NCT; a++) {
         fprintf(f, "%s|%s|%s\n", CT_ID[a], SDL_GetScancodeName(ctl[a][0]), SDL_GetScancodeName(ctl[a][1]));
     }
+
     fclose(f);
 }
 
@@ -41,24 +44,31 @@ static void ctl_load(void)
     char p[1024], line[128];
     save_path(p, sizeof p, "controls.txt", 0);
     FILE *f = fopen(p, "r");
+
     if (!f) {
         return;
     }
+
     while (fgets(line, sizeof line, f)) {
         char *fld[3];
         int n = 0;
         line[strcspn(line, "\r\n")] = 0;
+
         for (char *s = line; n < 3;) {
             fld[n++] = s;
             s = strchr(s, '|');
+
             if (!s) {
                 break;
             }
+
             *s++ = 0;
         }
+
         if (n < 3) {
             continue;
         }
+
         for (int a = 0; a < NCT; a++) {
             if (!strcmp(fld[0], CT_ID[a])) {
                 for (int k = 0; k < 2; k++) {
@@ -67,6 +77,7 @@ static void ctl_load(void)
             }
         }
     }
+
     fclose(f);
 }
 
@@ -80,6 +91,7 @@ static void ctl_bind(int a, int k, SDL_Scancode sc)
             }
         }
     }
+
     ctl[a][k] = sc;
     ctl_save();
 }

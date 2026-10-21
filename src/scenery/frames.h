@@ -49,6 +49,7 @@ static void fprism(const Frm *f, const float (*p)[2], int n, float x0, float x1,
         draw_quad(fpt(f, x0, p[k][1], p[k][0]), fpt(f, x0, p[k2][1], p[k2][0]), fpt(f, x1, p[k2][1], p[k2][0]),
                   fpt(f, x1, p[k][1], p[k][0]), col);
     }
+
     for (int k = 1; k + 1 < n; k++) {
         draw_tri(fpt(f, x0, p[0][1], p[0][0]), fpt(f, x0, p[k][1], p[k][0]), fpt(f, x0, p[k + 1][1], p[k + 1][0]), col);
         draw_tri(fpt(f, x1, p[0][1], p[0][0]), fpt(f, x1, p[k][1], p[k][0]), fpt(f, x1, p[k + 1][1], p[k + 1][0]), col);

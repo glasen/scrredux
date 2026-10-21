@@ -8,6 +8,7 @@ static void glyph_tris(char ch, void (*tri)(void *u, const float *t), void *u)
     if (ch < 32 || ch > 126) {
         return;
     }
+
     for (int k = 0; k < FV_GLYPH[ch - 32].n; k++) {
         tri(u, FV_TRI + 6 * (FV_GLYPH[ch - 32].first + k));
     }

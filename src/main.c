@@ -162,27 +162,33 @@ int main(int argc, char **argv)
     if (!car_model_load()) {
         return 1;
     }
+
     tracks_scan();
     phys_defaults();
     hof_load();
     ctl_load();
     opt_load();
+
     if (season_peek(0, &sea) || !sea.on) {
         memset(&sea, 0, sizeof sea);
     }
+
     if (argc >= 2 && !strcmp(argv[1], "--check-tracks")) {
         ed_check_originals();
         return 0;
     }
+
     if (argc >= 4 && !strcmp(argv[1], "--ui-shot")) {
         ui_shot(argv[2], argv[3]);
         return 0;
     }
+
     if (argc >= 3 && !strcmp(argv[1], "--sim")) {
         run_headless(0, NULL, (float)atof(argv[2]), argc > 3 ? atoi(argv[3]) % NTRACKS : 0, 0);
         snd_report();
         return 0;
     }
+
     if (argc >= 4 &&
         !strcmp(argv[1], "--audio-dump")) { /* the autopilot's race, mixed into a WAV instead of the device */
         snd_load();
@@ -192,56 +198,71 @@ int main(int argc, char **argv)
         snd_dump_write(argv[2]);
         return 0;
     }
+
     if (argc >= 4 && !strcmp(argv[1], "--menu-frames")) { /* debug: record the menu at 60 fps into DIR/fNNN.png */
         if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) {
             return 1;
         }
+
         setup_menu();
         update_camera(&cars[0], 1.f / 60.f, 1);
         int n = (int)(atof(argv[3]) * 60);
+
         for (int f = 0; f < n; f++) {
             for (int k = 0; k < 4; k++) {
                 game_tick(PHYS_DT);
             }
+
             update_camera(&cars[0], 1.f / 60.f, 0);
             char path[1024];
             snprintf(path, sizeof path, "%s/f%03d.png", argv[2], f);
             gpu_render(path);
         }
+
         SDL_Quit();
         return 0;
     }
+
     if (argc >= 4 && !strcmp(argv[1], "--shot")) {
         run_headless(1, argv[2], (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0,
                      argc > 5 ? atoi(argv[5]) : 0);
         return 0;
     }
+
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+
     win = SDL_CreateWindow("SCR REDUX", 1600, 900, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+
     if (!win || gpu_init() != 0) {
         fprintf(stderr, "init failed: %s\n", SDL_GetError());
         return 1;
     }
+
     if (opt.full) {
         SDL_SetWindowFullscreen(win, true);
     }
+
     snd_open();
     keys = SDL_GetKeyboardState(NULL);
 
     setup_menu();
+
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--view")) {
             start_view();
         }
     }
+
     update_camera(&cars[0], 0.016f, 1);
     uint64_t last = SDL_GetTicksNS();
     float acc = 0;
+
     for (int running = 1; running;) {
         SDL_Event e;
+
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT) {
                 running = 0;
@@ -287,6 +308,7 @@ int main(int argc, char **argv)
                         : e.jbutton.button < 2                  ? JOY[e.jbutton.button]
                                                                 : -1;
                 SDL_Keycode pk = b >= 0 ? pad_key(b) : 0;
+
                 if (pk && !handle_key(pk, 0)) {
                     running = 0;
                 }
@@ -302,16 +324,22 @@ int main(int argc, char **argv)
         uint64_t now = SDL_GetTicksNS();
         float frame = (float)(now - last) * 1e-9f;
         last = now;
+
         if (frame > 0.1f) {
             frame = 0.1f;
         }
+
         SDL_Keycode pk = pad_nav(frame);
+
         if (pk && !handle_key(pk, 0)) {
             running = 0;
         }
+
         frame_timers(frame);
+
         if (!paused) {
             acc += frame;
+
             while (acc >= PHYS_DT) {
                 game_tick(PHYS_DT);
                 acc -= PHYS_DT;

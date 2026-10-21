@@ -24,6 +24,7 @@ static void world_glyph_tri(void *u, const float *t)
 static void world_text(V3 o, V3 al, V3 up, const char *s, float c, uint32_t col, int unlit)
 {
     WorldGlyph w = {o, al, up, 7 * c, col, unlit};
+
     for (; *s; s++) {
         glyph_tris(*s, world_glyph_tri, &w);
         w.o = vadd(w.o, vmul(al, glyph_adv(*s) * w.cap));
@@ -34,8 +35,10 @@ static void world_text(V3 o, V3 al, V3 up, const char *s, float c, uint32_t col,
 static void world_text_c(V3 m, V3 rd, V3 up, const char *s, float c, uint32_t col, int unlit)
 {
     float tw = 0;
+
     for (const char *p = s; *p; p++) {
         tw += glyph_adv(*p) * 7 * c;
     }
+
     world_text(vadd(vsub(m, vmul(rd, tw / 2)), vmul(up, 3.5f * c)), rd, up, s, c, col, unlit);
 }

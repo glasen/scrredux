@@ -5,9 +5,11 @@
 static float text_width(const char *s, float sc)
 {
     float w = 0;
+
     for (; *s; s++) {
         w += glyph_adv(*s);
     }
+
     return w * 7 * sc;
 }
 
@@ -30,6 +32,7 @@ static void hud_glyph_tri(void *u, const float *t)
 static void hud_text_ex(float x, float y, const char *s, float sc, uint32_t ctop, uint32_t cbot, float shear)
 {
     HudGlyph h = {x, y + 7 * sc, 7 * sc, shear, ctop, cbot};
+
     for (; *s; s++) {
         glyph_tris(*s, hud_glyph_tri, &h);
         h.x += glyph_adv(*s) * h.cap;

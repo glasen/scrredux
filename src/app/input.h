@@ -8,11 +8,13 @@ static int handle_key(SDL_Keycode k, SDL_Keymod mod)
         set_fullscreen(!opt.full);
         return 1;
     }
+
     switch (state) {
         case ST_VIEW:
             if (k == SDLK_ESCAPE) {
                 return 0;
             }
+
             view_key(k);
             return 1;
         case ST_MENU:
@@ -36,14 +38,17 @@ static SDL_Keycode pad_key(int b)
 {
     int a = b == SDL_GAMEPAD_BUTTON_SOUTH, x = b == SDL_GAMEPAD_BUTTON_EAST, y = b == SDL_GAMEPAD_BUTTON_NORTH;
     int st = b == SDL_GAMEPAD_BUTTON_START, bk = b == SDL_GAMEPAD_BUTTON_BACK;
+
     if (ask_quit) {
         return a ? SDLK_Y : x || bk ? SDLK_N : 0;
     }
+
     switch (state) {
         case ST_MENU:
             if (ct_wait) {
                 return x || bk ? SDLK_ESCAPE : 0;
             }
+
             /* fall through */
         case ST_PREVIEW:
             return a || st ? SDLK_RETURN : x || bk ? SDLK_ESCAPE : 0;
@@ -58,6 +63,7 @@ static SDL_Keycode pad_key(int b)
             if (pause_on) {
                 return a ? SDLK_RETURN : x || bk || st ? SDLK_ESCAPE : 0;
             }
+
             return st ? SDLK_P : y ? SDLK_R : bk ? SDLK_ESCAPE : 0;
         default:
             return 0;
@@ -71,18 +77,22 @@ static SDL_Keycode pad_nav(float dt)
     static float t;
     PadIn pi = pad_read();
     int d = pi.up ? 1 : pi.dn ? 2 : pi.lf ? 3 : pi.rt ? 4 : 0;
+
     if ((state != ST_MENU && !pause_on) || ask_quit || ct_wait) {
         was = d;
         return 0;
     }
+
     if (d != was) {
         was = d;
         t = 0.4f;
         return NAV[d];
     }
+
     if (!d || (t -= dt) > 0) {
         return 0;
     }
+
     t = 0.12f;
     return NAV[d];
 }
@@ -92,9 +102,11 @@ static void frame_timers(float frame)
     if (ms_note_t > 0) {
         ms_note_t -= frame;
     }
+
     if (ed_msg_t > 0) {
         ed_msg_t -= frame;
     }
+
     if (state == ST_REPLAY) {
         replay_hold();
     }

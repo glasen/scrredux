@@ -20,9 +20,11 @@ static void opt_save(void)
     char p[1024];
     save_path(p, sizeof p, "options.txt", 0);
     FILE *f = fopen(p, "w");
+
     if (!f) {
         return;
     }
+
     fprintf(f, "engine|%d\neffects|%d\nfullscreen|%d\nrumble|%d\n", opt.eng, opt.fx, opt.full, opt.rumble);
     fclose(f);
 }
@@ -32,13 +34,17 @@ static void opt_load(void)
     char p[1024], line[128];
     save_path(p, sizeof p, "options.txt", 0);
     FILE *f = fopen(p, "r");
+
     while (f && fgets(line, sizeof line, f)) {
         char *v = strchr(line, '|');
+
         if (!v) {
             continue;
         }
+
         *v++ = 0;
         int n = atoi(v);
+
         if (!strcmp(line, "engine")) {
             opt.eng = (int)clampf(n, 0, 100);
         } else if (!strcmp(line, "effects")) {
@@ -49,8 +55,10 @@ static void opt_load(void)
             opt.rumble = n != 0;
         }
     }
+
     if (f) {
         fclose(f);
     }
+
     opt_apply();
 }
