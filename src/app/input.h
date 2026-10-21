@@ -103,8 +103,8 @@ static void frame_timers(float frame)
         ms_note_t -= frame;
     }
 
-    if (ed_msg_t > 0) {
-        ed_msg_t -= frame;
+    if (editor.message_time > 0) {
+        editor.message_time -= frame;
     }
 
     if (state == ST_REPLAY) {

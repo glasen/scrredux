@@ -11,14 +11,66 @@
  * G flies along the road.  */
 enum { EM_EDIT, EM_LIST, EM_NAME, EM_NEW, EM_QUIT, EM_FLY };
 
-static TrackDef ed;
-static int ed_sel, ed_anchor, ed_dirty, ed_mode, ed_list, ed_endh[2],
-    ed_help;                       /* the selection: the run from ed_anchor to ed_sel */
-static int ed_bad[MAXPC], ed_nbad; /* pieces before jumps the AI's planner can't get over */
-static char ed_msg[96], ed_name[32];
-static float ed_msg_t;
-static int ed_gen = 1, ed_built = -1; /* bumped on every change; the ed_gen the track mesh is of */
-static float ed_gen_t;                /* seconds since the last change */
+enum { UNDO_N = 64, TW_HEIGHT = 1, TW_BANK, TW_SIZE };
+
+typedef struct {
+    TrackDef t;
+    int endh[2], sel, anchor;
+} EdSnap;
+
+/* what is under the mouse: kind 0 nothing, 1 a piece (p), 2 a ghost (turn) */
+typedef struct {
+    int kind, p, turn;
+} Pick;
+
+/* the track builder: everything it keeps between frames */
+static struct {
+    TrackDef track;     /* the track being built */
+    int mode;           /* EM_* */
+    int sel, anchor;    /* the selection: the run of pieces from anchor to sel */
+    int dirty;          /* unsaved changes */
+    int list_cursor;    /* the track list's current line */
+    int end_heights[2]; /* heights of the open end */
+    int show_help;
+    int unreachable[MAXPC], unreachable_count; /* pieces before jumps the AI's planner can't get over */
+    char message[96], name_input[32];
+    float message_time;
+    int generation;         /* bumped on every change */
+    int built_generation;   /* the generation the track mesh is of */
+    float since_change;     /* seconds since the last change */
+    float mouse_x, mouse_y; /* HUD coordinates */
+    Pick hover;
+
+    /* undo: a ring of the last snapshots (oldest dropped) and a redo stack */
+    EdSnap undo_ring[UNDO_N], redo_stack[UNDO_N];
+    int undo_count, undo_top, redo_count;
+    int tweak_kind, tweak_sel; /* the current run of the same height/bank tweak is one undo step */
+
+    /* the flying camera */
+    struct {
+        V3 pos;
+        float yaw, pitch;
+        int looking; /* the right mouse button or Space held */
+        int space;
+    } cam;
+
+    /* fly-along: where on the road, how fast */
+    struct {
+        float position, speed, saved_speed;
+        V3 forward, normal;
+        int snap;
+    } fly;
+} editor = {
+    .mode = 0,
+    .generation = 1,
+    .built_generation = -1,
+    .hover = {0, -1, 0},
+    .mouse_x = -1,
+    .mouse_y = -1,
+    .tweak_kind = -1,
+    .cam = {.pos = {0, 140, -560}, .pitch = -0.32f},
+};
+
 static const unsigned char TPL_USE[7] = {0, 1, 3, 4, 6, 7, 10};
 
 typedef struct {
@@ -28,25 +80,25 @@ typedef struct {
 
 static void ed_note(const char *s)
 {
-    snprintf(ed_msg, sizeof ed_msg, "%s", s);
-    ed_msg_t = 3.f;
+    snprintf(editor.message, sizeof editor.message, "%s", s);
+    editor.message_time = 3.f;
 }
 
 static int ed_lo(void)
 {
-    return SDL_min(ed_sel, ed_anchor);
+    return SDL_min(editor.sel, editor.anchor);
 }
 
 static int ed_hi(void)
 {
-    return SDL_max(ed_sel, ed_anchor);
+    return SDL_max(editor.sel, editor.anchor);
 }
 
 static void ed_select(int p, int extend)
 {
-    ed_sel = p;
+    editor.sel = p;
 
     if (!extend) {
-        ed_anchor = p;
+        editor.anchor = p;
     }
 }

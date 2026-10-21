@@ -31,13 +31,13 @@ static float xs_ang(const int e[2][2])
 
 static int ed_closed(void)
 {
-    if (ed.np < 2) {
+    if (editor.track.np < 2) {
         return 0;
     }
 
     int a[2][2], b[2][2];
-    pc_endxs(&ed.p[ed.np - 1], a);
-    pc_xs(&ed.p[0], 0, b);
+    pc_endxs(&editor.track.p[editor.track.np - 1], a);
+    pc_xs(&editor.track.p[0], 0, b);
     return xs_eq(a, b);
 }
 
@@ -161,12 +161,12 @@ static int fits(const TPiece *c, int k, int closes)
         return 0;
     }
 
-    for (int j = 0; j < ed.np; j++) {
-        if ((j == ed.np - 1 && k == 0) || (j == 0 && closes)) {
+    for (int j = 0; j < editor.track.np; j++) {
+        if ((j == editor.track.np - 1 && k == 0) || (j == 0 && closes)) {
             continue;
         }
 
-        if (pc_clash(c, &ed.p[j])) {
+        if (pc_clash(c, &editor.track.p[j])) {
             return 0;
         }
     }
@@ -237,16 +237,16 @@ static int moves(const int e[2][2], Move *out)
 
 static void open_end(int e[2][2])
 {
-    pc_endxs(&ed.p[ed.np - 1], e);
+    pc_endxs(&editor.track.p[editor.track.np - 1], e);
 }
 
 static int move_ok(const Move *m, int *closes)
 {
     int s0[2][2], x[2][2];
-    pc_xs(&ed.p[0], 0, s0);
+    pc_xs(&editor.track.p[0], 0, s0);
     pc_endxs(&m->p[m->n - 1], x);
     *closes = xs_eq(x, s0);
-    if (ed.np + m->n > MAXPC) {
+    if (editor.track.np + m->n > MAXPC) {
         return 0;
     }
 

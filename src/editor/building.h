@@ -4,18 +4,18 @@
 /* ---- building ---- */
 static void ed_new(void)
 {
-    memset(&ed, 0, sizeof ed);
-    snprintf(ed.name, sizeof ed.name, "NEW TRACK");
-    ed.orig = -1;
-    ed.np = 1;
-    ed.p[0].cx = 7;
-    ed.p[0].cz = 2;
-    ed.p[0].at = 0;
-    ed.p[0].shape = SH_SMOOTH;
-    ed_endh[0] = ed_endh[1] = 0;
-    ed_sel = ed_anchor = 0;
-    ed_dirty = 0;
-    ed_gen++;
+    memset(&editor.track, 0, sizeof editor.track);
+    snprintf(editor.track.name, sizeof editor.track.name, "NEW TRACK");
+    editor.track.orig = -1;
+    editor.track.np = 1;
+    editor.track.p[0].cx = 7;
+    editor.track.p[0].cz = 2;
+    editor.track.p[0].at = 0;
+    editor.track.p[0].shape = SH_SMOOTH;
+    editor.end_heights[0] = editor.end_heights[1] = 0;
+    editor.sel = editor.anchor = 0;
+    editor.dirty = 0;
+    editor.generation++;
 }
 
 static void ed_append(const Move *m, int closes)
@@ -29,18 +29,18 @@ static void ed_append(const Move *m, int closes)
 
         for (int e = 0; e < 2; e++) {
             for (int i = 0; i < 14; i++) {
-                p.h[e][i] = ed_endh[e]; /* new pieces carry on at the open end's height */
+                p.h[e][i] = editor.end_heights[e]; /* new pieces carry on at the open end's height */
             }
         }
 
-        ed.p[ed.np++] = p;
+        editor.track.p[editor.track.np++] = p;
     }
 
     if (closes) {
-        regen(ed.np - 1);
+        regen(editor.track.np - 1);
     }
 
-    ed_select(ed.np - 1, 0);
+    ed_select(editor.track.np - 1, 0);
 }
 
 /* the move for this turn at the open end that fits, or NULL (*joins: there is one but no room, 2: too many pieces) */
@@ -61,7 +61,7 @@ static const Move *ed_move_for(int turn, Move *mv, int *closes, int *joins)
             }
 
             if (joins) {
-                *joins = ed.np + mv[k].n > MAXPC ? 2 : 1;
+                *joins = editor.track.np + mv[k].n > MAXPC ? 2 : 1;
             }
         }
     }
@@ -101,15 +101,15 @@ static void ed_extend(int turn)
 
     /* would it join on one straight further on? (the original's bends only start at some places in a cube) */
     const Move *s = ed_move_for(0, mv, &closes, NULL);
-    int after = 0, n0 = ed.np;
+    int after = 0, n0 = editor.track.np;
 
     if (s && !closes) {
         for (int k = 0; k < s->n; k++) {
-            ed.p[ed.np++] = s->p[k];
+            editor.track.p[editor.track.np++] = s->p[k];
         }
 
         after = ed_move_for(turn, mv, &closes, &joins) != NULL || joins;
-        ed.np = n0;
+        editor.track.np = n0;
     }
 
     snprintf(b, sizeof b, "No %s joins on here%s", what,
@@ -124,14 +124,14 @@ static void ed_renumber(int k)
 {
     TPiece t[MAXPC];
 
-    for (int i = 0; i < ed.np; i++) {
-        t[i] = ed.p[(i + k) % ed.np];
+    for (int i = 0; i < editor.track.np; i++) {
+        t[i] = editor.track.p[(i + k) % editor.track.np];
     }
 
-    memcpy(ed.p, t, sizeof(TPiece) * ed.np);
-    ed.start = (ed.start - k + ed.np) % ed.np;
-    ed_sel = (ed_sel - k + ed.np) % ed.np;
-    ed_anchor = (ed_anchor - k + ed.np) % ed.np;
+    memcpy(editor.track.p, t, sizeof(TPiece) * editor.track.np);
+    editor.track.start = (editor.track.start - k + editor.track.np) % editor.track.np;
+    editor.sel = (editor.sel - k + editor.track.np) % editor.track.np;
+    editor.anchor = (editor.anchor - k + editor.track.np) % editor.track.np;
 }
 
 /* the selected pieces come off: a closed loop opens there, an open track loses pieces at either end */
@@ -139,12 +139,13 @@ static void ed_remove(void)
 {
     int a = ed_lo(), b = ed_hi(), n = b - a + 1, cl = ed_closed();
 
-    if (n >= ed.np) {
-        ed_note(ed.np == 1 ? "The last piece stays - ALT+arrows move it, ALT+R turns it" : "One piece has to stay");
+    if (n >= editor.track.np) {
+        ed_note(editor.track.np == 1 ? "The last piece stays - ALT+arrows move it, ALT+R turns it"
+                                     : "One piece has to stay");
         return;
     }
 
-    if (!cl && a != 0 && b != ed.np - 1) {
+    if (!cl && a != 0 && b != editor.track.np - 1) {
         ed_note("The loop is open: pieces only come off at its ends (C closes it)");
         return;
     }
@@ -153,32 +154,32 @@ static void ed_remove(void)
 
     if (cl) {
         ed_renumber(b + 1);
-        a = ed.np - n;
-        b = ed.np - 1;
+        a = editor.track.np - n;
+        b = editor.track.np - 1;
     } /* the selection last: the gap opens where it was */
-    int gone = ed.start >= a && ed.start <= b;
+    int gone = editor.track.start >= a && editor.track.start <= b;
 
-    if (b == ed.np - 1) {
-        ed_endh[0] = ed.p[a].h[0][0];
-        ed_endh[1] = ed.p[a].h[1][0];
-        ed.np -= n;
-        ed_select(ed.np - 1, 0);
+    if (b == editor.track.np - 1) {
+        editor.end_heights[0] = editor.track.p[a].h[0][0];
+        editor.end_heights[1] = editor.track.p[a].h[1][0];
+        editor.track.np -= n;
+        ed_select(editor.track.np - 1, 0);
     } else { /* the first pieces of an open track */
-        memmove(ed.p, ed.p + n, sizeof(TPiece) * (ed.np - n));
-        ed.np -= n;
+        memmove(editor.track.p, editor.track.p + n, sizeof(TPiece) * (editor.track.np - n));
+        editor.track.np -= n;
         ed_select(0, 0);
 
         if (!gone) {
-            ed.start -= n;
+            editor.track.start -= n;
         }
     }
 
     if (gone) { /* the start line goes to the next straight */
-        ed.start = 0;
+        editor.track.start = 0;
 
-        for (int k = 0; k < ed.np; k++) {
-            if ((ed.p[k].at & 15) == 0) {
-                ed.start = k;
+        for (int k = 0; k < editor.track.np; k++) {
+            if ((editor.track.p[k].at & 15) == 0) {
+                editor.track.start = k;
                 break;
             }
         }
@@ -188,7 +189,7 @@ static void ed_remove(void)
 /* the whole track a cube over (dx, dz) and q quarter turns clockwise (seen from above) about the grid's middle */
 static void ed_move(int dx, int dz, int q)
 {
-    TrackDef t = ed;
+    TrackDef t = editor.track;
 
     for (int p = 0; p < t.np; p++) {
         TPiece *pc = &t.p[p];
@@ -216,7 +217,7 @@ static void ed_move(int dx, int dz, int q)
     }
 
     ed_push(0);
-    ed = t;
+    editor.track = t;
 }
 
 /* the shortest way back to the first piece: breadth first over single pieces, clear of the track */
@@ -238,7 +239,7 @@ static int ed_autoclose(void)
     static unsigned char vis[256 * 256 * 8];
     memset(vis, 0, sizeof vis);
     int s0[2][2], qt = 1;
-    pc_xs(&ed.p[0], 0, s0);
+    pc_xs(&editor.track.p[0], 0, s0);
     open_end(q[0].e);
     q[0].prev = -1;
     q[0].depth = 0;
@@ -260,7 +261,7 @@ static int ed_autoclose(void)
                 TPiece path[MAXPC];
                 int L = q[qh].depth + 1;
 
-                if (ed.np + L > MAXPC) {
+                if (editor.track.np + L > MAXPC) {
                     continue;
                 }
 
@@ -283,7 +284,7 @@ static int ed_autoclose(void)
                 }
 
                 ed_push(0);
-                int h0[2] = {ed_endh[0], ed_endh[1]}, n0 = ed.np;
+                int h0[2] = {editor.end_heights[0], editor.end_heights[1]}, n0 = editor.track.np;
 
                 for (int a = 0; a < L; a++) {
                     TPiece p = path[a];
@@ -291,21 +292,21 @@ static int ed_autoclose(void)
                     p.amp = 0;
 
                     for (int e = 0; e < 2; e++) {
-                        int h = h0[e] + (ed.p[0].h[e][0] - h0[e]) * a / L;
+                        int h = h0[e] + (editor.track.p[0].h[e][0] - h0[e]) * a / L;
 
                         for (int i = 0; i < 14; i++) {
                             p.h[e][i] = h;
                         }
                     }
 
-                    ed.p[ed.np++] = p;
+                    editor.track.p[editor.track.np++] = p;
                 }
 
-                for (int a = n0; a < ed.np; a++) {
+                for (int a = n0; a < editor.track.np; a++) {
                     regen(a);
                 }
 
-                ed_select(ed.np - 1, 0);
+                ed_select(editor.track.np - 1, 0);
                 char b[64];
                 snprintf(b, sizeof b, "Loop closed with %d pieces", L);
                 ed_note(b);
@@ -317,7 +318,7 @@ static int ed_autoclose(void)
             int kx = (int)clampf(mx / 128.f, 0, 255), kz = (int)clampf(mz / 128.f, 0, 255),
                 key = (kz * 256 + kx) * 8 + oct;
 
-            if (vis[key] || qt >= CAP || q[qh].depth + 2 + ed.np > MAXPC) {
+            if (vis[key] || qt >= CAP || q[qh].depth + 2 + editor.track.np > MAXPC) {
                 continue;
             }
 
@@ -342,24 +343,24 @@ static int ed_ready(void)
         return 0;
     }
 
-    if (ed.np < 4) {
+    if (editor.track.np < 4) {
         ed_note("A track needs at least 4 pieces");
         return 0;
     }
 
-    if ((ed.p[ed.start].at & 15) != 0) {
+    if ((editor.track.p[editor.track.start].at & 15) != 0) {
         int k = 0;
 
-        while (k < ed.np && (ed.p[k].at & 15) != 0) {
+        while (k < editor.track.np && (editor.track.p[k].at & 15) != 0) {
             k++;
         }
 
-        if (k == ed.np) {
+        if (k == editor.track.np) {
             ed_note("The start line needs a straight piece");
             return 0;
         }
 
-        ed.start = k;
+        editor.track.start = k;
     }
 
     return 1;
@@ -368,22 +369,23 @@ static int ed_ready(void)
 /* the AI's jump planner on the track as it stands: the pieces whose jumps can't be cleared */
 static void ed_jumps_note(void)
 {
-    ed_nbad = 0;
+    editor.unreachable_count = 0;
 
-    for (int k = 0; k < nbadj && ed_nbad < MAXPC; k++) {
-        ed_bad[ed_nbad++] = seg_sec[badj[k]];
+    for (int k = 0; k < nbadj && editor.unreachable_count < MAXPC; k++) {
+        editor.unreachable[editor.unreachable_count++] = seg_sec[badj[k]];
     }
 
     char b[96];
 
-    if (!ed_nbad) {
+    if (!editor.unreachable_count) {
         ed_note("Every jump can be made");
         return;
     }
 
-    snprintf(b, sizeof b, "The jump after piece %d cannot be cleared - lower it or give it more run-up", ed_bad[0] + 1);
+    snprintf(b, sizeof b, "The jump after piece %d cannot be cleared - lower it or give it more run-up",
+             editor.unreachable[0] + 1);
     ed_note(b);
-    ed_msg_t = 8.f;
+    editor.message_time = 8.f;
 }
 
 static void ed_check_jumps(void)
@@ -394,7 +396,7 @@ static void ed_check_jumps(void)
 
     float keep[4] = {ar_x0, ar_x1, ar_z0, ar_z1};
     int tg = track_gen;
-    trk[ED_SLOT] = ed;
+    trk[ED_SLOT] = editor.track;
     trk[ED_SLOT].orig = -1;
     build_track_geometry(ED_SLOT);
     cur_track = -1;
@@ -405,7 +407,7 @@ static void ed_check_jumps(void)
     ar_z1 = keep[3];
     track_gen = tg; /* the builder's stadium stays */
     ed_jumps_note();
-    ed_built = -1; /* the mesh again (an open track has its gap) */
+    editor.built_generation = -1; /* the mesh again (an open track has its gap) */
 }
 
 static void ed_test(void)
@@ -414,7 +416,7 @@ static void ed_test(void)
         return;
     }
 
-    trk[ED_SLOT] = ed;
+    trk[ED_SLOT] = editor.track;
     trk[ED_SLOT].orig = -1;
     build_track(ED_SLOT);
     race_mode = RM_TEST;
@@ -431,7 +433,7 @@ static void ed_save(void)
     char keep[32];
     snprintf(keep, sizeof keep, "%s", sel_track < ntrk ? trk[sel_track].name : "");
 
-    if (track_save(&ed)) {
+    if (track_save(&editor.track)) {
         ed_note("Could not write the track file");
         return;
     }
@@ -441,22 +443,22 @@ static void ed_save(void)
     sel_track = k >= 0 ? k : 0;
     cur_track = -1;
     char b[96];
-    snprintf(b, sizeof b, "Saved as tracks/%s", ed.file);
+    snprintf(b, sizeof b, "Saved as tracks/%s", editor.track.file);
     ed_note(b);
-    ed_dirty = 0;
+    editor.dirty = 0;
 }
 
 /* an original comes in with its jump edits baked into the heights */
 static void ed_import(int i)
 {
     ed_push(0);
-    ed = trk[i];
+    editor.track = trk[i];
 
-    if (ed.orig >= 0) {
-        track_xsecs(&ed);
+    if (editor.track.orig >= 0) {
+        track_xsecs(&editor.track);
 
-        for (int q = 0, n = 0; q < ed.np; q++) {
-            TPiece *pc = &ed.p[(ed.start + 1 + q) % ed.np];
+        for (int q = 0, n = 0; q < editor.track.np; q++) {
+            TPiece *pc = &editor.track.p[(editor.track.start + 1 + q) % editor.track.np];
 
             for (int r = 0; r < pc_ns(pc); r++, n++) {
                 for (int e = 0; e < 2; e++) {
@@ -466,14 +468,14 @@ static void ed_import(int i)
         }
 
         char nm[40];
-        snprintf(nm, sizeof nm, "MY %s", ed.name);
-        SDL_strlcpy(ed.name, nm, sizeof ed.name);
-        ed.orig = -1;
-        ed.file[0] = 0;
+        snprintf(nm, sizeof nm, "MY %s", editor.track.name);
+        SDL_strlcpy(editor.track.name, nm, sizeof editor.track.name);
+        editor.track.orig = -1;
+        editor.track.file[0] = 0;
     }
 
-    ed_endh[0] = ed.p[0].h[0][0];
-    ed_endh[1] = ed.p[0].h[1][0];
+    editor.end_heights[0] = editor.track.p[0].h[0][0];
+    editor.end_heights[1] = editor.track.p[0].h[1][0];
     ed_select(0, 0);
-    ed_dirty = ed.file[0] == 0;
+    editor.dirty = editor.track.file[0] == 0;
 }

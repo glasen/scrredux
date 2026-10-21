@@ -14,7 +14,7 @@ static void piece_world(const TPiece *pc, int p, int i, V3 o[2])
     pc_xs(pc, i, a);
 
     for (int e = 0; e < 2; e++) {
-        int h = p < 0 ? ed_endh[e] : i < pc_ns(pc) ? pc->h[e][i] : *joint_ptr(p + 1, e);
+        int h = p < 0 ? editor.end_heights[e] : i < pc_ns(pc) ? pc->h[e][i] : *joint_ptr(p + 1, e);
         o[e] = V(-(a[e][0] - 8 * 2048) * SCR_U, ed_wy(h), (a[e][1] - 8 * 2048) * SCR_U);
     }
 }
@@ -30,10 +30,11 @@ static V3 joint_world(int j)
 {
     V3 o[2];
 
-    if (j < ed.np) {
-        piece_world(&ed.p[j], j, 0, o);
+    if (j < editor.track.np) {
+        piece_world(&editor.track.p[j], j, 0, o);
     } else {
-        piece_world(&ed.p[ed.np - 1], ed.np - 1, pc_ns(&ed.p[ed.np - 1]), o);
+        piece_world(&editor.track.p[editor.track.np - 1], editor.track.np - 1,
+                    pc_ns(&editor.track.p[editor.track.np - 1]), o);
     }
     return vmul(vadd(o[0], o[1]), 0.5f);
 }
@@ -41,7 +42,7 @@ static V3 joint_world(int j)
 /* the ghosts: what can join on at the open end */
 static int ed_ghosts(Move *mv)
 {
-    if (!ed.np || ed_closed()) {
+    if (!editor.track.np || ed_closed()) {
         return 0;
     }
 

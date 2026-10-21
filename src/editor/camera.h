@@ -2,29 +2,24 @@
 #pragma once
 
 /* ---- the flying camera ---- */
-static V3 fc_pos = {0, 140, -560};
-static float fc_yaw, fc_pitch = -0.32f;
-static int fc_look, fc_space;       /* looking round: the right mouse button or Space held */
-static float fly_u, fly_v, fly_was; /* fly-along: where on the road, how fast */
-static V3 fly_f, fly_n;
-static int fly_snap;
 
 static V3 fc_dir(void)
 {
-    return V(sinf(fc_yaw) * cosf(fc_pitch), sinf(fc_pitch), cosf(fc_yaw) * cosf(fc_pitch));
+    return V(sinf(editor.cam.yaw) * cosf(editor.cam.pitch), sinf(editor.cam.pitch),
+             cosf(editor.cam.yaw) * cosf(editor.cam.pitch));
 }
 
 static void fc_clamp(void)
 {
-    fc_pos.y = clampf(fc_pos.y, 2, 700);
-    fc_pos.x = clampf(fc_pos.x, -1600, 1600);
-    fc_pos.z = clampf(fc_pos.z, -1600, 1600);
+    editor.cam.pos.y = clampf(editor.cam.pos.y, 2, 700);
+    editor.cam.pos.x = clampf(editor.cam.pos.x, -1600, 1600);
+    editor.cam.pos.z = clampf(editor.cam.pos.z, -1600, 1600);
 }
 
 static void fc_set_look(int on)
 {
-    if (on != fc_look) {
-        fc_look = on;
+    if (on != editor.cam.looking) {
+        editor.cam.looking = on;
 
         if (win) {
             SDL_SetWindowRelativeMouseMode(win, on);
@@ -37,20 +32,21 @@ static V3 joint_world(int j);
 
 static void ed_view_sel(void)
 {
-    V3 a = piece_mid(&ed.p[ed_lo()], ed_lo()), b = piece_mid(&ed.p[ed_hi()], ed_hi()), t = vmul(vadd(a, b), 0.5f);
+    V3 a = piece_mid(&editor.track.p[ed_lo()], ed_lo()), b = piece_mid(&editor.track.p[ed_hi()], ed_hi()),
+       t = vmul(vadd(a, b), 0.5f);
 
     if (ed_lo() == ed_hi()) { /* one piece: from behind it, looking the way it goes */
-        V3 e = joint_world(ed_sel + 1), h = vsub(e, a);
+        V3 e = joint_world(editor.sel + 1), h = vsub(e, a);
 
         if (h.x * h.x + h.z * h.z > 1) {
-            fc_yaw = atan2f(h.x, h.z);
+            editor.cam.yaw = atan2f(h.x, h.z);
         }
 
         t = vadd(e, vmul(vnorm(V(h.x, 0, h.z)), 8));
     }
 
-    fc_pitch = -0.6f;
-    fc_pos = vsub(t, vmul(fc_dir(), 110 + vlen(vsub(a, b)) * 0.6f));
+    editor.cam.pitch = -0.6f;
+    editor.cam.pos = vsub(t, vmul(fc_dir(), 110 + vlen(vsub(a, b)) * 0.6f));
     fc_clamp();
 }
 
@@ -68,11 +64,11 @@ static int ed_seg_of(int p)
 static void ed_fly(int on)
 {
     if (!on) {
-        ed_mode = EM_EDIT;
+        editor.mode = EM_EDIT;
         return;
     }
 
-    if (ed_built != ed_gen) {
+    if (editor.built_generation != editor.generation) {
         ed_build_mesh();
     }
 
@@ -82,40 +78,41 @@ static void ed_fly(int on)
         return;
     }
 
-    ed_mode = EM_FLY;
-    fly_u = (float)k;
-    fly_v = 25;
-    fly_snap = 1;
+    editor.mode = EM_FLY;
+    editor.fly.position = (float)k;
+    editor.fly.speed = 25;
+    editor.fly.snap = 1;
     fc_set_look(0);
 }
 
 static void ed_tick(float dt)
 {
-    ed_gen_t += dt;
+    editor.since_change += dt;
 
-    if (ed.np && ed_built != ed_gen && (ed_gen_t > 0.08f || ed_built < 0)) {
+    if (editor.track.np && editor.built_generation != editor.generation &&
+        (editor.since_change > 0.08f || editor.built_generation < 0)) {
         ed_build_mesh();
     }
 
-    if (ed_mode == EM_FLY && nseg) {
-        fly_u = fmodf(fly_u + fly_v * dt / ds + nseg, (float)nseg);
+    if (editor.mode == EM_FLY && nseg) {
+        editor.fly.position = fmodf(editor.fly.position + editor.fly.speed * dt / ds + nseg, (float)nseg);
 
-        for (int g = 0; g < nseg && seg[(int)fly_u % nseg].gap; g++) {
-            fly_u = fmodf(fly_u + (fly_v < 0 ? -1 : 1) + nseg, (float)nseg);
+        for (int g = 0; g < nseg && seg[(int)editor.fly.position % nseg].gap; g++) {
+            editor.fly.position = fmodf(editor.fly.position + (editor.fly.speed < 0 ? -1 : 1) + nseg, (float)nseg);
         }
 
         return;
     }
 
-    if (ed_mode != EM_EDIT || !keys) {
+    if (editor.mode != EM_EDIT || !keys) {
         return;
     }
 
     SDL_Keymod m = SDL_GetModState();
     int sp = keys[SDL_SCANCODE_SPACE];
 
-    if (sp != fc_space) {
-        fc_space = sp;
+    if (sp != editor.cam.space) {
+        editor.cam.space = sp;
         fc_set_look(sp);
     }
 
@@ -123,8 +120,8 @@ static void ed_tick(float dt)
         return;
     }
 
-    float v = fmaxf(25.f, fc_pos.y * 0.9f) * (m & SDL_KMOD_SHIFT ? 3.f : 1.f);
-    V3 f = V(sinf(fc_yaw), 0, cosf(fc_yaw)), r = V(-f.z, 0, f.x), d = V(0, 0, 0);
+    float v = fmaxf(25.f, editor.cam.pos.y * 0.9f) * (m & SDL_KMOD_SHIFT ? 3.f : 1.f);
+    V3 f = V(sinf(editor.cam.yaw), 0, cosf(editor.cam.yaw)), r = V(-f.z, 0, f.x), d = V(0, 0, 0);
 
     if (keys[SDL_SCANCODE_W]) {
         d = vadd(d, f);
@@ -150,7 +147,7 @@ static void ed_tick(float dt)
         d = vsub(d, UP);
     }
 
-    fc_pos = vadd(fc_pos, vmul(d, v * dt));
+    editor.cam.pos = vadd(editor.cam.pos, vmul(d, v * dt));
     fc_clamp();
 }
 
@@ -158,20 +155,21 @@ static void ed_cam(float dt)
 {
     V3 up = UP;
 
-    if (ed_mode == EM_FLY && nseg) { /* at a driver's eye height, looking 8 m up the road */
-        int k = (int)fly_u % nseg, ka = (k + (int)(8 / ds)) % nseg;
-        float f = fly_u - floorf(fly_u), kf = fly_snap ? 1.f : 1.f - expf(-10.f * dt);
+    if (editor.mode == EM_FLY && nseg) { /* at a driver's eye height, looking 8 m up the road */
+        int k = (int)editor.fly.position % nseg, ka = (k + (int)(8 / ds)) % nseg;
+        float f = editor.fly.position - floorf(editor.fly.position),
+              kf = editor.fly.snap ? 1.f : 1.f - expf(-10.f * dt);
         const Seg *a = &seg[k], *b = &seg[(k + 1) % nseg];
         V3 n = vnorm(vlerp(a->N, b->N, f));
         cam.pos = vadd(vlerp(a->c, b->c, f), vmul(n, 1.8f));
         V3 fw = seg[ka].gap ? a->T : vnorm(vsub(vadd(seg[ka].c, vmul(seg[ka].N, 1.4f)), cam.pos));
-        fly_f = vnorm(vlerp(fly_f, fw, kf));
-        fly_n = vnorm(vlerp(fly_n, n, kf));
-        fly_snap = 0;
-        cam.fwd = fly_f;
-        up = fly_n;
+        editor.fly.forward = vnorm(vlerp(editor.fly.forward, fw, kf));
+        editor.fly.normal = vnorm(vlerp(editor.fly.normal, n, kf));
+        editor.fly.snap = 0;
+        cam.fwd = editor.fly.forward;
+        up = editor.fly.normal;
     } else {
-        cam.pos = fc_pos;
+        cam.pos = editor.cam.pos;
         cam.fwd = fc_dir();
     }
     cam.right = vnorm(vcross(cam.fwd, up));

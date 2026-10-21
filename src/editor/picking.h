@@ -2,11 +2,6 @@
 #pragma once
 
 /* ---- the mouse: what is under it ---- */
-typedef struct {
-    int kind, p, turn;
-} Pick; /* kind 0 nothing, 1 a piece (p), 2 a ghost (turn) */
-
-static float ed_hx = -1, ed_hy = -1;
 
 static float ray_tri(V3 o, V3 d, V3 a, V3 b, V3 c)
 {
@@ -56,8 +51,8 @@ static Pick ed_pick(float hx, float hy)
     V3 o = cam.pos, d = vnorm(vadd(cam.fwd, vadd(vmul(cam.right, (hx / HW * 2 - 1) * asp / FOCAL_Y),
                                                  vmul(cam.up, (1 - hy / VH * 2) / FOCAL_Y))));
 
-    for (int p = 0; p < ed.np; p++) {
-        float t = ray_piece(o, d, &ed.p[p], p);
+    for (int p = 0; p < editor.track.np; p++) {
+        float t = ray_piece(o, d, &editor.track.p[p], p);
 
         if (t > 0 && t < best) {
             best = t;

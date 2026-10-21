@@ -40,20 +40,18 @@ static void ed_pole(V3 p, float h, uint32_t col)
     draw_tri_unlit(vsub(t, V(0, 1.8f, 0)), vadd(t, r), vsub(t, r), col);
 }
 
-static Pick ed_hov;
-
 static void ed_draw3d(void)
 {
-    if (ed_mode == EM_FLY || !ed.np) {
+    if (editor.mode == EM_FLY || !editor.track.np) {
         return;
     }
 
-    ed_hov = fc_look ? (Pick){0, -1, 0} : ed_pick(ed_hx, ed_hy);
+    editor.hover = editor.cam.looking ? (Pick){0, -1, 0} : ed_pick(editor.mouse_x, editor.mouse_y);
     Move mv[8];
     int n = ed_ghosts(mv);
 
     for (int g = 0; g < n; g++) {
-        int hot = ed_hov.kind == 2 && ed_hov.turn == mv[g].turn;
+        int hot = editor.hover.kind == 2 && editor.hover.turn == mv[g].turn;
 
         for (int j = 0; j < mv[g].n; j++) {
             ed_deck(&mv[g].p[j], -1, 0.2f, hot ? 0xF0D060 : 0x78B4E8);
@@ -61,18 +59,18 @@ static void ed_draw3d(void)
         }
     }
 
-    for (int k = 0; k < ed_nbad; k++) {
-        if (ed_bad[k] < ed.np) {
-            ed_fence(&ed.p[ed_bad[k]], ed_bad[k], 0.1f, 1.4f, 0xFF3030);
+    for (int k = 0; k < editor.unreachable_count; k++) {
+        if (editor.unreachable[k] < editor.track.np) {
+            ed_fence(&editor.track.p[editor.unreachable[k]], editor.unreachable[k], 0.1f, 1.4f, 0xFF3030);
         }
     }
 
-    if (ed_hov.kind == 1 && (ed_hov.p < ed_lo() || ed_hov.p > ed_hi())) {
-        ed_fence(&ed.p[ed_hov.p], ed_hov.p, 0.1f, 0.9f, 0xF0F0F0);
+    if (editor.hover.kind == 1 && (editor.hover.p < ed_lo() || editor.hover.p > ed_hi())) {
+        ed_fence(&editor.track.p[editor.hover.p], editor.hover.p, 0.1f, 0.9f, 0xF0F0F0);
     }
 
     for (int p = ed_lo(); p <= ed_hi(); p++) {
-        ed_fence(&ed.p[p], p, 0.1f, 1.6f, 0x30E0FF);
+        ed_fence(&editor.track.p[p], p, 0.1f, 1.6f, 0x30E0FF);
     }
 
     int jl[MAXPC + 1], nj = ed_joints(jl); /* the joints R/F move: poles at the run's ends */
@@ -82,7 +80,8 @@ static void ed_draw3d(void)
 
     if (!ed_closed()) { /* the start line (a closed track has it on the road) */
         V3 o[2];
-        piece_world(&ed.p[ed.start], ed.start, pc_ns(&ed.p[ed.start]), o);
+        piece_world(&editor.track.p[editor.track.start], editor.track.start, pc_ns(&editor.track.p[editor.track.start]),
+                    o);
         V3 s = vmul(vsub(o[1], o[0]), 1.f / 8), f = vmul(vnorm(vcross(vsub(o[1], o[0]), UP)), 1.2f), y = V(0, 0.12f, 0);
 
         for (int k = 0; k < 8; k++) {

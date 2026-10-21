@@ -23,13 +23,13 @@ static void ed_build_mesh(void)
 {
     float keep[4] = {ar_x0, ar_x1, ar_z0, ar_z1};
     int tg = track_gen;
-    trk[ED_SLOT] = ed;
+    trk[ED_SLOT] = editor.track;
     trk[ED_SLOT].orig = -1;
 
     if (!ed_closed()) {
-        trk[ED_SLOT].start = ed.np - 1;
+        trk[ED_SLOT].start = editor.track.np - 1;
         trk_open = 1;
-        memcpy(trk_endh, ed_endh, sizeof trk_endh);
+        memcpy(trk_endh, editor.end_heights, sizeof trk_endh);
     }
 
     build_track_geometry(ED_SLOT);
@@ -56,5 +56,5 @@ static void ed_build_mesh(void)
     cur = was;
     trk_open = 0;
     tkb_gen++;
-    ed_built = ed_gen;
+    editor.built_generation = editor.generation;
 }

@@ -5,8 +5,8 @@
 static int ed_left_edge(void)
 {
     int a[2][2], b[2][2];
-    pc_xs(&ed.p[0], 0, a);
-    pc_xs(&ed.p[0], 1, b);
+    pc_xs(&editor.track.p[0], 0, a);
+    pc_xs(&editor.track.p[0], 1, b);
     float mx = (a[0][0] + a[1][0]) * 0.5f, mz = (a[0][1] + a[1][1]) * 0.5f;
     float dx = (b[0][0] + b[1][0]) * 0.5f - mx, dz = (b[0][1] + b[1][1]) * 0.5f - mz;
     return ((a[0][0] - mx) * -dz + (a[0][1] - mz) * dx) > 0 ? 0 : 1;
@@ -14,16 +14,16 @@ static int ed_left_edge(void)
 
 static int *joint_ptr(int j, int e)
 {
-    if (j >= ed.np) {
-        return ed_closed() ? &ed.p[0].h[e][0] : &ed_endh[e];
+    if (j >= editor.track.np) {
+        return ed_closed() ? &editor.track.p[0].h[e][0] : &editor.end_heights[e];
     }
 
-    return &ed.p[j].h[e][0];
+    return &editor.track.p[j].h[e][0];
 }
 
 static void regen(int p)
 {
-    TPiece *pc = &ed.p[p];
+    TPiece *pc = &editor.track.p[p];
 
     if (pc->shape == SH_RAW) {
         return;
@@ -72,24 +72,24 @@ static void joint_get(int j, float *c, float *b)
 
 static void joint_set(int j, float c, float b)
 {
-    ed_nbad = 0;
+    editor.unreachable_count = 0;
     int L = ed_left_edge(), cl = ed_closed();
     c = clampf(c, fabsf(b) / 2, 250);
     b = clampf(b, -6, 6);
     *joint_ptr(j, L) = (int)lroundf((c + b / 2) * U_PER_M);
     *joint_ptr(j, 1 - L) = (int)lroundf((c - b / 2) * U_PER_M);
-    if (j < ed.np) {
+    if (j < editor.track.np) {
         regen(j);
     } else if (cl) {
         regen(0);
     }
-    int pj = j - 1 < 0 && cl ? ed.np - 1 : j - 1;
+    int pj = j - 1 < 0 && cl ? editor.track.np - 1 : j - 1;
 
     if (pj >= 0) {
         regen(pj);
     }
 
-    ed_dirty = 1;
+    editor.dirty = 1;
 }
 
 /* the joints the height and banking keys move: one piece's end, or a run's every joint from its first piece's start to
@@ -104,7 +104,7 @@ static int ed_joints(int *j)
     }
 
     for (int k = a; k <= b + 1; k++) {
-        if (!(k == ed.np && a == 0 && ed_closed())) {
+        if (!(k == editor.track.np && a == 0 && ed_closed())) {
             j[n++] = k; /* a whole closed loop: its end is its start */
         }
     }
