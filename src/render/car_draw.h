@@ -72,7 +72,7 @@ static void draw_cars_gpu(SDL_GPURenderPass *rp, SDL_GPUCommandBuffer *cmd, int 
         for (int g = 0; g < car_mesh.group_count; g++) { /* the engine top stays visible in the cockpit */
             float m[12];
 
-            if (!car_group_rows(c, g, m, first_person, vw ? view_hide : 0)) {
+            if (!car_group_rows(c, g, m, first_person, vw ? viewer.hide_mask : 0)) {
                 continue;
             }
 

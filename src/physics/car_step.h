@@ -256,7 +256,7 @@ static void car_step(Car *c, float dt)
     impact = fmaxf(impact, 0.5f * fence_contact(c, &Fo, &To, &net)); /* the net gives: a softer hit */
     if ((touch || net) && c->crash_time <= 0) { /* landed beside the track or caught in the net: crash */
         c->crash_time = 1e-4f;
-        stat_falls++;
+        stats.falls++;
         car_hurt(c, 6.f + 0.5f * impact, 1.f);
         dust_burst(c->x, 36, 3.f + 0.3f * impact);
 
@@ -356,7 +356,7 @@ static void car_step(Car *c, float dt)
     c->stuck_time = (state == ST_RACE && vlen(c->v) < 1.0f && c->throttle > 0.15f) ? c->stuck_time + dt : 0;
 
     if (c->flipped_time > 2.5f || c->stuck_time > 2.5f || c->x.y < ground_h(c->x.x, c->x.z) - 4.f) {
-        stat_falls++;
+        stats.falls++;
         car_hurt(c, 4.f, 1.f);
 
         if (getenv("SCR_DEBUG") && !planning) {
@@ -407,8 +407,8 @@ static void cars_interact(Car *a, Car *b, float dt)
                 continue;
             }
 
-            stat_contacts++;
-            stat_push += Fn * dt;
+            stats.contacts++;
+            stats.push += Fn * dt;
             V3 f = vmul(n, Fn);
             a->v = vsub(a->v, vmul(f, dt / CAR_M));
             b->v = vadd(b->v, vmul(f, dt / CAR_M));

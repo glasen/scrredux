@@ -183,7 +183,7 @@ static void plan_jumps(void)
     int cb[NJ], cl[NJ][NJ], cn[NJ], nc = 0;
     int st0 = state;
     float rt0 = racetime;
-    int np0 = npart, sf0 = stat_falls, ss0 = stat_sparks;
+    int np0 = npart, sf0 = stats.falls, ss0 = stats.sparks;
     uint32_t rs0 = rngs;
     state = ST_RACE;
     planning = 1;
@@ -278,8 +278,8 @@ static void plan_jumps(void)
     state = st0;
     racetime = rt0;
     npart = np0;
-    stat_falls = sf0;
-    stat_sparks = ss0;
+    stats.falls = sf0;
+    stats.sparks = ss0;
     rngs = rs0;
     planning = 0;
     plan_gen = track_gen;

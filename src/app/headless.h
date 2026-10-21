@@ -108,30 +108,30 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
     } /* else the start crane puts them back on the grid */
     if (camsel == 4) {
         start_view();
-        view_auto = 0;
-        view_yaw = secs * PI_F / 180.f;
+        viewer.auto_orbit = 0;
+        viewer.yaw = secs * PI_F / 180.f;
         secs = 0;
 
         if (getenv("SCR_VIEW")) {
-            sscanf(getenv("SCR_VIEW"), "%f,%f", &view_pitch, &view_dist);
+            sscanf(getenv("SCR_VIEW"), "%f,%f", &viewer.pitch, &viewer.distance);
         }
 
         if (getenv("SCR_TARGET")) {
-            sscanf(getenv("SCR_TARGET"), "%f,%f,%f", &view_target.x, &view_target.y, &view_target.z);
+            sscanf(getenv("SCR_TARGET"), "%f,%f,%f", &viewer.target.x, &viewer.target.y, &viewer.target.z);
         }
 
         if (getenv("SCR_FLAME")) {
-            view_flame = 1;
+            viewer.flame = 1;
         }
 
         if (getenv("SCR_FREEZE")) {
-            view_anim = 0;
+            viewer.animate = 0;
         }
 
         if (getenv("SCR_POSE")) { /* debug: SCR_POSE="travel,steer", travel -1 = full droop .. +1 = full bump */
             float f = 0, st = 0;
             sscanf(getenv("SCR_POSE"), "%f,%f", &f, &st);
-            view_anim = 0;
+            viewer.animate = 0;
             cars[0].steer_angle = st;
 
             for (int i = 0; i < 4; i++) {
@@ -163,7 +163,7 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
         if (i % 1200 == 0) {
             printf("t=%5.1f p: seg %4d/%d lap %d v=%5.1f dmg=%4.1f | ai: lap %d v=%5.1f dmg=%4.1f falls=%d\n",
                    i * PHYS_DT, cars[0].seg, nseg, cars[0].lap, vlen(cars[0].v), cars[0].damage, cars[1].lap,
-                   vlen(cars[1].v), cars[1].damage, stat_falls);
+                   vlen(cars[1].v), cars[1].damage, stats.falls);
         }
 
         if (i % 4 == 0) {
@@ -214,11 +214,11 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
         }
     }
 
-    printf("CONTACT samples=%d impulse=%.0f Ns sparks=%d\n", stat_contacts, stat_push, stat_sparks);
+    printf("CONTACT samples=%d impulse=%.0f Ns sparks=%d\n", stats.contacts, stats.push, stats.sparks);
     printf("END state=%d result=%d racetime=%.1f p lap=%d dmg=%.1f best=%.1f | ai lap=%d dmg=%.1f | falls=%d nseg=%d "
            "len=%.0f\n",
            state, result, racetime, cars[0].lap, cars[0].damage, cars[0].best_lap, cars[1].lap, cars[1].damage,
-           stat_falls, nseg, nseg * ds);
+           stats.falls, nseg, nseg * ds);
 
     if (shot) {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -230,7 +230,7 @@ static void run_headless(int shot, const char *path, float secs, int track, int 
             update_camera(&cars[0], 1.f / 60.f, 1);
 
             if (camsel == 4) {
-                cars[0].flame = view_flame ? 1.f : 0.f;
+                cars[0].flame = viewer.flame ? 1.f : 0.f;
                 update_camera(&cars[0], 1.f / 60.f, 1);
             }
 

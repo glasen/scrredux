@@ -268,11 +268,11 @@ int main(int argc, char **argv)
             if (e.type == SDL_EVENT_QUIT) {
                 running = 0;
             } else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e.motion.state & SDL_BUTTON_LMASK)) {
-                view_yaw -= e.motion.xrel * 0.008f;
-                view_pitch += e.motion.yrel * 0.006f;
-                view_auto = 0;
+                viewer.yaw -= e.motion.xrel * 0.008f;
+                viewer.pitch += e.motion.yrel * 0.006f;
+                viewer.auto_orbit = 0;
             } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) {
-                view_dist *= 1.f - 0.1f * e.wheel.y;
+                viewer.distance *= 1.f - 0.1f * e.wheel.y;
             } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) {
                 ed_wheel(e.wheel.y);
             } else if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&

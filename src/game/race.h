@@ -45,7 +45,7 @@ static void start_race(void)
     state_t = 3.99f;
     result = 0;
     msg_t = 0;
-    stat_falls = 0;
+    stats.falls = 0;
     paused = 0;
 
     if (race_mode == RM_SEASON) {

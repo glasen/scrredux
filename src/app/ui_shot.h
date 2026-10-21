@@ -119,7 +119,7 @@ static void ui_shot(const char *path, const char *script)
     }
 
     if (state == ST_RACE || state == ST_DONE) {
-        printf("race: t=%.1f lap %d dmg %.1f falls %d best %.1f\n", racetime, cars[0].lap, cars[0].damage, stat_falls,
+        printf("race: t=%.1f lap %d dmg %.1f falls %d best %.1f\n", racetime, cars[0].lap, cars[0].damage, stats.falls,
                cars[0].best_lap);
     }
 

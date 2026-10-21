@@ -113,8 +113,8 @@ static void game_tick(float dt)
         case ST_VIEW: {
             Car *c = &cars[0];
 
-            if (view_auto) {
-                view_yaw += 0.35f * dt;
+            if (viewer.auto_orbit) {
+                viewer.yaw += 0.35f * dt;
             }
 
             if (keys) {
@@ -124,20 +124,20 @@ static void game_tick(float dt)
                     (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) - (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]);
                 float kz = (keys[SDL_SCANCODE_EQUALS] || keys[SDL_SCANCODE_KP_PLUS]) -
                            (keys[SDL_SCANCODE_MINUS] || keys[SDL_SCANCODE_KP_MINUS]);
-                view_yaw += kx * 1.6f * dt;
-                view_pitch += ky * 0.9f * dt;
-                view_dist *= 1.f - kz * 0.8f * dt;
+                viewer.yaw += kx * 1.6f * dt;
+                viewer.pitch += ky * 0.9f * dt;
+                viewer.distance *= 1.f - kz * 0.8f * dt;
 
                 if (kx != 0) {
-                    view_auto = 0;
+                    viewer.auto_orbit = 0;
                 }
             }
 
-            view_pitch = clampf(view_pitch, -0.15f, 1.45f);
-            view_dist = clampf(view_dist, 0.9f, 22.f);
+            viewer.pitch = clampf(viewer.pitch, -0.15f, 1.45f);
+            viewer.distance = clampf(viewer.distance, 0.9f, 22.f);
             state_t += dt;
 
-            if (view_anim) {
+            if (viewer.animate) {
                 c->steer_angle = 0.30f * sinf(state_t * 0.9f); /* steering demo */
                 for (int i = 0; i < 4; i++) {
                     c->wheel_phase[i] += dt * 1.8f; /* wheels turn slowly */
@@ -155,7 +155,7 @@ static void game_tick(float dt)
                 }
             }
 
-            c->flame = view_flame ? 1.f : 0.f;
+            c->flame = viewer.flame ? 1.f : 0.f;
             break;
         }
         case ST_DONE:

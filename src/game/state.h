@@ -8,8 +8,13 @@ static int state = ST_MENU, laps = 3, sel_track = 0, result = 0, paused = 0, coc
 static float state_t, racetime;
 static char msg[64];
 static float msg_t;
-static int stat_falls, stat_contacts;
-static float stat_push;
+
+/* what --sim reports */
+static struct {
+    int falls, contacts, sparks;
+    float push; /* summed car-to-car impulse, Ns */
+} stats;
+
 static const float skill_vcap[3] = {56, 62, 69}, skill_alat[3] = {11.0f, 13.5f, 16.0f};
 
 static void set_msg(const char *s, float t)

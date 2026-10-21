@@ -11,8 +11,8 @@ static void draw_hud_base(void)
         hud_text_c(36, b, 1, 0xE0E0E0);
         hud_text_c(226, "DRAG/ARROWS: ROTATE   WHEEL/+-: ZOOM   HOME: RESET   SPACE: TURNTABLE", 1, 0xE0E0E0);
         snprintf(b, sizeof b, "N: PAINT  Z: ANIMATION %s  F: FLAMES %s  R: CAGE %s  E: INTAKE %s  ESC: QUIT",
-                 view_anim ? "ON" : "OFF", view_flame ? "ON" : "OFF", (view_hide & 1) ? "OFF" : "ON",
-                 (view_hide & 4) ? "OFF" : "ON");
+                 viewer.animate ? "ON" : "OFF", viewer.flame ? "ON" : "OFF", (viewer.hide_mask & 1) ? "OFF" : "ON",
+                 (viewer.hide_mask & 4) ? "OFF" : "ON");
         hud_text_c(238, b, 1, 0xE0E0E0);
         return;
     }

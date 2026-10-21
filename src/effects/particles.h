@@ -13,12 +13,11 @@ typedef struct {
 
 static Part parts[MAXPART];
 static int npart;
-static int stat_sparks;
 
 static void spawn(int kind, V3 p, V3 v, float life, float size, uint32_t col)
 {
     if (kind == P_SPARK) {
-        stat_sparks++;
+        stats.sparks++;
     }
 
     if (npart >= MAXPART) {

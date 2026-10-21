@@ -2,9 +2,16 @@
 #pragma once
 
 /* ---- model viewer: the car alone on a plain floor, orbit camera ---- */
-static float view_yaw = 0.6f, view_pitch = 0.22f, view_dist = 7.5f;
-static int view_auto = 1, view_hide = 0, view_col = 0, view_flame = 0, view_anim = 1;
-static V3 view_target = {0, 0.55f, 0};
+static struct {
+    float yaw, pitch, distance; /* orbit camera */
+    V3 target;
+    int auto_orbit;
+    int hide_mask; /* bit 0: body panels hidden, bit 2: suspension hidden */
+    int paint;     /* index into PALETTE */
+    int flame;     /* exhaust flames shown */
+    int animate;   /* wheels and suspension moving */
+} viewer = {0.6f, 0.22f, 7.5f, {0, 0.55f, 0}, .auto_orbit = 1, .animate = 1};
+
 static const uint32_t PALETTE[] = {CAR_RED, 0x2860D8, 0xF07818, 0x30A050, 0xE8D030, 0xF0F0F0, 0x303034, 0x9040C0};
 
 static void start_view(void)
@@ -13,7 +20,7 @@ static void start_view(void)
     memset(&cars[1], 0, sizeof(Car));
     Car *c = &cars[0];
     c->active = 1;
-    c->col = PALETTE[view_col % 8];
+    c->col = PALETTE[viewer.paint % 8];
     c->x = V(0, REST_H, 0);
     c->F = V(0, 0, 1);
     c->U = V(0, 1, 0);
@@ -29,23 +36,23 @@ static void start_view(void)
 static void view_key(SDL_Keycode k)
 {
     if (k == SDLK_SPACE) {
-        view_auto = !view_auto;
+        viewer.auto_orbit = !viewer.auto_orbit;
     } else if (k == SDLK_N) {
-        view_col = (view_col + 1) % 8;
-        cars[0].col = PALETTE[view_col];
+        viewer.paint = (viewer.paint + 1) % 8;
+        cars[0].col = PALETTE[viewer.paint];
     } else if (k == SDLK_R) {
-        view_hide ^= 1;
+        viewer.hide_mask ^= 1;
     } else if (k == SDLK_E) {
-        view_hide ^= 4;
+        viewer.hide_mask ^= 4;
     } else if (k == SDLK_F) {
-        view_flame = !view_flame;
+        viewer.flame = !viewer.flame;
     } else if (k == SDLK_Z) {
-        view_anim = !view_anim;
+        viewer.animate = !viewer.animate;
     } else if (k == SDLK_HOME) {
-        view_yaw = 0.6f;
-        view_pitch = 0.22f;
-        view_dist = 7.5f;
-        view_target = V(0, 0.55f, 0);
+        viewer.yaw = 0.6f;
+        viewer.pitch = 0.22f;
+        viewer.distance = 7.5f;
+        viewer.target = V(0, 0.55f, 0);
     }
 }
 
