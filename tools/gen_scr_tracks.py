@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate scr_tracks.h from the Stunt Car Racer remake sources.
 
-usage: tools/gen_scr_tracks.py PATH_TO_StuntCarRacer-X > include/scr_tracks.h
+usage: tools/gen_scr_tracks.py PATH_TO_StuntCarRacer-X > src/track/data/scr_tracks.h
 
 Reads Tracks/*.bin (804-byte road tables) and the piece shape / height profile tables from Track.cpp.
 """
