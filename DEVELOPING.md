@@ -57,7 +57,7 @@ scale the physics is tuned to: 128 original units = the 2.95 m wheelbase, 8.85 m
 - `./scrredux --check-tracks` checks the originals against the builder's joining and overlap rules.
 - The track builder (`editor/`) works in the stadium: `ed_build_scene()` builds the stadium once round the whole grid
   (`scene_builder`: no track, the grid drawn on the floor, no infield clutter), and the track goes into its own vertex
-  buffer (`tkb`, uploaded as `vbuf_t`), rebuilt 0.08 s after a change. An open track is built with `trk_open`: its
+  buffer (`tkb`, uploaded as `gpu.vbuf_track`), rebuilt 0.08 s after a change. An open track is built with `trk_open`: its
   open end added, the stretch back to the start marked as a gap, no start line on the road. Ghosts, the selection and
   the joint poles are drawn each frame from the pieces' cross-sections (`ed_draw3d()`); clicks pick the deck by ray.
 
