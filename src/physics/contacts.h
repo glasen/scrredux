@@ -22,7 +22,7 @@ static float in_climb_wall(V3 P, int f, V3 *n)
     V3 Th = vnorm(V(s2->c.x - s->c.x, 0, s2->c.z - s->c.z));
     float d = vdot(vsub(P, s->c), Th);
 
-    if (d <= 0 || d > 4.f || P.y > s2->c.y - 0.3f) {
+    if (d <= 0 || d > CLIMB_WALL_DEPTH || P.y > s2->c.y - CLIMB_WALL_CLEARANCE) {
         return 0;
     }
 
@@ -56,14 +56,14 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         topy = 0;
         stp = 0;
     } /* the wall: pushed straight back out, never up the face */
-    if (al > ow || (h < -1.2f && !stp && wd <= 0) || h > topy) {
+    if (al > ow || (h < -BODY_DEPTH && !stp && wd <= 0) || h > topy) {
         c->point_hit[idx] = 0;
         return;
     }
 
     float best = topy - h;
     V3 bn = wd > 0 ? wn : q.N;
-    float pb = h + 1.2f;
+    float pb = h + BODY_DEPTH;
 
     if (pb < best && !stp && wd <= 0) {
         best = pb;
@@ -97,18 +97,19 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
 
     V3 r = vsub(P, c->x), vp = vadd(c->v, vcross(c->w, r));
     float vn = vdot(vp, bn);
-    float Fn = 250000.f * best - 7000.f * vn;
+    float Fn = BODY_SPRING * best - BODY_DAMPING * vn;
 
     if (Fn < 0) {
         Fn = 0;
     }
 
-    if (Fn > 220000.f) {
-        Fn = 220000.f;
+    if (Fn > BODY_FORCE_MAX) {
+        Fn = BODY_FORCE_MAX;
     }
 
-    if (stp && Fn > 0.6f * CAR_M * GRAV) {
-        Fn = 0.6f * CAR_M * GRAV; /* a sheer face lifts the car, it does not fire it (the original clamps too) */
+    if (stp && Fn > BODY_STEEP_G * CAR_M * GRAV) {
+        Fn =
+            BODY_STEEP_G * CAR_M * GRAV; /* a sheer face lifts the car, it does not fire it (the original clamps too) */
     }
 
     V3 f = vmul(bn, Fn);
@@ -116,16 +117,17 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
     float vts = vlen(vt);
 
     if (vts > 1e-3f) {
-        f = vadd(f, vmul(vt, -0.25f * Fn * tanhf(vts / 0.5f) / vts));
+        f = vadd(f, vmul(vt, -BODY_FRICTION * Fn * tanhf(vts / CONTACT_SLIP_SCALE) / vts));
     }
 
     *F = vadd(*F, f);
     *Tq = vadd(*Tq, vcross(r, f));
-    if (vts > 3.f && Fn > 1500.f && c == &cars[0]) {
+    if (vts > BODY_SCRAPE_SPEED && Fn > BODY_SCRAPE_FORCE && c == &cars[0]) {
         sfx.scraping = 1;
     }
 
-    if (vts > 3.f && Fn > 1500.f && frand() < 0.35f) { /* steel on the deck: sparks */
+    if (vts > BODY_SCRAPE_SPEED && Fn > BODY_SCRAPE_FORCE &&
+        frand() < BODY_SPARK_CHANCE) { /* steel on the deck: sparks */
         for (int k = 0; k < 4; k++) {
             spawn(P_SPARK, P,
                   vadd(vadd(vmul(vt, 0.55f + 0.3f * frand()), vmul(bn, 1.5f + 2.f * frand())), vmul(rnd_dir(), 2.f)),
@@ -133,8 +135,8 @@ static void contact_point(Car *c, int idx, V3 lp, V3 *F, V3 *Tq)
         }
     }
 
-    if (!c->point_hit[idx] && -vn > 9.0f) {
-        car_hurt(c, (-vn - 9.0f) * 0.5f, 1.f);
+    if (!c->point_hit[idx] && -vn > BODY_HIT_SPEED) {
+        car_hurt(c, (-vn - BODY_HIT_SPEED) * BODY_HIT_DAMAGE, 1.f);
     }
 
     c->point_hit[idx] = 1;
@@ -177,33 +179,33 @@ static void edge_contact(Car *c, V3 *F, V3 *Tq)
             belly_at(l.z, &ey, &ehw);
             float pen = l.y - ey;
 
-            if (fabsf(l.x) > ehw || pen <= 0 || pen > 0.35f) {
+            if (fabsf(l.x) > ehw || pen <= 0 || pen > EDGE_MAX_PENETRATION) {
                 continue;
             }
 
             V3 r = d, vp = vadd(c->v, vcross(c->w, r));
             float vn = vdot(vp, c->U);
-            float Fn = fmaxf(250000.f * pen - 7000.f * vn, 0.f);
+            float Fn = fmaxf(BODY_SPRING * pen - BODY_DAMPING * vn, 0.f);
 
-            if (Fn > 120000.f) {
-                Fn = 120000.f;
+            if (Fn > EDGE_FORCE_MAX) {
+                Fn = EDGE_FORCE_MAX;
             }
 
             V3 f = vmul(c->U, Fn), vt = vsub(vp, vmul(c->U, vn));
             float vts = vlen(vt);
 
             if (vts > 1e-3f) {
-                f = vadd(f, vmul(vt, -0.3f * Fn * tanhf(vts / 0.5f) / vts));
+                f = vadd(f, vmul(vt, -EDGE_FRICTION * Fn * tanhf(vts / CONTACT_SLIP_SCALE) / vts));
             }
 
             *F = vadd(*F, f);
             *Tq = vadd(*Tq, vcross(r, f));
-            if (vts > 2.f && c == &cars[0]) {
+            if (vts > EDGE_SCRAPE_SPEED && c == &cars[0]) {
                 sfx.scraping = 1;
             }
 
-            if (vts > 2.f && frand() < 0.5f) { /* frame grinding on the edge: sparks */
-                for (int k = 0; k < 4; k++) {  /* some fly high and wide: seen from the cockpit */
+            if (vts > EDGE_SCRAPE_SPEED && frand() < EDGE_SPARK_CHANCE) { /* frame grinding on the edge: sparks */
+                for (int k = 0; k < 4; k++) { /* some fly high and wide: seen from the cockpit */
                     V3 sv =
                         (k & 1)
                             ? vadd(vadd(vmul(c->v, 1.f), vmul(c->F, 3.f + 4.f * frand())), /* sprayed forward and up */
@@ -298,9 +300,10 @@ static void start_crane(Car *c, int s, float lat, float T)
 static void crane_step(Car *c, float dt)
 {
     c->crane_time += dt;
-    float f = smooth01(c->crane_time / c->crane_duration), sway = 0.04f * sinf(c->crane_time * 2.3f) * (1 - f);
+    float f = smooth01(c->crane_time / c->crane_duration),
+          sway = CRANE_SWAY * sinf(c->crane_time * CRANE_SWAY_RATE) * (1 - f);
     const Seg *s = &seg[c->crane_segment];
-    c->x = vadd(c->crane_target, vmul(s->N, 6.5f * (1 - f)));
+    c->x = vadd(c->crane_target, vmul(s->N, CRANE_HEIGHT * (1 - f)));
     c->F = vnorm(vadd(s->T, vmul(s->R, sway)));
     c->U = s->N;
     c->R = vcross(c->F, c->U);
@@ -319,7 +322,7 @@ static void crane_step(Car *c, float dt)
 
     if (c->crane_time >= c->crane_duration) {
         c->crane_time = 0;
-        c->hook_time = 2.0f;
+        c->hook_time = HOOK_RETRACT_TIME;
     } /* released: the hook goes back up */
 }
 
@@ -341,17 +344,17 @@ static float ground_contact(Car *c, V3 *F, V3 *Tq, int *touch)
         V3 r = vsub(P, c->x), vp = vadd(c->v, vcross(c->w, r));
         float vn = vp.y;
         worst = fmaxf(worst, -vn);
-        float Fn = fmaxf(160000.f * pen - 6000.f * vn, 0.f);
+        float Fn = fmaxf(GROUND_SPRING * pen - GROUND_DAMPING * vn, 0.f);
         V3 f = V(0, Fn, 0), vt = V(vp.x, 0, vp.z);
         float vts = vlen(vt);
 
         if (vts > 1e-3f) {
-            f = vadd(f, vmul(vt, -0.7f * Fn * tanhf(vts / 0.5f) / vts));
+            f = vadd(f, vmul(vt, -GROUND_FRICTION * Fn * tanhf(vts / CONTACT_SLIP_SCALE) / vts));
         }
 
         *F = vadd(*F, f);
         *Tq = vadd(*Tq, vcross(r, f));
-        if (vts > 2.f && frand() < 0.04f) {
+        if (vts > DUST_SPEED && frand() < DUST_CHANCE) {
             spawn(P_DUST, P, vadd(vmul(vt, 0.2f), V(0, 1.2f, 0)), 1.0f + frand(), 0.25f + frand() * 0.3f,
                   (i & 1) ? 0xB49A72 : 0x9C8460);
         }
@@ -374,7 +377,7 @@ static float fence_contact(Car *c, V3 *F, V3 *Tq, int *touch)
                     : side == 2 ? ar_z0 - c->x.z
                                 : c->x.z - ar_z1;
 
-        if (out > 3.f) {
+        if (out > FENCE_REACH) {
             continue;
         }
 
@@ -393,7 +396,7 @@ static float fence_contact(Car *c, V3 *F, V3 *Tq, int *touch)
             worst = fmaxf(worst, -vn);
             P[np] = p;
             n[np] = nn;
-            fn[np] = fmaxf(300.f * pen - 8000.f * vn, 0.f);
+            fn[np] = fmaxf(FENCE_SPRING * pen - FENCE_DAMPING * vn, 0.f);
             sum += fn[np++];
         }
     }
@@ -403,7 +406,7 @@ static float fence_contact(Car *c, V3 *F, V3 *Tq, int *touch)
     }
 
     *touch = 1;
-    float k = sum > 800000.f ? 800000.f / sum : 1.f;
+    float k = sum > FENCE_FORCE_MAX ? FENCE_FORCE_MAX / sum : 1.f;
 
     for (int j = 0; j < np; j++) {
         V3 r = vsub(P[j], c->x), vp = vadd(c->v, vcross(c->w, r)), vt = vsub(vp, vmul(n[j], vdot(vp, n[j])));
@@ -411,7 +414,7 @@ static float fence_contact(Car *c, V3 *F, V3 *Tq, int *touch)
         V3 f = vmul(n[j], Fn);
 
         if (vts > 1e-3f) {
-            f = vadd(f, vmul(vt, -0.5f * Fn * tanhf(vts / 0.5f) / vts));
+            f = vadd(f, vmul(vt, -FENCE_FRICTION * Fn * tanhf(vts / CONTACT_SLIP_SCALE) / vts));
         }
 
         *F = vadd(*F, f);

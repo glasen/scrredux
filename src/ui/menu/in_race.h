@@ -138,7 +138,7 @@ static int race_key(SDL_Keycode k)
         pause_set(1);
     } else if (k == SDLK_R && state == ST_RACE && !car_out(&cars[0])) {
         car_hurt(&cars[0], 8, 0);
-        start_crane(&cars[0], restart_seg(&cars[0]), 0, 2.6f);
+        start_crane(&cars[0], restart_seg(&cars[0]), 0, CRANE_LOWER_TIME);
     }
     return 1;
 }
