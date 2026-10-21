@@ -158,40 +158,54 @@
 #include "app/input.h"
 #include "app/ui_shot.h"
 
-int main(int argc, char **argv)
+/* --menu-frames DIR SECONDS: records the menu at 60 fps into DIR/fNNN.png */
+static int menu_frames(const char *dir, float seconds)
 {
-    if (!car_model_load()) {
+    if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) {
         return 1;
     }
 
-    tracks_scan();
-    phys_defaults();
-    hof_load();
-    ctl_load();
-    opt_load();
+    setup_menu();
+    update_camera(&cars[0], 1.f / 60.f, 1);
+    int frames = (int)(seconds * 60);
 
-    if (season_peek(0, &sea) || !sea.on) {
-        memset(&sea, 0, sizeof sea);
+    for (int f = 0; f < frames; f++) {
+        for (int k = 0; k < 4; k++) {
+            game_tick(PHYS_DT);
+        }
+
+        update_camera(&cars[0], 1.f / 60.f, 0);
+        char path[1024];
+        snprintf(path, sizeof path, "%s/f%03d.png", dir, f);
+        gpu_render(path);
     }
 
-    if (argc >= 2 && !strcmp(argv[1], "--check-tracks")) {
+    SDL_Quit();
+    return 0;
+}
+
+/* the debug and test modes, none of which opens a window for play. Returns the exit code, or -1 when argv is not one */
+static int run_debug_command(int argc, char **argv)
+{
+    const char *cmd = argc >= 2 ? argv[1] : "";
+
+    if (!strcmp(cmd, "--check-tracks")) {
         ed_check_originals();
         return 0;
     }
 
-    if (argc >= 4 && !strcmp(argv[1], "--ui-shot")) {
+    if (argc >= 4 && !strcmp(cmd, "--ui-shot")) {
         ui_shot(argv[2], argv[3]);
         return 0;
     }
 
-    if (argc >= 3 && !strcmp(argv[1], "--sim")) {
+    if (argc >= 3 && !strcmp(cmd, "--sim")) {
         run_headless(0, NULL, (float)atof(argv[2]), argc > 3 ? atoi(argv[3]) % NTRACKS : 0, 0);
         snd_report();
         return 0;
     }
 
-    if (argc >= 4 &&
-        !strcmp(argv[1], "--audio-dump")) { /* the autopilot's race, mixed into a WAV instead of the device */
+    if (argc >= 4 && !strcmp(cmd, "--audio-dump")) { /* the autopilot's race, mixed into a WAV instead of the device */
         snd_load();
         snd_dump_begin();
         run_headless(0, NULL, (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0, 0);
@@ -200,36 +214,22 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    if (argc >= 4 && !strcmp(argv[1], "--menu-frames")) { /* debug: record the menu at 60 fps into DIR/fNNN.png */
-        if (!SDL_Init(SDL_INIT_VIDEO) || gpu_init() != 0 || ensure_targets(1920, 1080) != 0) {
-            return 1;
-        }
-
-        setup_menu();
-        update_camera(&cars[0], 1.f / 60.f, 1);
-        int n = (int)(atof(argv[3]) * 60);
-
-        for (int f = 0; f < n; f++) {
-            for (int k = 0; k < 4; k++) {
-                game_tick(PHYS_DT);
-            }
-
-            update_camera(&cars[0], 1.f / 60.f, 0);
-            char path[1024];
-            snprintf(path, sizeof path, "%s/f%03d.png", argv[2], f);
-            gpu_render(path);
-        }
-
-        SDL_Quit();
-        return 0;
+    if (argc >= 4 && !strcmp(cmd, "--menu-frames")) {
+        return menu_frames(argv[2], (float)atof(argv[3]));
     }
 
-    if (argc >= 4 && !strcmp(argv[1], "--shot")) {
+    if (argc >= 4 && !strcmp(cmd, "--shot")) {
         run_headless(1, argv[2], (float)atof(argv[3]), argc > 4 ? atoi(argv[4]) % NTRACKS : 0,
                      argc > 5 ? atoi(argv[5]) : 0);
         return 0;
     }
 
+    return -1;
+}
+
+/* the window, the GPU, audio and the first screen; returns 0 on success */
+static int open_game(int argc, char **argv)
+{
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
@@ -248,7 +248,6 @@ int main(int argc, char **argv)
 
     snd_open();
     keys = SDL_GetKeyboardState(NULL);
-
     setup_menu();
 
     for (int i = 1; i < argc; i++) {
@@ -258,70 +257,131 @@ int main(int argc, char **argv)
     }
 
     update_camera(&cars[0], 0.016f, 1);
+    return 0;
+}
+
+/* a window position in the HUD's units */
+static float hud_x(float window_x)
+{
+    int w, h;
+    SDL_GetWindowSize(win, &w, &h);
+    return window_x / (float)w * HW;
+}
+
+static float hud_y(float window_y)
+{
+    int w, h;
+    SDL_GetWindowSize(win, &w, &h);
+    return window_y / (float)h * VH;
+}
+
+/* a gamepad button (or a joystick's fire button) acts as a key */
+static SDL_Keycode pad_button_key(const SDL_Event *e)
+{
+    static const int JOY[2] = {SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST}; /* a joystick's fire buttons */
+    int b = e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ? e->gbutton.button
+            : e->jbutton.button < 2                  ? JOY[e->jbutton.button]
+                                                     : -1;
+    return b >= 0 ? pad_key(b) : 0;
+}
+
+/* held keys repeat in the editor and the menus, except the ones that would act twice */
+static int key_repeat_allowed(SDL_Keycode k)
+{
+    int editing = state == ST_EDIT || (state == ST_MENU && menu.screen != MS_CTL);
+    return editing && k != SDLK_RETURN && k != SDLK_ESCAPE && k != SDLK_C && k != SDLK_T;
+}
+
+/* one window or input event; returns 0 when the game should quit */
+static int handle_event(const SDL_Event *e)
+{
+    if (e->type == SDL_EVENT_QUIT) {
+        return 0;
+    }
+
+    if (e->type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e->motion.state & SDL_BUTTON_LMASK)) {
+        viewer.yaw -= e->motion.xrel * 0.008f;
+        viewer.pitch += e->motion.yrel * 0.006f;
+        viewer.auto_orbit = 0;
+    } else if (e->type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) {
+        viewer.distance *= 1.f - 0.1f * e->wheel.y;
+    } else if (e->type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) {
+        ed_wheel(e->wheel.y);
+    } else if ((e->type == SDL_EVENT_MOUSE_BUTTON_DOWN || e->type == SDL_EVENT_MOUSE_BUTTON_UP) && state == ST_EDIT) {
+        ed_button(hud_x(e->button.x), hud_y(e->button.y), e->button.button, e->type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+    } else if (e->type == SDL_EVENT_MOUSE_MOTION && state == ST_EDIT) {
+        ed_motion(hud_x(e->motion.x), hud_y(e->motion.y), e->motion.xrel, e->motion.yrel);
+    } else if (e->type == SDL_EVENT_TEXT_INPUT) {
+        if (state == ST_MENU) {
+            menu_text(e->text.text);
+        } else if (state == ST_EDIT) {
+            ed_text(e->text.text);
+        }
+    } else if (e->type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e->type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) {
+        int on = e->type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN; /* also the window's own button: remember it */
+
+        if (on != opt.full) {
+            opt.full = on;
+            opt_save();
+        }
+    } else if (e->type == SDL_EVENT_JOYSTICK_ADDED) {
+        pad_added(e->jdevice.which);
+    } else if (e->type == SDL_EVENT_JOYSTICK_REMOVED) {
+        pad_removed(e->jdevice.which);
+    } else if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+               (e->type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && !SDL_IsGamepad(e->jbutton.which))) {
+        SDL_Keycode key = pad_button_key(e);
+
+        if (key && !handle_key(key, 0)) {
+            return 0;
+        }
+    } else if (e->type == SDL_EVENT_KEY_DOWN && (!e->key.repeat || key_repeat_allowed(e->key.key))) {
+        if (!handle_key(e->key.key, e->key.mod)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    if (!car_model_load()) {
+        return 1;
+    }
+
+    tracks_scan();
+    phys_defaults();
+    hof_load();
+    ctl_load();
+    opt_load();
+
+    if (season_peek(0, &sea) || !sea.on) {
+        memset(&sea, 0, sizeof sea);
+    }
+
+    int exit_code = run_debug_command(argc, argv);
+
+    if (exit_code >= 0) {
+        return exit_code;
+    }
+
+    if (open_game(argc, argv) != 0) {
+        return 1;
+    }
+
     uint64_t last = SDL_GetTicksNS();
-    float acc = 0;
+    float accumulated = 0;
 
     for (int running = 1; running;) {
         SDL_Event e;
 
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_QUIT) {
+            if (!handle_event(&e)) {
                 running = 0;
-            } else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_VIEW && (e.motion.state & SDL_BUTTON_LMASK)) {
-                viewer.yaw -= e.motion.xrel * 0.008f;
-                viewer.pitch += e.motion.yrel * 0.006f;
-                viewer.auto_orbit = 0;
-            } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_VIEW) {
-                viewer.distance *= 1.f - 0.1f * e.wheel.y;
-            } else if (e.type == SDL_EVENT_MOUSE_WHEEL && state == ST_EDIT) {
-                ed_wheel(e.wheel.y);
-            } else if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
-                       state == ST_EDIT) {
-                int ww, wh;
-                SDL_GetWindowSize(win, &ww, &wh); /* the HUD's units */
-                ed_button(e.button.x / (float)ww * HW, e.button.y / (float)wh * VH, e.button.button,
-                          e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
-            } else if (e.type == SDL_EVENT_MOUSE_MOTION && state == ST_EDIT) {
-                int ww, wh;
-                SDL_GetWindowSize(win, &ww, &wh);
-                ed_motion(e.motion.x / (float)ww * HW, e.motion.y / (float)wh * VH, e.motion.xrel, e.motion.yrel);
-            } else if (e.type == SDL_EVENT_TEXT_INPUT) {
-                if (state == ST_MENU) {
-                    menu_text(e.text.text);
-                } else if (state == ST_EDIT) {
-                    ed_text(e.text.text);
-                }
-            } else if (e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN || e.type == SDL_EVENT_WINDOW_LEAVE_FULLSCREEN) {
-                int on = e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN; /* also the window's own button: remember it */
-                if (on != opt.full) {
-                    opt.full = on;
-                    opt_save();
-                }
-            } else if (e.type == SDL_EVENT_JOYSTICK_ADDED) {
-                pad_added(e.jdevice.which);
-            } else if (e.type == SDL_EVENT_JOYSTICK_REMOVED) {
-                pad_removed(e.jdevice.which);
-            } else if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
-                       (e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && !SDL_IsGamepad(e.jbutton.which))) {
-                static const int JOY[2] = {SDL_GAMEPAD_BUTTON_SOUTH,
-                                           SDL_GAMEPAD_BUTTON_EAST}; /* a joystick's fire buttons */
-                int b = e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ? e.gbutton.button
-                        : e.jbutton.button < 2                  ? JOY[e.jbutton.button]
-                                                                : -1;
-                SDL_Keycode pk = b >= 0 ? pad_key(b) : 0;
-
-                if (pk && !handle_key(pk, 0)) {
-                    running = 0;
-                }
-            } else if (e.type == SDL_EVENT_KEY_DOWN &&
-                       (!e.key.repeat || ((state == ST_EDIT || (state == ST_MENU && menu.screen != MS_CTL)) &&
-                                          e.key.key != SDLK_RETURN && e.key.key != SDLK_ESCAPE && e.key.key != SDLK_C &&
-                                          e.key.key != SDLK_T))) {
-                if (!handle_key(e.key.key, e.key.mod)) {
-                    running = 0;
-                }
             }
         }
+
         uint64_t now = SDL_GetTicksNS();
         float frame = (float)(now - last) * 1e-9f;
         last = now;
@@ -330,27 +390,29 @@ int main(int argc, char **argv)
             frame = 0.1f;
         }
 
-        SDL_Keycode pk = pad_nav(frame);
+        SDL_Keycode pad_nav_key = pad_nav(frame);
 
-        if (pk && !handle_key(pk, 0)) {
+        if (pad_nav_key && !handle_key(pad_nav_key, 0)) {
             running = 0;
         }
 
         frame_timers(frame);
 
         if (!paused) {
-            acc += frame;
+            accumulated += frame;
 
-            while (acc >= PHYS_DT) {
+            while (accumulated >= PHYS_DT) {
                 game_tick(PHYS_DT);
-                acc -= PHYS_DT;
+                accumulated -= PHYS_DT;
             }
         } else {
             snd_paused();
         }
+
         update_camera(&cars[cam_car()], frame, 0);
         gpu_render(NULL);
     }
+
     SDL_Quit();
     return 0;
 }
