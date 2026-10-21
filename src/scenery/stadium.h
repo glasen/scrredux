@@ -273,154 +273,213 @@ static void scoreboard(V3 c, V3 face)
 
 /* the stadium: perimeter wall with sponsor boards, grandstands of different kinds, stair blocks, gate,
  * scoreboard, floodlights */
-static void build_stadium(void)
+/* one side of the arena: the wall runs from `base` along `along`, `out` points away from the field */
+typedef struct {
+    V3 base, along, out, in;
+    float length;
+    float gate; /* distance along the side of the service gate, or -100 when there is none */
+    int side;
+} ArenaSide;
+
+/* the perimeter wall: a red and white crash barrier with sponsor boards above and white coping; *board is the next
+ * sponsor board */
+static void stadium_wall(const ArenaSide *s, int *board)
 {
-    float Lx = ar_x1 - ar_x0, Lz = ar_z1 - ar_z0;
-    int bi = 0;
+    V3 base = s->base, along = s->along, out = s->out, in = s->in;
+    float L = s->length, gate = s->gate;
+    int bi = *board;
 
-    for (int side = 0; side < 4; side++) {
-        V3 base = side == 0   ? V(ar_x0, 0, ar_z0)
-                  : side == 1 ? V(ar_x1, 0, ar_z0)
-                  : side == 2 ? V(ar_x1, 0, ar_z1)
-                              : V(ar_x0, 0, ar_z1);
-        V3 along = side == 0 ? V(1, 0, 0) : side == 1 ? V(0, 0, 1) : side == 2 ? V(-1, 0, 0) : V(0, 0, -1);
-        V3 out = side == 0 ? V(0, 0, -1) : side == 1 ? V(1, 0, 0) : side == 2 ? V(0, 0, 1) : V(-1, 0, 0);
-        V3 in = vmul(out, -1);
-        float L = (side & 1) ? Lz : Lx;
-        float gate = side == 1 ? gate_z - ar_z0 : -100;
-        /* perimeter wall: red and white crash barrier, sponsor boards above, white coping */
-        int nst = (int)(L / 3.0f);
+    /* perimeter wall: red and white crash barrier, sponsor boards above, white coping */
+    int nst = (int)(L / 3.0f);
 
-        for (int k = 0; k < nst; k++) {
-            float a0 = k * 3.0f, a1 = (k + 1) * 3.0f;
+    for (int k = 0; k < nst; k++) {
+        float a0 = k * 3.0f, a1 = (k + 1) * 3.0f;
 
-            if (a1 > gate - 6 && a0 < gate + 6) {
+        if (a1 > gate - 6 && a0 < gate + 6) {
+            continue;
+        }
+
+        V3 p0 = vadd(base, vmul(along, a0)), p1 = vadd(base, vmul(along, a1));
+        draw_quad(p0, p1, vadd(p1, V(0, 1.1f, 0)), vadd(p0, V(0, 1.1f, 0)), (k & 1) ? 0xE8E8E8 : 0xB02020);
+    }
+
+    for (float a = 0; a + 8 <= L; a += 8) {
+        if (a + 8 > gate - 6 && a < gate + 6) {
+            continue;
+        }
+
+        ad_board(vadd(vadd(base, vmul(along, a)), V(0, 1.1f, 0)), along, in, 8, 1.5f, bi++);
+        draw_quad(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)), vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)),
+                  vadd(vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)), vmul(out, 0.5f)),
+                  vadd(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)), vmul(out, 0.5f)), 0xEEEEEA);
+    }
+
+    *board = bi;
+}
+
+/* the catch net above the boards (down to the ground across the gate): steel posts, a mesh of thin strands, cables */
+static void stadium_catch_net(const ArenaSide *s)
+{
+    V3 base = s->base, along = s->along, out = s->out;
+    float L = s->length, gate = s->gate;
+
+    {
+        V3 nb = vadd(base, vmul(out, 0.2f));
+
+        for (float a = 0; a <= L + 0.01f; a += 8) {
+            if (a > gate - 7 && a < gate + 7) {
                 continue;
             }
 
-            V3 p0 = vadd(base, vmul(along, a0)), p1 = vadd(base, vmul(along, a1));
-            draw_quad(p0, p1, vadd(p1, V(0, 1.1f, 0)), vadd(p0, V(0, 1.1f, 0)), (k & 1) ? 0xE8E8E8 : 0xB02020);
+            obox(vadd(vadd(vadd(nb, vmul(along, a)), vmul(out, 0.1f)), V(0, NET_H / 2 + 0.15f, 0)), along, UP, out,
+                 0.09f, NET_H / 2 + 0.15f, 0.09f, 0x70747A);
         }
 
-        for (float a = 0; a + 8 <= L; a += 8) {
-            if (a + 8 > gate - 6 && a < gate + 6) {
+        for (float a = 0; a + 0.5f <= L + 0.01f; a += 0.5f) {
+            float y0 = a + 0.5f > gate - 6 && a < gate + 6 ? 0.f : 2.6f;
+            V3 p = vadd(nb, vmul(along, a));
+            draw_quad(vadd(p, V(0, y0, 0)), vadd(vadd(p, vmul(along, 0.03f)), V(0, y0, 0)),
+                      vadd(vadd(p, vmul(along, 0.03f)), V(0, NET_H, 0)), vadd(p, V(0, NET_H, 0)), 0x3A3E44);
+        }
+
+        for (float y = 0.5f; y < NET_H; y += 0.5f) {
+            float th = y == 5.f ? 0.07f : 0.03f; /* the middle cable */
+            if (y < 2.6f) {                      /* below the boards only across the gate */
+                V3 g0 = vadd(nb, vmul(along, gate - 6)), g1 = vadd(nb, vmul(along, gate + 6));
+
+                if (gate > 0) {
+                    draw_quad(vadd(g0, V(0, y, 0)), vadd(g1, V(0, y, 0)), vadd(g1, V(0, y + th, 0)),
+                              vadd(g0, V(0, y + th, 0)), 0x3A3E44);
+                }
+
                 continue;
-            }
-
-            ad_board(vadd(vadd(base, vmul(along, a)), V(0, 1.1f, 0)), along, in, 8, 1.5f, bi++);
-            draw_quad(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)),
-                      vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)),
-                      vadd(vadd(vadd(base, vmul(along, a + 8)), V(0, 2.6f, 0)), vmul(out, 0.5f)),
-                      vadd(vadd(vadd(base, vmul(along, a)), V(0, 2.6f, 0)), vmul(out, 0.5f)), 0xEEEEEA);
-        }
-
-        /* catch net above the boards (down to the ground across the gate): steel posts, a mesh of thin strands, cables */
-        {
-            V3 nb = vadd(base, vmul(out, 0.2f));
-
-            for (float a = 0; a <= L + 0.01f; a += 8) {
-                if (a > gate - 7 && a < gate + 7) {
-                    continue;
-                }
-
-                obox(vadd(vadd(vadd(nb, vmul(along, a)), vmul(out, 0.1f)), V(0, NET_H / 2 + 0.15f, 0)), along, UP, out,
-                     0.09f, NET_H / 2 + 0.15f, 0.09f, 0x70747A);
-            }
-
-            for (float a = 0; a + 0.5f <= L + 0.01f; a += 0.5f) {
-                float y0 = a + 0.5f > gate - 6 && a < gate + 6 ? 0.f : 2.6f;
-                V3 p = vadd(nb, vmul(along, a));
-                draw_quad(vadd(p, V(0, y0, 0)), vadd(vadd(p, vmul(along, 0.03f)), V(0, y0, 0)),
-                          vadd(vadd(p, vmul(along, 0.03f)), V(0, NET_H, 0)), vadd(p, V(0, NET_H, 0)), 0x3A3E44);
-            }
-
-            for (float y = 0.5f; y < NET_H; y += 0.5f) {
-                float th = y == 5.f ? 0.07f : 0.03f; /* the middle cable */
-                if (y < 2.6f) {                      /* below the boards only across the gate */
-                    V3 g0 = vadd(nb, vmul(along, gate - 6)), g1 = vadd(nb, vmul(along, gate + 6));
-
-                    if (gate > 0) {
-                        draw_quad(vadd(g0, V(0, y, 0)), vadd(g1, V(0, y, 0)), vadd(g1, V(0, y + th, 0)),
-                                  vadd(g0, V(0, y + th, 0)), 0x3A3E44);
-                    }
-
-                    continue;
-                }
-
-                V3 e = vadd(nb, vmul(along, L));
-                draw_quad(vadd(nb, V(0, y, 0)), vadd(e, V(0, y, 0)), vadd(e, V(0, y + th, 0)),
-                          vadd(nb, V(0, y + th, 0)), th > 0.05f ? 0x2A2C30 : 0x3A3E44);
             }
 
             V3 e = vadd(nb, vmul(along, L));
-            draw_quad(vadd(nb, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H, 0)),
-                      vadd(nb, V(0, NET_H, 0)), 0x2A2C30);
-        }
-        /* stands with stair blocks between them */
-        int rows = side == 0 ? 16 : side == 2 ? 20 : 12, upper = side == 0 ? 9 : 0, roofed = side == 0 || side == 2;
-        uint32_t seat = side == 0 ? 0x2A54B4 : side == 2 ? 0xB42A2A : side == 1 ? 0xE0B020 : 0x2A8A44;
-        uint32_t accent = side == 0 ? 0xC81E18 : side == 2 ? 0x2858C0 : side == 1 ? 0x1E8A3C : 0xE8B020;
-        float gapw = 12, start = 22, end = L - 22;
-        int nseg_st = (int)ceilf((end - start) / 110.f);
-        float sl = (end - start - (nseg_st - 1) * gapw) / nseg_st;
-        float off = 7.f;
-
-        for (int k = 0; k < nseg_st; k++) {
-            float a = start + k * (sl + gapw);
-            float a0 = a, a1 = a + sl;
-
-            if (side == 1 && gate > a0 - 8 && gate < a1 + 8) { /* leave room for the gate */
-                float g0 = gate - 9, g1 = gate + 9;
-
-                if (g0 - a0 > 20) {
-                    grandstand(vadd(vadd(base, vmul(along, a0)), vmul(out, off)), along, out, g0 - a0, rows, upper,
-                               roofed, seat, accent, side * 31 + k);
-                }
-
-                if (a1 - g1 > 20) {
-                    grandstand(vadd(vadd(base, vmul(along, g1)), vmul(out, off)), along, out, a1 - g1, rows, upper,
-                               roofed, seat, accent, side * 31 + k + 50);
-                }
-            } else {
-                grandstand(vadd(vadd(base, vmul(along, a0)), vmul(out, off)), along, out, sl, rows, upper, roofed, seat,
-                           accent, side * 31 + k);
-            }
-
-            if (k + 1 < nseg_st) {
-                float depth = 1.0f + (rows + upper) * 0.85f + (upper ? 1 : 0);
-                stair_block(vadd(vadd(base, vmul(along, a1 + 0.5f)), vmul(out, off + depth * 0.25f)), along, out,
-                            gapw - 1.0f, depth * 0.75f, 2.4f + rows * 0.46f + (upper ? 9 : 2));
-            }
+            draw_quad(vadd(nb, V(0, y, 0)), vadd(e, V(0, y, 0)), vadd(e, V(0, y + th, 0)), vadd(nb, V(0, y + th, 0)),
+                      th > 0.05f ? 0x2A2C30 : 0x3A3E44);
         }
 
-        /* walkway between wall and stands */
-        draw_quad(vadd(base, V(0, 0.02f, 0)), vadd(vadd(base, vmul(along, L)), V(0, 0.02f, 0)),
-                  vadd(vadd(vadd(base, vmul(along, L)), vmul(out, off)), V(0, 0.02f, 0)),
-                  vadd(vadd(base, vmul(out, off)), V(0, 0.02f, 0)), 0x8C8A84);
+        V3 e = vadd(nb, vmul(along, L));
+        draw_quad(vadd(nb, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H - 0.08f, 0)), vadd(e, V(0, NET_H, 0)),
+                  vadd(nb, V(0, NET_H, 0)), 0x2A2C30);
+    }
+}
 
-        if (side == 1) { /* gate: posts, sign, open doors */
-            V3 g = vadd(base, vmul(along, gate));
+/* the grandstands with stair blocks between them, leaving room for the service gate */
+static void stadium_stands(const ArenaSide *s)
+{
+    V3 base = s->base, along = s->along, out = s->out;
+    float L = s->length, gate = s->gate;
+    int side = s->side;
 
-            for (int s = -1; s <= 1; s += 2) {
-                obox(vadd(vadd(g, vmul(along, s * 6.6f)), V(0, 3.5f, 0)), along, UP, out, 0.6f, 3.5f, 0.6f, 0x8E8C88);
+    /* stands with stair blocks between them */
+    int rows = side == 0 ? 16 : side == 2 ? 20 : 12, upper = side == 0 ? 9 : 0, roofed = side == 0 || side == 2;
+    uint32_t seat = side == 0 ? 0x2A54B4 : side == 2 ? 0xB42A2A : side == 1 ? 0xE0B020 : 0x2A8A44;
+    uint32_t accent = side == 0 ? 0xC81E18 : side == 2 ? 0x2858C0 : side == 1 ? 0x1E8A3C : 0xE8B020;
+    float gapw = 12, start = 22, end = L - 22;
+    int nseg_st = (int)ceilf((end - start) / 110.f);
+    float sl = (end - start - (nseg_st - 1) * gapw) / nseg_st;
+    float off = STADIUM_WALKWAY;
+
+    for (int k = 0; k < nseg_st; k++) {
+        float a = start + k * (sl + gapw);
+        float a0 = a, a1 = a + sl;
+
+        if (side == 1 && gate > a0 - 8 && gate < a1 + 8) { /* leave room for the gate */
+            float g0 = gate - 9, g1 = gate + 9;
+
+            if (g0 - a0 > 20) {
+                grandstand(vadd(vadd(base, vmul(along, a0)), vmul(out, off)), along, out, g0 - a0, rows, upper, roofed,
+                           seat, accent, side * 31 + k);
             }
 
-            obox(vadd(g, V(0, 7.6f, 0)), along, UP, out, 7.2f, 0.7f, 0.6f, 0x2858C0);
-            world_text_c(vadd(vadd(g, V(0, 7.6f, 0)), vmul(in, 0.62f)), vnorm(vcross(out, UP)), UP, "SERVICE GATE",
-                         0.14f, 0xF8F8F8, 0);
-
-            for (int s = -1; s <= 1; s += 2) {
-                V3 h0 = vadd(g, vmul(along, s * 6.0f)), h1 = vadd(h0, vmul(in, 5.6f));
-                draw_quad(h0, h1, vadd(h1, V(0, 3.2f, 0)), vadd(h0, V(0, 3.2f, 0)), 0x5A6A72);
+            if (a1 - g1 > 20) {
+                grandstand(vadd(vadd(base, vmul(along, g1)), vmul(out, off)), along, out, a1 - g1, rows, upper, roofed,
+                           seat, accent, side * 31 + k + 50);
             }
+        } else {
+            grandstand(vadd(vadd(base, vmul(along, a0)), vmul(out, off)), along, out, sl, rows, upper, roofed, seat,
+                       accent, side * 31 + k);
+        }
 
-            draw_quad(vadd(vadd(g, vmul(along, -6)), V(0, 0.03f, 0)), vadd(vadd(g, vmul(along, 6)), V(0, 0.03f, 0)),
-                      vadd(vadd(vadd(g, vmul(along, 6)), vmul(out, 40)), V(0, 0.03f, 0)),
-                      vadd(vadd(vadd(g, vmul(along, -6)), vmul(out, 40)), V(0, 0.03f, 0)), 0x6E6C68);
+        if (k + 1 < nseg_st) {
+            float depth = 1.0f + (rows + upper) * 0.85f + (upper ? 1 : 0);
+            stair_block(vadd(vadd(base, vmul(along, a1 + 0.5f)), vmul(out, off + depth * 0.25f)), along, out,
+                        gapw - 1.0f, depth * 0.75f, 2.4f + rows * 0.46f + (upper ? 9 : 2));
+        }
+    }
+}
+
+/* the walkway between the wall and the stands */
+static void stadium_walkway(const ArenaSide *s)
+{
+    const float off = STADIUM_WALKWAY;
+    V3 base = s->base, along = s->along, out = s->out;
+    float L = s->length;
+
+    /* walkway between wall and stands */
+    draw_quad(vadd(base, V(0, 0.02f, 0)), vadd(vadd(base, vmul(along, L)), V(0, 0.02f, 0)),
+              vadd(vadd(vadd(base, vmul(along, L)), vmul(out, off)), V(0, 0.02f, 0)),
+              vadd(vadd(base, vmul(out, off)), V(0, 0.02f, 0)), 0x8C8A84);
+}
+
+/* the service gate in the east wall: posts, sign, open doors and the road out */
+static void stadium_service_gate(const ArenaSide *s)
+{
+    V3 base = s->base, along = s->along, out = s->out, in = s->in;
+    float gate = s->gate;
+
+    V3 g = vadd(base, vmul(along, gate));
+
+    for (int s = -1; s <= 1; s += 2) {
+        obox(vadd(vadd(g, vmul(along, s * 6.6f)), V(0, 3.5f, 0)), along, UP, out, 0.6f, 3.5f, 0.6f, 0x8E8C88);
+    }
+
+    obox(vadd(g, V(0, 7.6f, 0)), along, UP, out, 7.2f, 0.7f, 0.6f, 0x2858C0);
+    world_text_c(vadd(vadd(g, V(0, 7.6f, 0)), vmul(in, 0.62f)), vnorm(vcross(out, UP)), UP, "SERVICE GATE", 0.14f,
+                 0xF8F8F8, 0);
+
+    for (int s = -1; s <= 1; s += 2) {
+        V3 h0 = vadd(g, vmul(along, s * 6.0f)), h1 = vadd(h0, vmul(in, 5.6f));
+        draw_quad(h0, h1, vadd(h1, V(0, 3.2f, 0)), vadd(h0, V(0, 3.2f, 0)), 0x5A6A72);
+    }
+
+    draw_quad(vadd(vadd(g, vmul(along, -6)), V(0, 0.03f, 0)), vadd(vadd(g, vmul(along, 6)), V(0, 0.03f, 0)),
+              vadd(vadd(vadd(g, vmul(along, 6)), vmul(out, 40)), V(0, 0.03f, 0)),
+              vadd(vadd(vadd(g, vmul(along, -6)), vmul(out, 40)), V(0, 0.03f, 0)), 0x6E6C68);
+}
+
+static void build_stadium(void)
+{
+    float Lx = ar_x1 - ar_x0, Lz = ar_z1 - ar_z0;
+    int board = 0;
+
+    for (int side = 0; side < 4; side++) {
+        ArenaSide s;
+        s.side = side;
+        s.base = side == 0   ? V(ar_x0, 0, ar_z0)
+                 : side == 1 ? V(ar_x1, 0, ar_z0)
+                 : side == 2 ? V(ar_x1, 0, ar_z1)
+                             : V(ar_x0, 0, ar_z1);
+        s.along = side == 0 ? V(1, 0, 0) : side == 1 ? V(0, 0, 1) : side == 2 ? V(-1, 0, 0) : V(0, 0, -1);
+        s.out = side == 0 ? V(0, 0, -1) : side == 1 ? V(1, 0, 0) : side == 2 ? V(0, 0, 1) : V(-1, 0, 0);
+        s.in = vmul(s.out, -1);
+        s.length = (side & 1) ? Lz : Lx;
+        s.gate = side == 1 ? gate_z - ar_z0 : -100;
+        stadium_wall(&s, &board);
+        stadium_catch_net(&s);
+        stadium_stands(&s);
+        stadium_walkway(&s);
+
+        if (side == 1) {
+            stadium_service_gate(&s);
         }
 
         if (side == 3) {
-            scoreboard(vadd(vadd(base, vmul(along, L * 0.5f)), vmul(out, off + 1.0f + 12 * 0.85f + 4.f)), in);
+            scoreboard(vadd(vadd(s.base, vmul(s.along, s.length * 0.5f)),
+                            vmul(s.out, STADIUM_WALKWAY + 1.0f + 12 * 0.85f + 4.f)),
+                       s.in);
         }
     }
 

@@ -13,3 +13,4 @@
 #define MAXTRK 48
 #define ED_SLOT (MAXTRK - 1)  /* the track builder's test drive */
 #define U_PER_M (4.f / SCR_U) /* height units (1/4 of an x/z unit) per metre */
+#define STADIUM_WALKWAY 7.f   /* m between the arena wall and the front of the stands */
