@@ -298,37 +298,25 @@ static int track_xsecs(const TrackDef *td)
     return nx;
 }
 
-static void build_track_geometry(int idx)
+/* the smooth centre line through the cross-sections: points every 1/PER of a piece section (the "centre line") with
+ * heights, banking, and whether it is a sheer face or the open track's gap */
+static V3 cl_pos[MAXX * PER];
+static float cl_height[MAXX * PER], cl_bank[MAXX * PER], cl_distance[MAXX * PER + 1];
+static unsigned char cl_steep[MAXX * PER], cl_gap[MAXX * PER];
+static short cl_section[MAXX * PER];
+
+/* per segment, before the final shaping */
+static float seg_bank[MAXSEG];
+static unsigned char seg_steep_raw[MAXSEG], seg_gap_raw[MAXSEG];
+
+/* the centre line: centripetal Catmull-Rom through the cross-section centres, heights linear between cross-sections.
+ * right_edge is which template edge is on the right; lift raises roads that would sit at ground level. Returns the
+ * number of centre-line points */
+static int plan_centre_line(int nx, int right_edge, float lift)
 {
-    const TrackDef *td = &trk[idx];
-    int np = td->np, start = td->start, orig = td->orig;
-    cur_track = idx;
-    track_gen++;
     float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez;
     int (*ey)[2] = tx_ey, *xsec = tx_sec;
-    int nx = track_xsecs(td);
-    (void)np;
-    (void)start;
-    (void)orig;
-    (void)xsec;
-    float ymin = 1e9f;
-
-    for (int i = 0; i < nx; i++) {
-        ymin = fminf(ymin, fminf(ey[i][0], ey[i][1]) * 0.25f * SCR_U);
-    }
-
-    float lift = fmaxf(0.f, 1.3f - ymin); /* roads at ground level sit on their deck slab */
-    tr_lift = lift;
-    /* which template edge is on the right */
-    V3 d0 = V(ex[1][0] + ex[1][1] - ex[0][0] - ex[0][1], 0, ez[1][0] + ez[1][1] - ez[0][0] - ez[0][1]);
-    int re = vdot(vcross(d0, UP), V(ex[0][1] - ex[0][0], 0, ez[0][1] - ez[0][0])) > 0 ? 1 : 0;
-
-    /* plan: centripetal Catmull-Rom through the cross-section centres; heights stay linear between cross-sections */
-    static V3 fp[MAXX * PER];
-    static float fy[MAXX * PER], fb[MAXX * PER], cum[MAXX * PER + 1];
-    static unsigned char fs[MAXX * PER], fw[MAXX * PER];
-    static short fsec[MAXX * PER];
-    int M = 0;
+    int re = right_edge, M = 0;
 
     for (int i = 0; i < nx; i++) {
         V3 P[4];
@@ -357,28 +345,35 @@ static void build_track_geometry(int idx)
             V3 A1 = vlerp(P[0], P[1], (tt - t[0]) / (t[1] - t[0])), A2 = vlerp(P[1], P[2], (tt - t[1]) / (t[2] - t[1]));
             V3 A3 = vlerp(P[2], P[3], (tt - t[2]) / (t[3] - t[2]));
             V3 B1 = vlerp(A1, A2, (tt - t[0]) / (t[2] - t[0])), B2 = vlerp(A2, A3, (tt - t[1]) / (t[3] - t[1]));
-            fp[M] = vlerp(B1, B2, (tt - t[1]) / (t[2] - t[1]));
+            cl_pos[M] = vlerp(B1, B2, (tt - t[1]) / (t[2] - t[1]));
             /* a sheer face becomes a vertical step at the upper deck's end: the lip and the gap stay the original's */
             float fh = !steep                    ? f
                        : (yl1 + yr1 < yl0 + yr0) ? clampf(f / 0.08f, 0, 1)
                                                  : clampf((f - 0.92f) / 0.08f, 0, 1);
             float yl = yl0 + (yl1 - yl0) * fh, yr = yr0 + (yr1 - yr0) * fh;
-            fy[M] = (yl + yr) * 0.5f * 0.25f * SCR_U + lift;
-            fb[M] = (yl - yr) * 0.25f * SCR_U; /* left edge minus right edge */
-            fs[M] = steep;
-            fsec[M] = (short)xsec[i];
-            fw[M] = trk_open && i == nx - 1; /* the open track's gap */
+            cl_height[M] = (yl + yr) * 0.5f * 0.25f * SCR_U + lift;
+            cl_bank[M] = (yl - yr) * 0.25f * SCR_U; /* left edge minus right edge */
+            cl_steep[M] = steep;
+            cl_section[M] = (short)xsec[i];
+            cl_gap[M] = trk_open && i == nx - 1; /* the open track's gap */
             M++;
         }
     }
 
-    cum[0] = 0;
+    return M;
+}
+
+/* evenly spaced road segments (about 1 m) along the centre line: position, banking, and the section each belongs to;
+ * sets nseg and ds */
+static void resample_segments(int M)
+{
+    cl_distance[0] = 0;
 
     for (int i = 0; i < M; i++) {
-        cum[i + 1] = cum[i] + vlen(vsub(fp[(i + 1) % M], fp[i]));
+        cl_distance[i + 1] = cl_distance[i] + vlen(vsub(cl_pos[(i + 1) % M], cl_pos[i]));
     }
 
-    float total = cum[M];
+    float total = cl_distance[M];
     nseg = (int)(total / 1.0f + 0.5f);
 
     if (nseg > MAXSEG) {
@@ -386,26 +381,24 @@ static void build_track_geometry(int idx)
     }
 
     ds = total / nseg;
-    static float bank[MAXSEG];
-    static unsigned char st[MAXSEG], gk[MAXSEG];
     int i = 0;
 
     for (int k = 0; k < nseg; k++) {
         float tg = k * ds;
 
-        while (i < M - 1 && cum[i + 1] < tg) {
+        while (i < M - 1 && cl_distance[i + 1] < tg) {
             i++;
         }
 
-        float f = (tg - cum[i]) / (cum[i + 1] - cum[i]);
+        float f = (tg - cl_distance[i]) / (cl_distance[i + 1] - cl_distance[i]);
         int i2 = (i + 1) % M;
-        seg[k].c = vlerp(fp[i], fp[i2], f);
-        seg[k].c.y = fy[i] + (fy[i2] - fy[i]) * f;
+        seg[k].c = vlerp(cl_pos[i], cl_pos[i2], f);
+        seg[k].c.y = cl_height[i] + (cl_height[i2] - cl_height[i]) * f;
         seg[k].u = tg;
-        bank[k] = atan2f(fb[i] + (fb[i2] - fb[i]) * f, 2 * TRACK_HW);
-        st[k] = fs[i];
-        seg_sec[k] = fsec[i];
-        gk[k] = fw[i];
+        seg_bank[k] = atan2f(cl_bank[i] + (cl_bank[i2] - cl_bank[i]) * f, 2 * TRACK_HW);
+        seg_steep_raw[k] = cl_steep[i];
+        seg_sec[k] = cl_section[i];
+        seg_gap_raw[k] = cl_gap[i];
     }
 
     for (int k = 0, k0 = 0; k < nseg; k++) {
@@ -414,18 +407,23 @@ static void build_track_geometry(int idx)
             k0 = k + 1;
         }
     }
+}
 
-    /* sharp hollows (the foot of the draw bridge's 30 degree ramps: an 11 m radius) are rounded off to ~80 m, away from sheer faces */
+/* sharp hollows (the foot of the draw bridge's 30 degree ramps: an 11 m radius) are rounded off to ~80 m, away from
+ * sheer faces */
+static void round_off_hollows(void)
+{
     for (int k = 0; k < nseg; k++) {
         int near = 0;
 
         for (int o = -6; o <= 6; o++) {
-            near |= st[(k + o + nseg) % nseg];
+            near |= seg_steep_raw[(k + o + nseg) % nseg];
         }
 
         if (near) {
             continue;
         }
+
 #define YS(o) seg[((k) + (o) + nseg) % nseg].c.y
         float s1 = (YS(-1) - YS(-4)) / (3 * ds), s2 = (YS(4) - YS(1)) / (3 * ds), d2 = YS(1) - 2 * YS(0) + YS(-1);
 
@@ -435,6 +433,7 @@ static void build_track_geometry(int idx)
 
         int W = (int)fminf(40.f * (s2 - s1) / ds, 25.f);
         float y0 = YS(-W) + s1 * W * ds; /* where the two straights meet, about here */
+
         for (int j = -W; j <= W; j++) {
             float y = y0 + s1 * j * ds + (s2 - s1) * sq((j + W) * ds) / (4 * W * ds);
             int q = (k + j + nseg) % nseg;
@@ -446,15 +445,20 @@ static void build_track_geometry(int idx)
 #undef YS
         k += W;
     }
+}
+
+/* gap and sheer flags, the tangent of each segment, its curvature (bends) and vertical curvature (crests), and its
+ * frame turned by the banking */
+static void finish_segment_frames(void)
+{
+    static float kap[MAXSEG], vk[MAXSEG];
+    static V3 Th[MAXSEG];
 
     for (int k = 0; k < nseg; k++) {
         int kn = (k + 1) % nseg;
-        seg[k].gap = gk[k];
-        seg[k].steep = (st[k] || st[kn]) && fabsf(seg[kn].c.y - seg[k].c.y) > 1.5f;
+        seg[k].gap = seg_gap_raw[k];
+        seg[k].steep = (seg_steep_raw[k] || seg_steep_raw[kn]) && fabsf(seg[kn].c.y - seg[k].c.y) > 1.5f;
     }
-
-    static float kap[MAXSEG], vk[MAXSEG];
-    static V3 Th[MAXSEG];
 
     for (int k = 0; k < nseg; k++) {
         int kp = (k + nseg - 1) % nseg, kn = (k + 1) % nseg;
@@ -485,9 +489,9 @@ static void build_track_geometry(int idx)
     for (int k = 0; k < nseg; k++) {
         seg[k].curv = fabsf(kap[k]);
         seg[k].vcurv = vk[k];
-        seg[k].bin = sinf(bank[k]) * (kap[k] >= 0 ? 1.f : -1.f);
+        seg[k].bin = sinf(seg_bank[k]) * (kap[k] >= 0 ? 1.f : -1.f);
         V3 R0 = vnorm(vcross(seg[k].T, UP)), N0 = vcross(R0, seg[k].T);
-        float cb = cosf(bank[k]), sb = sinf(bank[k]);
+        float cb = cosf(seg_bank[k]), sb = sinf(seg_bank[k]);
         seg[k].R = vsub(vmul(R0, cb), vmul(N0, sb));
         seg[k].N = vadd(vmul(N0, cb), vmul(R0, sb));
 
@@ -496,7 +500,11 @@ static void build_track_geometry(int idx)
             seg[k].N = UP;
         }
     }
+}
 
+/* the extent of the track and the arena round it */
+static void compute_bounds(void)
+{
     tr_minx = tr_minz = 1e9f;
     tr_maxx = tr_maxz = -1e9f;
 
@@ -511,4 +519,29 @@ static void build_track_geometry(int idx)
     ar_x1 = tr_maxx + 90;
     ar_z0 = tr_minz - 90;
     ar_z1 = tr_maxz + 90;
+}
+
+static void build_track_geometry(int idx)
+{
+    cur_track = idx;
+    track_gen++;
+    int nx = track_xsecs(&trk[idx]);
+    float (*ex)[2] = tx_ex, (*ez)[2] = tx_ez;
+    int (*ey)[2] = tx_ey;
+    float ymin = 1e9f;
+
+    for (int i = 0; i < nx; i++) {
+        ymin = fminf(ymin, fminf(ey[i][0], ey[i][1]) * 0.25f * SCR_U);
+    }
+
+    float lift = fmaxf(0.f, 1.3f - ymin); /* roads at ground level sit on their deck slab */
+    tr_lift = lift;
+    /* which template edge is on the right */
+    V3 d0 = V(ex[1][0] + ex[1][1] - ex[0][0] - ex[0][1], 0, ez[1][0] + ez[1][1] - ez[0][0] - ez[0][1]);
+    int right_edge = vdot(vcross(d0, UP), V(ex[0][1] - ex[0][0], 0, ez[0][1] - ez[0][0])) > 0 ? 1 : 0;
+
+    resample_segments(plan_centre_line(nx, right_edge, lift));
+    round_off_hollows();
+    finish_segment_frames();
+    compute_bounds();
 }
