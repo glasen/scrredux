@@ -14,9 +14,10 @@ static void big_top(float x, float z, float R, float wallh, float peak)
         V3 t0 = vadd(b0, V(0, wallh, 0)), t1 = vadd(b1, V(0, wallh, 0));
         uint32_t c = (k & 1) ? 0xF4F4F0 : 0xC81E18;
         draw_quad(b0, b1, t1, t0, c);
-        V3 e0 = V(x + cosf(a0) * R * 1.06f, g + wallh - 0.6f, z + sinf(a0) * R * 1.06f), e1 = V(x + cosf(a1) * R * 1.06f, g + wallh - 0.6f, z + sinf(a1) * R * 1.06f);
+        V3 e0 = V(x + cosf(a0) * R * 1.06f, g + wallh - 0.6f, z + sinf(a0) * R * 1.06f),
+           e1 = V(x + cosf(a1) * R * 1.06f, g + wallh - 0.6f, z + sinf(a1) * R * 1.06f);
         draw_quad(t0, t1, e1, e0, c);
-        draw_tri(e0, e1, V(x, g + peak, z), c);                                       /* roof gore */
+        draw_tri(e0, e1, V(x, g + peak, z), c); /* roof gore */
     }
     cyl(V(x, g + peak - 0.5f, z), V(x, g + peak + 7, z), 0.25f, 0.18f, 6, 0xD8D8E0, 3);
     draw_tri(V(x, g + peak + 7, z), V(x, g + peak + 5.4f, z), V(x + 4.5f, g + peak + 6.2f, z), 0xF0D020);
@@ -38,7 +39,9 @@ static void build_mountains(void)
         float an = (m + frand() * 0.8f) * 2 * PI_F / NM;
         float dist = rad + 1500 + frand() * 1300;
         float R = 500 + frand() * 600, H = 110 + frand() * 240;
-        if (m % 5 == 0) H *= 1.5f;
+        if (m % 5 == 0) {
+            H *= 1.5f;
+        }
         float px = cx + cosf(an) * dist, pz = cz + sinf(an) * dist;
         static V3 pt[NR + 1][NA];
         float hz[NR + 1];
@@ -47,13 +50,14 @@ static void build_mountains(void)
             hz[r] = H * (1.f - powf(1.f - t, 1.7f));
             for (int a = 0; a < NA; a++) {
                 float aa = 2 * PI_F * a / NA;
-                float j1 = (float)(hash2(m * 131 + r, a * 17 + 3) & 255) / 255.f, j2 = (float)(hash2(m * 71 + a, r * 29 + 9) & 255) / 255.f;
+                float j1 = (float)(hash2(m * 131 + r, a * 17 + 3) & 255) / 255.f,
+                      j2 = (float)(hash2(m * 71 + a, r * 29 + 9) & 255) / 255.f;
                 float rr = R * (1.f - t) * (1.f + 0.22f * (j1 - 0.5f)) * (1.f + 0.25f * sinf(aa * 3 + m));
                 float hh = hz[r] * (1.f + 0.16f * (j2 - 0.5f) * (r > 0 && r < NR));
                 pt[r][a] = V(px + cosf(aa) * rr, hh, pz + sinf(aa) * rr);
             }
         }
-        for (int r = 0; r < NR; r++)
+        for (int r = 0; r < NR; r++) {
             for (int a = 0; a < NA; a++) {
                 int a2 = (a + 1) % NA;
                 float hf = (hz[r] + hz[r + 1]) * 0.5f / H;
@@ -61,5 +65,6 @@ static void build_mountains(void)
                 col = scalecol(col, 0.88f + 0.24f * (float)(hash2(m * 7 + r, a * 3) & 255) / 255.f);
                 draw_quad(pt[r][a], pt[r][a2], pt[r + 1][a2], pt[r + 1][a], col);
             }
+        }
     }
 }

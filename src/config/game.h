@@ -4,7 +4,7 @@
 #define NHOLE 10
 #define HOLE_W 5.f
 #define MAXPART 1500
-#define RUN_ALAT 36.f              /* lateral grip the AI uses in the bend before a jump (m/s^2, before banking) */
+#define RUN_ALAT 36.f /* lateral grip the AI uses in the bend before a jump (m/s^2, before banking) */
 #define NJ 64
 #define PREF_ORG "SCR Redux"
 #define PREF_APP "SCR Redux"

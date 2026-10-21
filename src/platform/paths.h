@@ -16,9 +16,15 @@ static void user_path(char *out, size_t n, const char *rel)
     if (!dir[0]) {
         const char *e = getenv("SCR_HOME");
         char *pp = e && *e ? NULL : SDL_GetPrefPath(PREF_ORG, PREF_APP);
-        if (e && *e) { size_t k = strlen(e); snprintf(dir, sizeof dir, "%s%s", e, e[k - 1] == '/' || e[k - 1] == '\\' ? "" : "/"); SDL_CreateDirectory(dir); }
-        else if (pp) snprintf(dir, sizeof dir, "%s", pp);
-        else data_path(dir, sizeof dir, "");                    /* no such folder here: beside the game, as before */
+        if (e && *e) {
+            size_t k = strlen(e);
+            snprintf(dir, sizeof dir, "%s%s", e, e[k - 1] == '/' || e[k - 1] == '\\' ? "" : "/");
+            SDL_CreateDirectory(dir);
+        } else if (pp) {
+            snprintf(dir, sizeof dir, "%s", pp);
+        } else {
+            data_path(dir, sizeof dir, ""); /* no such folder here: beside the game, as before */
+        }
         SDL_free(pp);
     }
     snprintf(out, n, "%s%s", dir, rel);

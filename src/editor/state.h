@@ -11,16 +11,36 @@
  * G flies along the road.  */
 enum { EM_EDIT, EM_LIST, EM_NAME, EM_NEW, EM_QUIT, EM_FLY };
 static TrackDef ed;
-static int ed_sel, ed_anchor, ed_dirty, ed_mode, ed_list, ed_endh[2], ed_help;   /* the selection: the run from ed_anchor to ed_sel */
-static int ed_bad[MAXPC], ed_nbad;                     /* pieces before jumps the AI's planner can't get over */
+static int ed_sel, ed_anchor, ed_dirty, ed_mode, ed_list, ed_endh[2],
+    ed_help;                       /* the selection: the run from ed_anchor to ed_sel */
+static int ed_bad[MAXPC], ed_nbad; /* pieces before jumps the AI's planner can't get over */
 static char ed_msg[96], ed_name[32];
 static float ed_msg_t;
-static int ed_gen = 1, ed_built = -1;                  /* bumped on every change; the ed_gen the track mesh is of */
-static float ed_gen_t;                                 /* seconds since the last change */
+static int ed_gen = 1, ed_built = -1; /* bumped on every change; the ed_gen the track mesh is of */
+static float ed_gen_t;                /* seconds since the last change */
 static const unsigned char TPL_USE[7] = {0, 1, 3, 4, 6, 7, 10};
-typedef struct { int n, turn; TPiece p[3]; } Move;
+typedef struct {
+    int n, turn;
+    TPiece p[3];
+} Move;
 
-static void ed_note(const char *s) { snprintf(ed_msg, sizeof ed_msg, "%s", s); ed_msg_t = 3.f; }
-static int ed_lo(void) { return ed_sel < ed_anchor ? ed_sel : ed_anchor; }
-static int ed_hi(void) { return ed_sel > ed_anchor ? ed_sel : ed_anchor; }
-static void ed_select(int p, int extend) { ed_sel = p; if (!extend) ed_anchor = p; }
+static void ed_note(const char *s)
+{
+    snprintf(ed_msg, sizeof ed_msg, "%s", s);
+    ed_msg_t = 3.f;
+}
+static int ed_lo(void)
+{
+    return ed_sel < ed_anchor ? ed_sel : ed_anchor;
+}
+static int ed_hi(void)
+{
+    return ed_sel > ed_anchor ? ed_sel : ed_anchor;
+}
+static void ed_select(int p, int extend)
+{
+    ed_sel = p;
+    if (!extend) {
+        ed_anchor = p;
+    }
+}

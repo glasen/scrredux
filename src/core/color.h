@@ -10,6 +10,7 @@ static uint32_t mixcol(uint32_t a, uint32_t b, float t)
 }
 static uint32_t scalecol(uint32_t c, float s)
 {
-    int r = (int)clampf(((c >> 16) & 255) * s, 0, 255), g = (int)clampf(((c >> 8) & 255) * s, 0, 255), b = (int)clampf((c & 255) * s, 0, 255);
+    int r = (int)clampf(((c >> 16) & 255) * s, 0, 255), g = (int)clampf(((c >> 8) & 255) * s, 0, 255),
+        b = (int)clampf((c & 255) * s, 0, 255);
     return (uint32_t)(r << 16 | g << 8 | b);
 }

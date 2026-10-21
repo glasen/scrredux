@@ -17,8 +17,13 @@ static size_t dlsize;
 static SDL_GPUTextureFormat dfmt;
 
 /* ---- the car model, loaded from models/stuntcar.scm (car/model_loader.h) ---- */
-typedef struct { char name[8]; int role, corner, link; uint32_t first, count; } MGroup;
-static MGroup mdl_g[64]; static int mdl_ng, mdl_nv;
+typedef struct {
+    char name[8];
+    int role, corner, link;
+    uint32_t first, count;
+} MGroup;
+static MGroup mdl_g[64];
+static int mdl_ng, mdl_nv;
 static Vtx *mdl_v;
 static SDL_GPUBuffer *vbuf_m;
 
